@@ -106,4 +106,4 @@ def test_haversine_hsv_to_jfk():
 
     # HSV: 34.6418°N, 86.7751°W  |  JFK: 40.6413°N, 73.7781°W
     dist = haversine_miles(34.6418, -86.7751, 40.6413, -73.7781)
-    assert 850 < dist < 950, f"Expected ~880 miles, got {dist}"
+    assert 800 < dist < 860, f"Expected ~822 miles, got {dist}"

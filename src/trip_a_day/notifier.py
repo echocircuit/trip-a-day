@@ -93,8 +93,8 @@ def _build_html(trip: TripCandidate) -> str:
   <h2>{trip.city}, {trip.country}</h2>
   <p>
     <strong>Region:</strong> {trip.region}<br>
-    <strong>Departure:</strong> {trip.departure_date.strftime('%B %d, %Y')}<br>
-    <strong>Return:</strong> {trip.return_date.strftime('%B %d, %Y')} ({nights} nights)<br>
+    <strong>Departure:</strong> {trip.departure_date.strftime("%B %d, %Y")}<br>
+    <strong>Return:</strong> {trip.return_date.strftime("%B %d, %Y")} ({nights} nights)<br>
     <strong>Distance from home:</strong> {distance_str}
   </p>
 
@@ -107,7 +107,7 @@ def _build_html(trip: TripCandidate) -> str:
     <tr><td>&#x1F374; Food (all travelers)</td><td>${trip.cost.food:,.2f}</td></tr>
     <tr class="total"><td><strong>Total</strong></td><td><strong>${trip.cost.total:,.2f}</strong></td></tr>
   </table>
-  {('<p class="estimate">* Car rental cost is a regional estimate, not a live quote.</p>') if trip.cost.car_is_estimate else ''}
+  {('<p class="estimate">* Car rental cost is a regional estimate, not a live quote.</p>') if trip.cost.car_is_estimate else ""}
 
   <h3>Book Now</h3>
   <a class="btn" href="{trip.flight_booking_url}">&#x2708; Book Flights</a>
@@ -131,8 +131,8 @@ def _build_plain(trip: TripCandidate) -> str:
         ✈️  TRIP OF THE DAY
         ==================
         Destination : {trip.city}, {trip.country} ({trip.region})
-        Departure   : {trip.departure_date.strftime('%B %d, %Y')}
-        Return      : {trip.return_date.strftime('%B %d, %Y')} ({nights} nights)
+        Departure   : {trip.departure_date.strftime("%B %d, %Y")}
+        Return      : {trip.return_date.strftime("%B %d, %Y")} ({nights} nights)
         Distance    : {distance_str}
 
         COST BREAKDOWN
