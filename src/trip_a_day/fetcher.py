@@ -20,7 +20,7 @@ from trip_a_day.db import get_api_calls_today, record_api_call
 
 logger = logging.getLogger(__name__)
 
-_DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SEED_AIRPORTS_PATH = _DATA_DIR / "seed_airports.json"
 _PER_DIEM_PATH = _DATA_DIR / "per_diem_rates.json"
 

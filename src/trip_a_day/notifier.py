@@ -44,11 +44,13 @@ def _parse_recipients(prefs: dict[str, str]) -> list[str]:
     try:
         parsed = json.loads(raw)
         if isinstance(parsed, list):
-            return [e.strip() for e in parsed if e.strip()]
+            emails = [e.strip() for e in parsed if e.strip()]
+            if emails:
+                return emails
     except (json.JSONDecodeError, TypeError):
         pass
 
-    # Also accept comma-separated value from NOTIFICATION_EMAILS env var
+    # Fall back to NOTIFICATION_EMAILS env var (also used when DB preference is empty)
     env_emails = os.environ.get("NOTIFICATION_EMAILS", "")
     if env_emails:
         return [e.strip() for e in env_emails.split(",") if e.strip()]
