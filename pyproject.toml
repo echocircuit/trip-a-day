@@ -104,5 +104,5 @@ disallow_untyped_defs = false       # start permissive, tighten over time
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["amadeus.*", "sendgrid.*"]
+module = ["fast_flights.*", "resend.*"]
 ignore_missing_imports = true
