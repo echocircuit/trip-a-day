@@ -70,7 +70,7 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests",
 ]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -W error::DeprecationWarning"
 
 # --- Coverage ---
 [tool.coverage.run]
