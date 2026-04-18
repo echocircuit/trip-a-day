@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -44,10 +44,10 @@ def set_pref(session: Session, key: str, value: str) -> None:
     """Write *value* for *key*, creating the row if it does not exist."""
     row = session.get(Preference, key)
     if row is None:
-        session.add(Preference(key=key, value=value, updated_at=datetime.utcnow()))
+        session.add(Preference(key=key, value=value, updated_at=datetime.now(UTC)))
     else:
         row.value = value
-        row.updated_at = datetime.utcnow()
+        row.updated_at = datetime.now(UTC)
     session.flush()
 
 

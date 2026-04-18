@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from sqlalchemy import (
@@ -40,7 +40,9 @@ class Preference(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[str | None] = mapped_column(Text, nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC)
+    )
 
 
 class Destination(Base):
@@ -86,7 +88,9 @@ class RunLog(Base):
     __tablename__ = "run_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    run_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    run_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC)
+    )
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     triggered_by: Mapped[str] = mapped_column(String(20), default="manual")
     destinations_evaluated: Mapped[int] = mapped_column(Integer, default=0)
@@ -131,7 +135,7 @@ def init_db() -> None:
 
 def seed_preferences(session: Session) -> None:
     """Insert default preference values if not already present."""
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     for key, value in _PREFERENCE_DEFAULTS.items():
         existing = session.get(Preference, key)
         if existing is None:
