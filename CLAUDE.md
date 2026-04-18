@@ -12,6 +12,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Phase 1 — Proof of Concept.** CLI only (`python main.py`). No scheduling, no UI. See Section 12 of the spec.
 
+## Development workflow
+
+**During a phase:** commit logical units of work as you go (one module, one test suite, one config change per commit). Use conventional prefixes from CONTRIBUTING.md.
+
+**At the end of a phase:** before pushing to remote, run the full pipeline locally end-to-end and verify it produces sensible output:
+
+```bash
+ruff check . && ruff format --check .   # must pass clean
+mypy src/                               # must pass clean
+pytest tests/unit/                      # must pass
+python main.py                          # must run without unhandled exceptions
+```
+
+Fix any issues found, commit the fixes, then push. Do not push a phase branch until `python main.py` has completed a successful local run.
+
 ## Commands
 
 ```bash
