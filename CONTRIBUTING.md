@@ -38,3 +38,4 @@ Use conventional-ish prefixes for scanability:
 - **mypy**: type checking (permissive to start, tighten over time)
 - **pytest**: testing with coverage
 - **pre-commit**: runs ruff on every commit, unit tests on push
+- **uv**: fast virtual environment and package management (replaces venv + pip)

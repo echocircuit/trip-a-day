@@ -1,18 +1,18 @@
-# Project Name
+# trip-a-day
 
-Short description of what this project does.
+Determines the cheapest trip that can be booked each day.
 
 ## Installation
 
 ```bash
 # Clone the repo
-git clone git@github.com:echocircuit/YOUR_REPO.git
-cd YOUR_REPO
+git clone git@github.com:YOUR_USERNAME/trip-a-day.git
+cd trip-a-day
 
-# Create virtual environment and install
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+# Create virtual environment and install (requires uv: brew install uv)
+uv venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+uv pip install -e ".[dev]"
 
 # Install pre-commit hooks
 pre-commit install
@@ -36,7 +36,7 @@ pytest tests/unit/
 pytest tests/integration/
 
 # All tests with coverage
-pytest --cov=src/myproject
+pytest --cov=src/trip_a_day
 ```
 
 ### Code quality
@@ -53,7 +53,7 @@ mypy src/
 ### Project structure
 
 ```
-├── src/myproject/       # Source code
+├── src/trip_a_day/      # Source code
 ├── tests/
 │   ├── unit/            # Fast, isolated tests — run on every commit
 │   └── integration/     # Slower, end-to-end tests — run on PRs

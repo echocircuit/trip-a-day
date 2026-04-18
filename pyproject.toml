@@ -1,21 +1,20 @@
 [build-system]
 requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
-name = "myproject"
+name = "trip-a-day"
 version = "0.1.0"
-description = "TODO: Short project description"
+description = "Determines the cheapest trip that can be booked each day."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [
-    { name = "echocircuit", email = "8434258+echocircuit@users.noreply.github.com" },
+    { name = "echocircuit" },
 ]
 dependencies = [
-    # Add runtime dependencies here
-    # "numpy>=1.26",
-    # "scipy>=1.12",
+    "numpy>=1.26",
+    "scipy>=1.12",
 ]
 
 [project.optional-dependencies]
@@ -29,7 +28,7 @@ dev = [
 
 # Optional: CLI entry point
 # [project.scripts]
-# myproject = "myproject.cli:main"
+# trip-a-day = "trip_a_day.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -57,7 +56,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["myproject"]
+known-first-party = ["trip_a_day"]
 
 # --- Pytest ---
 [tool.pytest.ini_options]
@@ -70,7 +69,7 @@ addopts = "-v --tb=short"
 
 # --- Coverage ---
 [tool.coverage.run]
-source = ["src/myproject"]
+source = ["src/trip_a_day"]
 branch = true
 
 [tool.coverage.report]

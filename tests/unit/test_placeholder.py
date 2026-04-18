@@ -1,6 +1,6 @@
 """Starter unit test — replace with real tests."""
 
-from myproject import __version__
+from trip_a_day import __version__
 
 
 def test_version_exists():

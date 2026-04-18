@@ -22,12 +22,12 @@ In your terminal:
 git clone git@github.com:YOUR_USERNAME/YOUR_REPO.git
 cd YOUR_REPO
 
-# Create and activate virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
+# Create and activate virtual environment (requires uv: brew install uv)
+uv venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
 
 # Install in editable mode with dev dependencies
-pip install -e ".[dev]"
+uv pip install -e ".[dev]"
 
 # Install pre-commit hooks (both commit-time and push-time)
 pre-commit install
@@ -68,7 +68,7 @@ Should return nothing.
 Then reinstall so the renamed package is picked up:
 
 ```bash
-pip install -e ".[dev]"
+uv pip install -e ".[dev]"
 pytest tests/unit/
 ```
 

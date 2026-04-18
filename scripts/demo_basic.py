@@ -4,11 +4,11 @@
 Run: python scripts/demo_basic.py
 """
 
-from myproject import __version__
+from trip_a_day import __version__
 
 
 def main():
-    print(f"myproject v{__version__} is working!")
+    print(f"trip-a-day v{__version__} is working!")
     # TODO: Add a meaningful demo of core functionality
 
 
