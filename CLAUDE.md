@@ -28,8 +28,8 @@ git checkout -b feature/<short-description>   # e.g. feature/phase-2-scheduling
 ```bash
 ruff check . && ruff format --check .   # must pass clean
 mypy src/                               # must pass clean
-pytest tests/unit/                      # must pass
-python main.py                          # must run without unhandled exceptions
+pytest tests/unit/                      # must pass (includes smoke test of full pipeline)
+python main.py                          # run if Amadeus keys are configured; otherwise the unit smoke test is the proxy
 ```
 Fix any issues found and commit them. Then push and open a PR:
 ```bash
