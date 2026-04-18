@@ -1,8 +1,8 @@
 """Smoke test for the main.py pipeline.
 
 Mocks all external API calls so the full orchestration path runs without
-Amadeus credentials. Catches import errors, DB init failures, and
-orchestration bugs that wouldn't be caught by unit tests on individual modules.
+network access. Catches import errors, DB init failures, and orchestration
+bugs that wouldn't be caught by unit tests on individual modules.
 """
 
 from __future__ import annotations
