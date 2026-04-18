@@ -97,8 +97,8 @@ class RunLog(Base):
     winner_trip_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
-    api_calls_amadeus: Mapped[int] = mapped_column(Integer, default=0)
-    api_calls_numbeo: Mapped[int] = mapped_column(Integer, default=0)
+    api_calls_flights: Mapped[int] = mapped_column(Integer, default=0)
+    api_calls_gsa: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class ApiUsage(Base):
@@ -153,9 +153,9 @@ def record_api_call(session: Session, api_name: str) -> None:
     )
     if row is None:
         limits = {
-            "amadeus": (None, 2000),
-            "numbeo": (None, None),
-            "sendgrid": (100, None),
+            "google_flights": (300, None),
+            "gsa": (None, None),
+            "resend": (100, 3000),
         }
         daily, monthly = limits.get(api_name, (None, None))
         row = ApiUsage(
