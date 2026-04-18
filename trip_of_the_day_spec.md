@@ -1,9 +1,9 @@
 # Trip of the Day — Project Specification
 
-**Version:** 1.1
-**Date:** 2026-04-17
+**Version:** 1.2
+**Date:** 2026-04-18
 **Language:** Python
-**Status:** Pre-implementation
+**Status:** Phase 1 complete; Phase 1b in progress
 
 ---
 
@@ -78,16 +78,17 @@ The app is designed as a personal, open source tool. Each user runs their own lo
         │         └───────────────────────────────┘
         │
 ┌───────▼──────────────────────────┐
-│  External APIs                    │
-│  - Amadeus (flights + hotels)     │
-│  - Numbeo (food / cost of living) │
+│  External APIs / Data             │
+│  - Tequila (flights)              │
+│  - GSA + State Dept per diem      │
+│    (hotel + food estimates)       │
 │  - Car cost table (local, static) │
 └───────────────────────────────────┘
                          │
               ┌──────────▼──────────┐
               │   Notifier           │
               │   (notifier.py)      │
-              │   SendGrid email     │
+              │   Resend email       │
               └─────────────────────┘
 ```
 
@@ -95,34 +96,70 @@ The app is designed as a personal, open source tool. Each user runs their own lo
 
 ## 4. Data Sources
 
-### 4.1 Amadeus for Developers (Flights + Hotels)
+> **Phase 1b note:** Amadeus, Numbeo, and SendGrid were replaced in Phase 1b after all three became unavailable at the free tier. The replacement sources are confirmed free permanently and described below.
 
-- **URL:** https://developers.amadeus.com
-- **Account type:** Free self-service tier (no credit card required)
-- **Relevant APIs:**
-  - `Flight Offers Search` — returns cheapest available flights between two airports on given dates
-  - `Flight Inspiration Search` — returns cheapest destinations from a given origin (key for destination discovery)
-  - `Hotel List` + `Hotel Offers Search` — returns hotel options with pricing at a destination city
-- **Sandbox vs. Production:** Amadeus provides a sandbox environment with realistic synthetic data. Development and testing happen entirely in sandbox. Switching to production is a single environment variable change (`AMADEUS_ENV=production`).
-- **Rate limits:** Free production tier allows 2,000 API calls/month. At 1 run/day with ~5–10 API calls per run, monthly usage will be well under 400 calls. Well within limits.
-- **Open source key handling:** Users register their own free Amadeus account and add `AMADEUS_API_KEY` and `AMADEUS_API_SECRET` to their local `.env` file. Keys are never committed to the repository.
+### 4.1 Kiwi.com Tequila API (Flights)
 
-### 4.2 Numbeo API (Food / Cost of Living)
+- **Registration:** https://tequila.kiwi.com (free developer account; no credit card required)
+- **Base URL:** `https://tequila-api.kiwi.com`
+- **Auth:** `apikey` request header
+- **Key endpoints:**
+  - `/v2/search` — flight search. Use `fly_to=anywhere` for inspiration-style destination discovery; specific IATA codes for point-to-point search. Key params: `fly_from`, `fly_to`, `date_from`, `date_to`, `return_from`, `return_to`, `flight_type=round`, `max_stopovers=0` (direct only), `adults`, `children`. Each result includes `price`, `deep_link` (booking URL), and `route[]` with per-segment IATA codes and city names.
+  - `/locations/query` — resolve IATA codes to city/country metadata. Returns `locations[]` with `code`, `name`, `country`.
+- **Rate limits:** Free tier; typical daily usage (1 run × ~10 searches) is well within limits.
+- **Environment variable:** `TEQUILA_API_KEY`
 
-- **URL:** https://www.numbeo.com/api/
-- **Account type:** Free tier available
-- **Usage:** Query cost-of-living index and meal cost estimates by city. Used to estimate daily food spend for a given destination.
-- **Key handling:** Same `.env` pattern as Amadeus.
+### 4.2 GSA CONUS Per Diem API (Domestic Hotel + Food Estimates)
 
-### 4.3 Rental Car Costs (Static Lookup Table — Phase 1)
+- **API docs:** https://open.gsa.gov/api/perdiem/
+- **Registration:** Free API key at https://api.data.gov/signup/ — no account required, key delivered by email within minutes
+- **Base URL:** `https://api.gsa.gov/travel/perdiem/v2/`
+- **Auth:** `x-api-key` request header
+- **Usage:** Returns US government per diem rates (lodging and M&IE) for all CONUS destinations. Used for domestic hotel and food cost estimates.
+  - All-CONUS lodging: `/rates/conus/lodging/{year}`
+  - All-CONUS M&IE: `/rates/conus/mie/{year}`
+- **Updated:** Annually each October 1 (new fiscal year rates). Run `scripts/update_rates.py` each October to refresh.
+- **Environment variable:** `GSA_API_KEY`
+
+### 4.3 State Department Foreign Per Diem Rates (International Hotel + Food Estimates)
+
+- **Source:** Monthly XLS published at `https://aoprals.state.gov/content/documents/{month}{year}pd.xls` (e.g., `april2026pd.xls`)
+- **No API key required** — pure HTTP download, public domain
+- **Column structure (confirmed):** Sheet name `SEA{MM}{YY}` (e.g., `SEA0426`). Column A = Country, Column B = City, Column F = Lodging USD/night, Column G = M&IE USD/day.
+- **Usage:** Covers all international destinations with government per diem lodging and meal rates. Used for international hotel and food cost estimates.
+- **Updated:** Monthly, but annual refresh is sufficient. Run `scripts/update_rates.py` each October alongside GSA refresh.
+- **No environment variable required.**
+
+### 4.4 Resend (Email)
+
+- **Registration:** https://resend.com (free tier: 3,000 emails/month permanently; no credit card required)
+- **Python SDK:** `resend` (pip install)
+- **Usage:**
+  ```python
+  import resend
+  resend.api_key = os.environ["RESEND_API_KEY"]
+  resend.Emails.send({"from": "...", "to": [...], "subject": "...", "html": "..."})
+  ```
+- **Sender domain:** Resend requires a verified sender domain for production use. For development and testing, Resend provides a shared sender address (`onboarding@resend.dev`) that works without domain verification. This is the default until a custom domain is configured.
+- **Environment variable:** `RESEND_API_KEY`
+
+### 4.5 Rental Car Costs (Static Lookup Table)
 
 - No viable free real-time rental car API exists at this time.
-- Phase 1 uses a static regional lookup table (JSON or SQLite table) mapping world regions to an estimated daily rental rate in USD.
-- The table will be bundled with the repo and can be manually updated.
+- Uses a static regional lookup table (`car_rates.json`) mapping world regions to an estimated daily rental rate in USD.
+- Bundled with the repo; updated manually when rates change significantly.
 - Clearly labeled as "estimated" in all output.
 - **Future:** Replace with a real API (e.g., via RapidAPI car rental endpoints) once a suitable free or low-cost option is identified.
 
-### 4.4 Optional / Future Data Sources
+### 4.6 Per Diem Cost Model Notes
+
+- `hotel_cost_usd` = lodging rate × number of nights × number of rooms needed
+- `food_cost_usd` = M&IE rate × number of days × number of travelers
+- Both values carry `is_estimate=True` and are labeled as estimates in all output
+- Per diem lodging rates are calibrated for US government travelers (typically 3-star standard). Since the app targets 4-star minimum hotels, actual costs may be higher. This is noted explicitly in notification output.
+- Lookup fallback chain: exact city match → country-level average → regional average. Never returns `None` — always returns an estimate with a flag.
+
+### 4.7 Optional / Future Data Sources
 
 | Source | Purpose | Notes |
 |--------|---------|-------|
@@ -221,8 +258,8 @@ Tracks each daily execution for debugging and history.
 | `winner_trip_id` | INTEGER | FK → `trips.id` |
 | `error_message` | TEXT | If failed, error details |
 | `duration_seconds` | REAL | Total runtime |
-| `api_calls_amadeus` | INTEGER | Amadeus API calls made this run |
-| `api_calls_numbeo` | INTEGER | Numbeo API calls made this run |
+| `api_calls_tequila` | INTEGER | Tequila API calls made this run |
+| `api_calls_gsa` | INTEGER | GSA API calls made this run (0 for international runs using static per diem data) |
 
 ### 5.5 `api_usage`
 
@@ -231,7 +268,7 @@ Tracks cumulative API usage for rate limit monitoring. One row per API per calen
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | INTEGER PRIMARY KEY |  |
-| `api_name` | TEXT | `amadeus`, `numbeo`, `sendgrid` |
+| `api_name` | TEXT | `tequila`, `gsa`, `resend` |
 | `usage_date` | DATE | Calendar date |
 | `calls_made` | INTEGER | Total calls made on this date |
 | `daily_limit` | INTEGER | Known daily limit for this API (configurable) |
@@ -252,14 +289,20 @@ Tracks cumulative API usage for rate limit monitoring. One row per API per calen
 trip_of_the_day/
 ├── main.py                  # Entry point; triggers daily run manually or via scheduler
 ├── scheduler.py             # APScheduler configuration; runs daily at configured time
-├── fetcher.py               # All external API calls (Amadeus, Numbeo)
+├── fetcher.py               # All external API calls (Tequila) and per diem lookups
 ├── costs.py                 # Cost assembly; combines flight + hotel + car + food into CostBreakdown
 ├── ranker.py                # Sorts and selects the best trip from candidates
-├── notifier.py              # Email composition and delivery via SendGrid
+├── notifier.py              # Email composition and delivery via Resend
 ├── db.py                    # SQLAlchemy setup, ORM models, DB initialization
 ├── preferences.py           # Read/write preference helpers
 ├── ui.py                    # Streamlit UI (preferences editor, history, exclusion list)
 ├── car_rates.json           # Static regional car rental rate table
+├── data/
+│   ├── gsa_per_diem.json        # Raw GSA CONUS per diem rates (generated by update_rates.py)
+│   ├── state_dept_per_diem.json # Parsed State Dept international rates (generated by update_rates.py)
+│   └── per_diem_rates.json      # Merged unified lookup (generated by update_rates.py)
+├── scripts/
+│   └── update_rates.py      # Fetches GSA + State Dept data and writes to data/
 ├── .env.example             # Template showing required environment variables
 ├── .gitignore               # Excludes .env, *.db, __pycache__, etc.
 ├── requirements.txt         # Pinned dependencies
@@ -267,20 +310,21 @@ trip_of_the_day/
 └── tests/
     ├── test_costs.py
     ├── test_ranker.py
-    ├── test_fetcher.py      # Uses Amadeus sandbox; no mocking needed for basic tests
+    ├── test_fetcher.py      # Integration tests for Tequila API (skipped without key)
     └── test_db.py
 ```
 
 ### Module Responsibilities
 
 **`fetcher.py`**
-- `get_cheapest_destinations(origin_iata, date, n=20)` — calls Amadeus Flight Inspiration Search
-- `get_flight_offers(origin, destination, depart_date, return_date, adults, children)` — calls Amadeus Flight Offers Search
-- `get_hotel_offers(city_code, checkin, checkout, adults, rooms)` — calls Amadeus Hotel Search
-- `get_food_cost(city, country, days, people)` — calls Numbeo; returns estimated food spend
+- `get_cheapest_destinations(origin_iata, date, n=20)` — calls Tequila `/v2/search` with `fly_to=anywhere`; returns top n cheapest destinations
+- `get_flight_offers(origin, destination, depart_date, return_date, adults, children)` — calls Tequila `/v2/search` for a specific route; extracts `deep_link` as the booking URL
+- `get_hotel_offers(city_code, checkin, checkout, adults, rooms)` — looks up lodging rate from `data/per_diem_rates.json`; returns estimate with `is_estimate=True` and a Google Hotels fallback booking URL
+- `get_food_cost(city, country, days, people)` — looks up M&IE rate from `data/per_diem_rates.json`; returns estimated total food cost
+- `get_airport_info(iata)` — calls Tequila `/locations/query`; returns city/country metadata. Lat/lon falls back to 0.0 (no coordinate data from Tequila).
+- Per diem JSON lookups (hotel, food) do not count as API calls and are not rate-limited
+- Tequila API calls are checked against `api_usage` table before executing
 - All functions return typed dataclasses, never raw API responses directly
-- All functions check `api_usage` table before executing; skip and warn if daily/monthly limit would be exceeded
-- All successful calls increment the `api_usage` counter for that API and date
 
 **`costs.py`**
 - `CostBreakdown` dataclass: `{flights, hotel, car, food, total, car_is_estimate}`
@@ -296,8 +340,8 @@ trip_of_the_day/
 - `send_trip_notification(trip: Trip, prefs: Preferences)` — single public function
 - Reads `notification_emails` preference (JSON list); sends to all configured addresses
 - Composes HTML email with trip summary, cost breakdown table, booking links
-- Delivers via SendGrid API
-- If SendGrid key is missing, falls back to plain-text stdout (useful during development)
+- Delivers via Resend API (`resend.Emails.send()`); uses `onboarding@resend.dev` shared sender when no custom domain is configured
+- If `RESEND_API_KEY` is not set, falls back to plain-text stdout (useful during development)
 
 **`db.py`**
 - SQLAlchemy engine and session factory
@@ -331,10 +375,10 @@ All costs are denominated in USD. All costs represent the full trip for all trav
 
 | Component | Scope | Source | Notes |
 |-----------|-------|--------|-------|
-| `flight_cost` | Round-trip, all passengers | Amadeus Flight Offers | Lowest available nonstop fare |
-| `hotel_cost` | All nights, all rooms needed | Amadeus Hotel Offers | Lowest available 4-star+ rate |
-| `car_cost` | All days, one vehicle | Static table (Phase 1) | Flagged as estimate |
-| `food_cost` | All days, all travelers | Numbeo city data | Based on mid-range restaurant cost × meals × people |
+| `flight_cost` | Round-trip, all passengers | Tequila `/v2/search` | Lowest available nonstop fare |
+| `hotel_cost` | All nights, all rooms needed | GSA / State Dept per diem | Lodging rate × nights × rooms; flagged as estimate; may be conservative (govt 3-star rate) |
+| `car_cost` | All days, one vehicle | Static table | Flagged as estimate |
+| `food_cost` | All days, all travelers | GSA / State Dept M&IE rate | M&IE rate × days × travelers; flagged as estimate |
 
 ### Storage
 
@@ -375,12 +419,13 @@ A candidate is excluded from ranking if:
 
 ## 9. Notification System
 
-### Delivery: SendGrid
+### Delivery: Resend
 
-- Python library: `sendgrid`
-- Requires `SENDGRID_API_KEY` in `.env`
-- Free tier: 100 emails/day (more than sufficient)
-- Users of the open source project register their own free SendGrid account
+- Python library: `resend`
+- Requires `RESEND_API_KEY` in `.env`
+- Free tier: 3,000 emails/month permanently; no credit card required
+- Sender: `onboarding@resend.dev` (shared test sender, no domain verification needed) or a user-configured custom verified domain
+- Users of the open source project register their own free Resend account at https://resend.com
 
 ### Email Content (Phase 1)
 
@@ -397,7 +442,7 @@ A candidate is excluded from ranking if:
 
 ### Fallback
 
-If `SENDGRID_API_KEY` is not set, `notifier.py` prints a formatted plain-text version of the trip to stdout. This makes local development and testing possible without any email configuration.
+If `RESEND_API_KEY` is not set, `notifier.py` prints a formatted plain-text version of the trip to stdout. This makes local development and testing possible without any email configuration.
 
 ---
 
@@ -443,21 +488,21 @@ streamlit run ui.py
 ### Environment Variables (`.env` file, never committed)
 
 ```env
-AMADEUS_API_KEY=your_key_here
-AMADEUS_API_SECRET=your_secret_here
-AMADEUS_ENV=test                    # Set to "production" when ready
-SENDGRID_API_KEY=your_key_here
-NOTIFICATION_EMAILS=you@example.com,partner@example.com   # Comma-separated list
+TEQUILA_API_KEY=your_key_here       # Register free at https://tequila.kiwi.com
+GSA_API_KEY=your_key_here           # Register free at https://api.data.gov/signup/
+RESEND_API_KEY=your_key_here        # Register free at https://resend.com
+RESEND_FROM_EMAIL=onboarding@resend.dev   # Use shared sender for dev; set custom domain for production
+NOTIFICATION_EMAILS=you@example.com,partner@example.com
 ```
 
 ### `.env.example` (committed to repo)
 
 ```env
-AMADEUS_API_KEY=
-AMADEUS_API_SECRET=
-AMADEUS_ENV=test
-SENDGRID_API_KEY=
-NOTIFICATION_EMAILS=    # One or more comma-separated email addresses
+TEQUILA_API_KEY=          # Register free at https://tequila.kiwi.com
+GSA_API_KEY=              # Register free at https://api.data.gov/signup/
+RESEND_API_KEY=           # Register free at https://resend.com
+RESEND_FROM_EMAIL=onboarding@resend.dev   # Shared test sender; replace with verified domain for production
+NOTIFICATION_EMAILS=      # One or more comma-separated email addresses
 ```
 
 ### User Preferences (stored in DB)
@@ -468,7 +513,7 @@ All values in Section 5.1 are stored in the `preferences` table and editable via
 
 ## 12. Phased Implementation Plan
 
-### Phase 1: Proof of Concept
+### Phase 1: Proof of Concept — ✅ Complete
 
 **Goal:** End-to-end working pipeline. Run manually. Produces a real trip recommendation and sends an email.
 
@@ -476,25 +521,38 @@ All values in Section 5.1 are stored in the `preferences` table and editable via
 - Home airport: HSV (hardcoded for PoC, then moved to preference)
 - Trip length: 7 nights, departing 7 days from today
 - Travelers: 2 adults, 2 children
-- Flights: direct only
-- Hotels: 4 stars and up
-- Car: required (static estimate)
-- Food: Numbeo estimate
-- Data source: Amadeus sandbox → Amadeus production
-- Destinations: top 20 cheapest from Amadeus Flight Inspiration Search
+- Flights: direct only, Hotels: 4 stars and up, Car: required (static estimate)
 - Ranking: cheapest total cost, ties by distance
-- Notification: SendGrid HTML email
-- Exclusion list: stored in DB, respected in ranking (no UI yet — manual DB edit or CLI flag)
-- UI: none (CLI only, `python main.py` to trigger a run)
-- Scheduling: none (manual execution)
+- Exclusion list: stored in DB, respected in ranking (no UI yet)
+- UI: none (CLI only), Scheduling: none (manual execution)
 
-**Deliverables:**
-- `main.py`, `fetcher.py`, `costs.py`, `ranker.py`, `notifier.py`, `db.py`, `preferences.py`
-- `car_rates.json` with global regional estimates
-- `.env.example`, `requirements.txt`, `README.md` with setup instructions
-- Basic test suite covering cost calculation and ranking logic
+**Status:** Complete. All modules implemented, unit tests pass, CI green.
 
-**Success criteria:** Running `python main.py` produces a ranked trip, stores results to SQLite, and sends a correctly formatted email to the configured address.
+---
+
+### Phase 1b: Data Source Migration — 🔄 In Progress
+
+**Goal:** Replace all unavailable data sources with confirmed free alternatives. No new features. No regressions.
+
+**Background:** Amadeus shut down its self-service developer portal (full decommission July 17, 2026). SendGrid permanently retired its free tier on May 27, 2025. Numbeo has no free API tier. All three must be replaced.
+
+**Replacement sources:**
+- Flights: Kiwi.com Tequila API (free developer tier)
+- Hotel + food estimates: GSA CONUS Per Diem API (domestic) + State Dept Foreign Per Diem XLS (international)
+- Email: Resend (3,000 emails/month free permanently)
+
+**Scope:**
+- Replace all Amadeus API calls in `fetcher.py` with Tequila API calls
+- Replace all Numbeo calls with per diem rate lookups from `data/per_diem_rates.json`
+- Replace SendGrid in `notifier.py` with Resend
+- Add `scripts/update_rates.py` to fetch and merge GSA + State Dept data into `data/`
+- Commit seeded per diem data files to repo
+- Rename `run_log` columns: `api_calls_amadeus` → `api_calls_tequila`, `api_calls_numbeo` → `api_calls_gsa`
+- Update `api_usage` API names: `tequila`, `gsa`, `resend`
+- Update all env vars, requirements, tests, and docs
+- **No schema additions. No new public function signatures. No Phase 2 features.**
+
+**Success criteria:** `python main.py` produces a ranked trip using Tequila flight data and per diem hotel/food estimates, stores results to SQLite, and delivers a correctly formatted email via Resend (or stdout fallback). All unit tests pass without any API keys.
 
 ---
 
@@ -632,9 +690,11 @@ All values in Section 5.1 are stored in the `preferences` table and editable via
 ### API Key Handling
 
 Every user of this project registers their own accounts with:
-- Amadeus for Developers (free)
-- SendGrid (free, up to 100 emails/day)
-- Numbeo (free)
+- Kiwi.com Tequila (free developer account at https://tequila.kiwi.com)
+- GSA Per Diem API (free key at https://api.data.gov/signup/)
+- Resend (free at https://resend.com — 3,000 emails/month permanently)
+
+State Department per diem data requires no account — it is downloaded as a public XLS file.
 
 No keys are ever committed to the repository. This is documented explicitly in the README and enforced by `.gitignore`.
 
