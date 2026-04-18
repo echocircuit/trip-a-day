@@ -4,9 +4,9 @@ Determines the cheapest trip that can be booked each day. Runs once daily, finds
 
 ---
 
-## Current phase: Phase 1 — Proof of Concept
+## Current phase: Phase 1b — Data Source Migration complete
 
-**What works now:** Run `python main.py` manually to get a trip recommendation printed to the terminal (or emailed if SendGrid is configured). No scheduling, no UI yet.
+**What works now:** Run `python main.py` manually to get a trip recommendation printed to the terminal (or emailed if Resend is configured). No scheduling, no UI yet.
 
 **What's coming:** Phase 2 adds a daily scheduler and a Streamlit browser UI for managing preferences and exclusions.
 
@@ -16,7 +16,7 @@ Determines the cheapest trip that can be booked each day. Runs once daily, finds
 
 - Python 3.11+
 - [`uv`](https://github.com/astral-sh/uv) — `brew install uv` (or see [uv docs](https://docs.astral.sh/uv/))
-- Free API accounts (details below)
+- Optional free API accounts (details below)
 
 ---
 
@@ -24,11 +24,12 @@ Determines the cheapest trip that can be booked each day. Runs once daily, finds
 
 | Service | What it's for | Sign up |
 |---|---|---|
-| [Amadeus for Developers](https://developers.amadeus.com) | Flights and hotels | Free self-service — no credit card |
-| [SendGrid](https://sendgrid.com) | Daily email notification | Free up to 100 emails/day — optional, falls back to terminal output |
-| [Numbeo](https://www.numbeo.com/api/) | Food cost estimates | Free tier — optional, falls back to regional estimates |
+| [GSA API](https://api.data.gov/signup/) | US domestic lodging & meal estimates | Free — register at api.data.gov |
+| [Resend](https://resend.com) | Daily email notification | Free up to 3,000 emails/month — optional, falls back to terminal output |
 
-> **Amadeus note:** After signing up, create an app in the Amadeus dashboard. You'll get a `Client ID` (`AMADEUS_API_KEY`) and `Client Secret` (`AMADEUS_API_SECRET`). All Phase 1 development uses the **sandbox** environment — do not change `AMADEUS_ENV` to `production`.
+> **Flight data:** No API key required. Flights are fetched via `fast-flights`, which queries Google Flights directly.
+>
+> **Per diem rates:** Run `python scripts/update_rates.py` once after setup (requires `GSA_API_KEY`) to download and cache domestic and international per diem rates to `data/`. The committed `data/per_diem_rates.json` is current as of April 2026.
 
 ---
 
@@ -51,19 +52,24 @@ pre-commit install --hook-type pre-push
 
 # 4. Configure your environment
 cp .env.example .env
-# Edit .env and fill in your API keys
+# Edit .env and fill in your API keys (only Resend and GSA are needed)
 ```
 
 **`.env` reference:**
 
 ```env
-AMADEUS_API_KEY=your_client_id_here
-AMADEUS_API_SECRET=your_client_secret_here
-AMADEUS_ENV=test                       # leave as "test" during Phase 1
-SENDGRID_API_KEY=your_key_here         # optional — omit to use terminal output
-SENDGRID_FROM_EMAIL=you@example.com    # required if using SendGrid
-NUMBEO_API_KEY=your_key_here           # optional — omits for regional fallback estimates
-NOTIFICATION_EMAILS=you@example.com,partner@example.com  # comma-separated
+# Flight data — no key required (fast-flights queries Google Flights directly)
+
+# Hotel + food estimates (domestic US) — register free at https://api.data.gov/signup/
+GSA_API_KEY=your_key_here
+
+# Email delivery — register free at https://resend.com (3,000 emails/month, no credit card)
+RESEND_API_KEY=your_key_here
+# Shared test sender (works without domain verification). Replace with your verified domain for production.
+RESEND_FROM_EMAIL=onboarding@resend.dev
+
+# Comma-separated list of recipient email addresses for the daily notification
+NOTIFICATION_EMAILS=you@example.com,partner@example.com
 ```
 
 ---
@@ -93,11 +99,18 @@ To change the home airport or any other preference before Phase 2 (UI) is availa
 sqlite3 trip_of_the_day.db "UPDATE preferences SET value='ATL' WHERE key='home_airport';"
 ```
 
-**Without any API keys:** The run will find no Amadeus destinations and exit. Add at minimum `AMADEUS_API_KEY` and `AMADEUS_API_SECRET` to get results.
+**Without Resend:** Notification is printed to the terminal instead of emailed.
 
-**Without SendGrid:** Notification is printed to the terminal instead of emailed.
+---
 
-**Without Numbeo:** Food costs are estimated using regional averages ($20–$60/person/day).
+## Refreshing per diem rate data
+
+Per diem rates are cached in `data/per_diem_rates.json` and committed to the repo. Refresh them each October (when GSA publishes new fiscal year rates) or any time you want the latest international rates:
+
+```bash
+# Requires GSA_API_KEY in .env
+python scripts/update_rates.py
+```
 
 ---
 
@@ -107,7 +120,7 @@ sqlite3 trip_of_the_day.db "UPDATE preferences SET value='ATL' WHERE key='home_a
 # Unit tests (fast, no API calls)
 pytest tests/unit/
 
-# Integration tests (requires Amadeus sandbox keys)
+# Integration tests (makes real Google Flights calls — no key required)
 pytest tests/integration/ -m integration -v
 
 # Lint, format, type check
@@ -125,17 +138,22 @@ mypy src/
 ├── src/trip_a_day/
 │   ├── db.py                # SQLite schema and ORM (SQLAlchemy 2.x)
 │   ├── preferences.py       # Read/write user preferences from DB
-│   ├── fetcher.py           # Amadeus + Numbeo API calls
+│   ├── fetcher.py           # fast-flights + per diem rate lookups
 │   ├── costs.py             # Cost assembly (flight + hotel + car + food)
 │   ├── ranker.py            # Trip sorting and selection logic
-│   └── notifier.py          # SendGrid email or terminal output
+│   └── notifier.py          # Resend email or terminal output
 ├── car_rates.json           # Static regional car rental rate estimates
+├── data/
+│   ├── seed_airports.json   # 96 curated destination airports
+│   └── per_diem_rates.json  # Merged GSA + State Dept per diem rates
+├── scripts/
+│   └── update_rates.py      # Refreshes data/ from GSA and State Dept APIs
 ├── .env.example             # Template for required environment variables
 ├── requirements.txt         # Pinned runtime dependencies
 ├── trip_of_the_day_spec.md  # Full project specification
 └── tests/
     ├── unit/                # Fast tests — no API calls required
-    └── integration/         # Amadeus sandbox tests
+    └── integration/         # Live Google Flights tests (no key required)
 ```
 
 ---
