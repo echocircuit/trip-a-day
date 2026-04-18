@@ -98,18 +98,48 @@ The app is designed as a personal, open source tool. Each user runs their own lo
 
 > **Phase 1b note:** Amadeus, Numbeo, and SendGrid were replaced in Phase 1b after all three became unavailable at the free tier. The replacement sources are confirmed free permanently and described below.
 
-### 4.1 Kiwi.com Tequila API (Flights)
+### 4.1 fast-flights (Flights)
 
-- **Registration:** https://tequila.kiwi.com (free developer account; no credit card required)
-- **Base URL:** `https://tequila-api.kiwi.com`
-- **Auth:** `apikey` request header
-- **Key endpoints:**
-  - `/v2/search` — flight search. Use `fly_to=anywhere` for inspiration-style destination discovery; specific IATA codes for point-to-point search. Key params: `fly_from`, `fly_to`, `date_from`, `date_to`, `return_from`, `return_to`, `flight_type=round`, `max_stopovers=0` (direct only), `adults`, `children`. Each result includes `price`, `deep_link` (booking URL), and `route[]` with per-segment IATA codes and city names.
-  - `/locations/query` — resolve IATA codes to city/country metadata. Returns `locations[]` with `code`, `name`, `country`.
-- **Rate limits:** Free tier; typical daily usage (1 run × ~10 searches) is well within limits.
-- **Environment variable:** `TEQUILA_API_KEY`
+- **Library:** `fast-flights` (pip install; no account or API key required)
+- **Mechanism:** Reverse-engineers Google Flights' internal protobuf endpoint. Lightweight (no headless browser), actively maintained.
+- **Usage:**
+  ```python
+  from fast_flights import FlightData, Passengers, get_flights
+  result = get_flights(
+      flight_data=[
+          FlightData(date="2025-06-01", from_airport="HSV", to_airport="LHR"),
+          FlightData(date="2025-06-08", from_airport="LHR", to_airport="HSV"),
+      ],
+      trip="round-trip",
+      seat="economy",
+      passengers=Passengers(adults=2, children=2),
+      fetch_mode="fallback",
+  )
+  ```
+  Each `result.flights` item has `name`, `price`, `stops`, and related fields.
+- **Booking URL:** Constructed as a Google Flights deep link: `https://www.google.com/flights?hl=en#flt={origin}.{destination}.{depart_date};c:USD;e:1;sd:1;t:f`
+- **Limitation:** Requires a specific origin AND destination — no open-ended "cheapest from anywhere" query. Destination discovery is handled via `data/seed_airports.json` (see Section 4.2).
+- **Self-limiting:** No enforced API limits, but the app must run at most one full destination sweep per calendar day. Enforced by checking `run_log` for a successful run on today's date before proceeding.
+- **No environment variable required.**
 
-### 4.2 GSA CONUS Per Diem API (Domestic Hotel + Food Estimates)
+### 4.2 Destination Seed List (`data/seed_airports.json`)
+
+Because `fast-flights` requires a specific destination, destination discovery uses a curated static list of 75–100 popular international and domestic airports committed to the repo.
+
+```json
+[
+  {"iata": "LHR", "city": "London", "country": "United Kingdom", "region": "Western Europe"},
+  ...
+]
+```
+
+- `region` values must match keys in `car_rates.json`
+- The list is geographically diverse across all regions
+- The daily run queries HSV → each airport in this list, collects prices, ranks by total cost
+- Expandable in a later phase (user-maintained CSV, region filter, etc.)
+- **No API key required.** File is committed to the repo.
+
+### 4.3 GSA CONUS Per Diem API (Domestic Hotel + Food Estimates)
 
 - **API docs:** https://open.gsa.gov/api/perdiem/
 - **Registration:** Free API key at https://api.data.gov/signup/ — no account required, key delivered by email within minutes
@@ -121,7 +151,7 @@ The app is designed as a personal, open source tool. Each user runs their own lo
 - **Updated:** Annually each October 1 (new fiscal year rates). Run `scripts/update_rates.py` each October to refresh.
 - **Environment variable:** `GSA_API_KEY`
 
-### 4.3 State Department Foreign Per Diem Rates (International Hotel + Food Estimates)
+### 4.4 State Department Foreign Per Diem Rates (International Hotel + Food Estimates)
 
 - **Source:** Monthly XLS published at `https://aoprals.state.gov/content/documents/{month}{year}pd.xls` (e.g., `april2026pd.xls`)
 - **No API key required** — pure HTTP download, public domain
@@ -130,7 +160,7 @@ The app is designed as a personal, open source tool. Each user runs their own lo
 - **Updated:** Monthly, but annual refresh is sufficient. Run `scripts/update_rates.py` each October alongside GSA refresh.
 - **No environment variable required.**
 
-### 4.4 Resend (Email)
+### 4.5 Resend (Email)
 
 - **Registration:** https://resend.com (free tier: 3,000 emails/month permanently; no credit card required)
 - **Python SDK:** `resend` (pip install)
@@ -143,7 +173,7 @@ The app is designed as a personal, open source tool. Each user runs their own lo
 - **Sender domain:** Resend requires a verified sender domain for production use. For development and testing, Resend provides a shared sender address (`onboarding@resend.dev`) that works without domain verification. This is the default until a custom domain is configured.
 - **Environment variable:** `RESEND_API_KEY`
 
-### 4.5 Rental Car Costs (Static Lookup Table)
+### 4.6 Rental Car Costs (Static Lookup Table)
 
 - No viable free real-time rental car API exists at this time.
 - Uses a static regional lookup table (`car_rates.json`) mapping world regions to an estimated daily rental rate in USD.
@@ -151,7 +181,7 @@ The app is designed as a personal, open source tool. Each user runs their own lo
 - Clearly labeled as "estimated" in all output.
 - **Future:** Replace with a real API (e.g., via RapidAPI car rental endpoints) once a suitable free or low-cost option is identified.
 
-### 4.6 Per Diem Cost Model Notes
+### 4.7 Per Diem Cost Model Notes
 
 - `hotel_cost_usd` = lodging rate × number of nights × number of rooms needed
 - `food_cost_usd` = M&IE rate × number of days × number of travelers
@@ -159,7 +189,7 @@ The app is designed as a personal, open source tool. Each user runs their own lo
 - Per diem lodging rates are calibrated for US government travelers (typically 3-star standard). Since the app targets 4-star minimum hotels, actual costs may be higher. This is noted explicitly in notification output.
 - Lookup fallback chain: exact city match → country-level average → regional average. Never returns `None` — always returns an estimate with a flag.
 
-### 4.7 Optional / Future Data Sources
+### 4.8 Optional / Future Data Sources
 
 | Source | Purpose | Notes |
 |--------|---------|-------|
@@ -258,7 +288,7 @@ Tracks each daily execution for debugging and history.
 | `winner_trip_id` | INTEGER | FK → `trips.id` |
 | `error_message` | TEXT | If failed, error details |
 | `duration_seconds` | REAL | Total runtime |
-| `api_calls_tequila` | INTEGER | Tequila API calls made this run |
+| `api_calls_flights` | INTEGER | Google Flights calls made this run (via fast-flights; tracked for self-limiting) |
 | `api_calls_gsa` | INTEGER | GSA API calls made this run (0 for international runs using static per diem data) |
 
 ### 5.5 `api_usage`
@@ -268,7 +298,7 @@ Tracks cumulative API usage for rate limit monitoring. One row per API per calen
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | INTEGER PRIMARY KEY |  |
-| `api_name` | TEXT | `tequila`, `gsa`, `resend` |
+| `api_name` | TEXT | `google_flights`, `gsa`, `resend` |
 | `usage_date` | DATE | Calendar date |
 | `calls_made` | INTEGER | Total calls made on this date |
 | `daily_limit` | INTEGER | Known daily limit for this API (configurable) |
@@ -298,6 +328,7 @@ trip_of_the_day/
 ├── ui.py                    # Streamlit UI (preferences editor, history, exclusion list)
 ├── car_rates.json           # Static regional car rental rate table
 ├── data/
+│   ├── seed_airports.json       # Curated destination pool (75-100 airports; committed to repo)
 │   ├── gsa_per_diem.json        # Raw GSA CONUS per diem rates (generated by update_rates.py)
 │   ├── state_dept_per_diem.json # Parsed State Dept international rates (generated by update_rates.py)
 │   └── per_diem_rates.json      # Merged unified lookup (generated by update_rates.py)
@@ -317,14 +348,14 @@ trip_of_the_day/
 ### Module Responsibilities
 
 **`fetcher.py`**
-- `get_cheapest_destinations(origin_iata, date, n=20)` — calls Tequila `/v2/search` with `fly_to=anywhere`; returns top n cheapest destinations
-- `get_flight_offers(origin, destination, depart_date, return_date, adults, children)` — calls Tequila `/v2/search` for a specific route; extracts `deep_link` as the booking URL
-- `get_hotel_offers(city_code, checkin, checkout, adults, rooms)` — looks up lodging rate from `data/per_diem_rates.json`; returns estimate with `is_estimate=True` and a Google Hotels fallback booking URL
+- `get_cheapest_destinations(origin_iata, date, n=20)` — iterates over `data/seed_airports.json`, calls `fast-flights` `get_flights()` for each destination, returns the n cheapest results
+- `get_flight_offers(origin, destination, depart_date, return_date, adults, children)` — single `get_flights()` call; returns cheapest matching result with a Google Flights deep link as booking URL
+- `get_hotel_offers(city_code, checkin, checkout, adults, rooms)` — looks up lodging rate from `data/per_diem_rates.json`; returns estimate with `is_estimate=True` and a Google Hotels search link as fallback booking URL
 - `get_food_cost(city, country, days, people)` — looks up M&IE rate from `data/per_diem_rates.json`; returns estimated total food cost
-- `get_airport_info(iata)` — calls Tequila `/locations/query`; returns city/country metadata. Lat/lon falls back to 0.0 (no coordinate data from Tequila).
-- Per diem JSON lookups (hotel, food) do not count as API calls and are not rate-limited
-- Tequila API calls are checked against `api_usage` table before executing
-- All functions return typed dataclasses, never raw API responses directly
+- `get_airport_info(iata)` — looks up metadata from `data/seed_airports.json`; returns city/country/region. Lat/lon falls back to 0.0 (not stored in seed list).
+- Per diem JSON and seed airport lookups do not count as API calls
+- `google_flights` call count is tracked in `api_usage` for self-limiting (not enforced by Google)
+- All functions return typed dataclasses, never raw responses directly
 
 **`costs.py`**
 - `CostBreakdown` dataclass: `{flights, hotel, car, food, total, car_is_estimate}`
@@ -537,18 +568,20 @@ All values in Section 5.1 are stored in the `preferences` table and editable via
 **Background:** Amadeus shut down its self-service developer portal (full decommission July 17, 2026). SendGrid permanently retired its free tier on May 27, 2025. Numbeo has no free API tier. All three must be replaced.
 
 **Replacement sources:**
-- Flights: Kiwi.com Tequila API (free developer tier)
+- Flights: `fast-flights` library (no key; queries Google Flights protobuf endpoint)
+- Destination discovery: `data/seed_airports.json` (curated static list; replaces "anywhere" search)
 - Hotel + food estimates: GSA CONUS Per Diem API (domestic) + State Dept Foreign Per Diem XLS (international)
 - Email: Resend (3,000 emails/month free permanently)
 
 **Scope:**
-- Replace all Amadeus API calls in `fetcher.py` with Tequila API calls
+- Replace all Amadeus calls in `fetcher.py` with `fast-flights` + seed airport iteration
 - Replace all Numbeo calls with per diem rate lookups from `data/per_diem_rates.json`
 - Replace SendGrid in `notifier.py` with Resend
+- Add `data/seed_airports.json` with 75–100 curated destinations
 - Add `scripts/update_rates.py` to fetch and merge GSA + State Dept data into `data/`
 - Commit seeded per diem data files to repo
-- Rename `run_log` columns: `api_calls_amadeus` → `api_calls_tequila`, `api_calls_numbeo` → `api_calls_gsa`
-- Update `api_usage` API names: `tequila`, `gsa`, `resend`
+- Rename `run_log` columns: `api_calls_amadeus` → `api_calls_flights`, `api_calls_numbeo` → `api_calls_gsa`
+- Update `api_usage` API names: `google_flights`, `gsa`, `resend`
 - Update all env vars, requirements, tests, and docs
 - **No schema additions. No new public function signatures. No Phase 2 features.**
 
@@ -690,11 +723,10 @@ All values in Section 5.1 are stored in the `preferences` table and editable via
 ### API Key Handling
 
 Every user of this project registers their own accounts with:
-- Kiwi.com Tequila (free developer account at https://tequila.kiwi.com)
 - GSA Per Diem API (free key at https://api.data.gov/signup/)
 - Resend (free at https://resend.com — 3,000 emails/month permanently)
 
-State Department per diem data requires no account — it is downloaded as a public XLS file.
+No account is required for flight data (`fast-flights` queries Google Flights directly). State Department per diem data requires no account — it is downloaded as a public XLS file.
 
 No keys are ever committed to the repository. This is documented explicitly in the README and enforced by `.gitignore`.
 
