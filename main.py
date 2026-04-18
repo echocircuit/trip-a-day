@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import sys
 import time
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 # Load .env before any other imports that might read env vars
@@ -289,7 +289,7 @@ def run() -> None:
         if not candidates:
             logger.error("No valid trip candidates found. Logging failed run.")
             log = RunLog(
-                run_at=__import__("datetime").datetime.utcnow(),
+                run_at=datetime.now(UTC),
                 status="failed",
                 triggered_by="manual",
                 destinations_evaluated=len(raw_destinations),
@@ -318,7 +318,7 @@ def run() -> None:
 
         # Mark winner as notified after sending
         log = RunLog(
-            run_at=__import__("datetime").datetime.utcnow(),
+            run_at=datetime.now(UTC),
             status="success",
             triggered_by="manual",
             destinations_evaluated=len(candidates),
