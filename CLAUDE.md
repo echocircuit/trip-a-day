@@ -10,7 +10,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current phase
 
-**Phase 1 — Proof of Concept.** CLI only (`python main.py`). No scheduling, no UI. See Section 12 of the spec.
+**Phase 1 — Complete.** The full pipeline runs end-to-end: `python main.py` fetches destinations from Amadeus sandbox, builds cost breakdowns, ranks trips, stores results in SQLite, and prints the winner to stdout (SendGrid fallback). All unit and integration tests pass. CI (lint + unit-tests + integration) is green.
+
+**Next: Phase 2.** Read Section 12 of the spec for Phase 2 scope before starting. Begin with `git checkout main && git pull && git checkout -b feature/phase-2-<description>`.
 
 ## Development workflow
 
