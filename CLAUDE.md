@@ -12,6 +12,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Phase 1 — Proof of Concept.** CLI only (`python main.py`). No scheduling, no UI. See Section 12 of the spec.
 
+## Development workflow
+
+**Start of a phase** (if not already on a feature branch):
+```bash
+git checkout main && git pull
+git checkout -b feature/<short-description>   # e.g. feature/phase-2-scheduling
+```
+
+**During a phase:** commit logical units of work as you go (one module, one test suite, one config change per commit). Use conventional prefixes from CONTRIBUTING.md.
+
+**End of a phase:** before pushing, verify everything works locally:
+```bash
+ruff check . && ruff format --check .   # must pass clean
+mypy src/                               # must pass clean
+pytest tests/unit/                      # must pass
+python main.py                          # must run without unhandled exceptions
+```
+Fix any issues found and commit them. Then push and open a PR:
+```bash
+git push -u origin feature/<short-description>
+gh pr create --title "<title>" --body "<summary>"
+```
+
 ## Commands
 
 ```bash
