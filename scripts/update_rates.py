@@ -47,42 +47,20 @@ FISCAL_YEAR = (
 # ---------------------------------------------------------------------------
 
 
-def _fetch_gsa_lodging(year: int) -> list[dict]:
+def _fetch_gsa_rates(year: int) -> list[dict]:
+    # Response is a flat list; each item has City, State, Meals, and per-month lodging keys
     url = f"{GSA_BASE}/rates/conus/lodging/{year}"
     resp = requests.get(url, headers={"x-api-key": GSA_API_KEY}, timeout=30)
     resp.raise_for_status()
     data = resp.json()
-    return data.get("rates", [])
-
-
-def _fetch_gsa_mie(year: int) -> list[dict]:
-    url = f"{GSA_BASE}/rates/conus/mie/{year}"
-    resp = requests.get(url, headers={"x-api-key": GSA_API_KEY}, timeout=30)
-    resp.raise_for_status()
-    data = resp.json()
-    return data.get("rates", [])
+    return data if isinstance(data, list) else data.get("rates", [])
 
 
 def build_gsa_records() -> list[dict]:
     print(f"Fetching GSA CONUS rates for fiscal year {FISCAL_YEAR}…")
-    lodging_rows = _fetch_gsa_lodging(FISCAL_YEAR)
-    mie_rows = _fetch_gsa_mie(FISCAL_YEAR)
+    rows = _fetch_gsa_rates(FISCAL_YEAR)
 
-    # Build a city+state → M&IE lookup (M&IE rows have city-level data too)
-    mie_lookup: dict[str, int] = {}
-    for row in mie_rows:
-        rate = row.get("rate", {})
-        city = (rate.get("city") or "").strip().upper()
-        state = (row.get("state") or "").strip().upper()
-        meals = rate.get("meals")
-        if city and meals is not None:
-            mie_lookup[f"{city}|{state}"] = int(meals)
-
-    # Build per-city lodging records; use annual max (October is fiscal year start)
     month_keys = [
-        "Oct",
-        "Nov",
-        "Dec",
         "Jan",
         "Feb",
         "Mar",
@@ -92,19 +70,21 @@ def build_gsa_records() -> list[dict]:
         "Jul",
         "Aug",
         "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
     ]
     records: list[dict] = []
-    for row in lodging_rows:
-        rate = row.get("rate", {})
-        city = (rate.get("city") or "").strip()
-        state = (row.get("state") or "").strip()
-        if not city or not state:
+
+    for row in rows:
+        city = (row.get("City") or "").strip()
+        state = (row.get("State") or "").strip()
+        if not city or not state or city == "Standard Rate":
             continue
 
-        # Max lodging across all months (conservative: use the highest monthly rate)
         monthly_values = []
         for mk in month_keys:
-            v = rate.get(mk)
+            v = row.get(mk)
             if v is not None:
                 with contextlib.suppress(ValueError, TypeError):
                     monthly_values.append(int(v))
@@ -112,9 +92,9 @@ def build_gsa_records() -> list[dict]:
             continue
         lodging = max(monthly_values)
 
-        mie = mie_lookup.get(
-            f"{city.upper()}|{state.upper()}", int(rate.get("meals", 0) or 0)
-        )
+        mie = 0
+        with contextlib.suppress(ValueError, TypeError):
+            mie = int(row.get("Meals") or 0)
 
         records.append(
             {
@@ -166,54 +146,41 @@ def _get_xls_bytes() -> bytes:
 
 
 def build_state_dept_records() -> list[dict]:
-    import openpyxl
+    import xlrd  # type: ignore[import]
 
     print("Fetching State Dept foreign per diem XLS…")
     xls_bytes = _get_xls_bytes()
 
-    # Save XLS to a temp file for openpyxl (it needs a file-like or path)
     tmp_path = _DATA_DIR / "_tmp_state_dept.xls"
     tmp_path.write_bytes(xls_bytes)
 
     try:
-        # openpyxl doesn't support .xls (old format); use xlrd fallback or
-        # convert via openpyxl with read_only=True. The State Dept actually
-        # publishes .xls but it is an HTML table renamed — try openpyxl first.
-        try:
-            wb = openpyxl.load_workbook(tmp_path, read_only=True, data_only=True)
-        except Exception:
-            # Some versions are genuinely binary .xls — try xlrd
-            import xlrd  # type: ignore[import]
-
-            wb = _xlrd_to_openpyxl_shim(xlrd.open_workbook(str(tmp_path)))  # type: ignore[assignment]
-            pass
-
-        ws = wb.active  # first sheet
+        wb = xlrd.open_workbook(str(tmp_path))
+        ws = wb.sheet_by_index(0)
         records: list[dict] = []
-        header_found = False
+        header_row_idx: int | None = None
 
-        for row in ws.iter_rows(values_only=True):
-            if not any(row):
+        for row_idx in range(ws.nrows):
+            row = ws.row_values(row_idx)
+            # Detect header row: column B (index 1) contains "Location" or "City"
+            if header_row_idx is None:
+                b = str(row[1] if len(row) > 1 else "").strip().upper()
+                if b in ("LOCATION", "CITY"):
+                    header_row_idx = row_idx
                 continue
 
-            # Detect the header row: column B = "Location" or "LOCATION"
-            if not header_found:
-                b = str(row[1] or "").strip().upper()
-                if b in ("LOCATION", "CITY"):
-                    header_found = True
+            if len(row) < 7:
                 continue
 
             country = str(row[0] or "").strip()
             city = str(row[1] or "").strip()
-
-            # Skip blank or repeated header rows
             if not country or not city or city.upper() in ("LOCATION", "CITY"):
                 continue
 
             try:
-                lodging = float(row[5])  # column F (0-indexed: 5)
-                mie = float(row[6])  # column G (0-indexed: 6)
-            except (TypeError, ValueError, IndexError):
+                lodging = float(row[5])  # column F
+                mie = float(row[6])  # column G
+            except (TypeError, ValueError):
                 continue
 
             records.append(
@@ -233,11 +200,6 @@ def build_state_dept_records() -> list[dict]:
 
     finally:
         tmp_path.unlink(missing_ok=True)
-
-
-def _xlrd_to_openpyxl_shim(wb_xlrd):  # type: ignore[return]
-    """Not used in normal flow; placeholder if xlrd path is needed."""
-    raise NotImplementedError("xlrd shim not implemented — install openpyxl >= 3.0")
 
 
 # ---------------------------------------------------------------------------

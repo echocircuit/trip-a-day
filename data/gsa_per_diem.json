@@ -1,0 +1,2684 @@
+[
+  {
+    "city": "Birmingham",
+    "state_or_country": "AL",
+    "is_domestic": true,
+    "lodging_usd": 126,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Huntsville",
+    "state_or_country": "AL",
+    "is_domestic": true,
+    "lodging_usd": 141,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Gulf Shores",
+    "state_or_country": "AL",
+    "is_domestic": true,
+    "lodging_usd": 216,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Mobile",
+    "state_or_country": "AL",
+    "is_domestic": true,
+    "lodging_usd": 114,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Hot Springs",
+    "state_or_country": "AR",
+    "is_domestic": true,
+    "lodging_usd": 114,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Phoenix / Scottsdale",
+    "state_or_country": "AZ",
+    "is_domestic": true,
+    "lodging_usd": 229,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Tucson",
+    "state_or_country": "AZ",
+    "is_domestic": true,
+    "lodging_usd": 171,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Grand Canyon / Flagstaff",
+    "state_or_country": "AZ",
+    "is_domestic": true,
+    "lodging_usd": 144,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Kayenta",
+    "state_or_country": "AZ",
+    "is_domestic": true,
+    "lodging_usd": 145,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Sedona",
+    "state_or_country": "AZ",
+    "is_domestic": true,
+    "lodging_usd": 274,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Barstow / Ontario / Victorville",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 124,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Los Angeles",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 191,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Santa Monica",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 273,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Palm Springs",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 186,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "San Diego",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 237,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Death Valley",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 142,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Santa Barbara",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 262,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Visalia",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 131,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Bakersfield / Ridgecrest",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 132,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Fresno",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 129,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "San Luis Obispo",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 203,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Monterey",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 279,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Mammoth Lakes",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 195,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Oakhurst",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 135,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Yosemite National Park",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 203,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "San Mateo / Foster City / Belmont",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 183,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Sunnyvale / Palo Alto / San Jose",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 192,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "San Francisco",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 272,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Sacramento",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 150,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Oakland",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 145,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Napa",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 246,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Antioch / Brentwood / Concord",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 147,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Stockton",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 132,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Santa Rosa",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 157,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Mill Valley / San Rafael / Novato",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 175,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Santa Cruz",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 176,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Point Arena / Gualala",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 129,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Eureka / Arcata / McKinleyville",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 172,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Tahoe City",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 131,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Truckee",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 173,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "West Sacramento / Davis",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 142,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "South Lake Tahoe",
+    "state_or_country": "CA",
+    "is_domestic": true,
+    "lodging_usd": 247,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Denver / Aurora",
+    "state_or_country": "CO",
+    "is_domestic": true,
+    "lodging_usd": 215,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Douglas",
+    "state_or_country": "CO",
+    "is_domestic": true,
+    "lodging_usd": 142,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Boulder / Broomfield",
+    "state_or_country": "CO",
+    "is_domestic": true,
+    "lodging_usd": 173,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Colorado Springs",
+    "state_or_country": "CO",
+    "is_domestic": true,
+    "lodging_usd": 168,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Vail",
+    "state_or_country": "CO",
+    "is_domestic": true,
+    "lodging_usd": 397,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Silverthorne / Breckenridge",
+    "state_or_country": "CO",
+    "is_domestic": true,
+    "lodging_usd": 282,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Steamboat Springs",
+    "state_or_country": "CO",
+    "is_domestic": true,
+    "lodging_usd": 288,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Grand Lake",
+    "state_or_country": "CO",
+    "is_domestic": true,
+    "lodging_usd": 173,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Fort Collins / Loveland",
+    "state_or_country": "CO",
+    "is_domestic": true,
+    "lodging_usd": 140,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Durango",
+    "state_or_country": "CO",
+    "is_domestic": true,
+    "lodging_usd": 184,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Crested Butte / Gunnison",
+    "state_or_country": "CO",
+    "is_domestic": true,
+    "lodging_usd": 154,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Montrose",
+    "state_or_country": "CO",
+    "is_domestic": true,
+    "lodging_usd": 185,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Cortez",
+    "state_or_country": "CO",
+    "is_domestic": true,
+    "lodging_usd": 133,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Telluride",
+    "state_or_country": "CO",
+    "is_domestic": true,
+    "lodging_usd": 350,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Aspen",
+    "state_or_country": "CO",
+    "is_domestic": true,
+    "lodging_usd": 407,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Hartford",
+    "state_or_country": "CT",
+    "is_domestic": true,
+    "lodging_usd": 138,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "New London / Groton",
+    "state_or_country": "CT",
+    "is_domestic": true,
+    "lodging_usd": 124,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "New Haven",
+    "state_or_country": "CT",
+    "is_domestic": true,
+    "lodging_usd": 130,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Bridgeport / Danbury",
+    "state_or_country": "CT",
+    "is_domestic": true,
+    "lodging_usd": 146,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "District of Columbia",
+    "state_or_country": "DC",
+    "is_domestic": true,
+    "lodging_usd": 276,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Wilmington",
+    "state_or_country": "DE",
+    "is_domestic": true,
+    "lodging_usd": 127,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Lewes",
+    "state_or_country": "DE",
+    "is_domestic": true,
+    "lodging_usd": 221,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "St. Augustine",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 170,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Daytona Beach",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 157,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Tallahassee",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 138,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Panama City",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 194,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Fort Walton Beach / De Funiak Springs",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 260,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Pensacola",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 190,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Gulf Breeze",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 214,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Orlando",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 169,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Cocoa Beach",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 208,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Vero Beach",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 259,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Key West",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 436,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Miami",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 232,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Fort Lauderdale",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 224,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Boca Raton / Delray Beach / Jupiter",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 244,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Stuart",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 214,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Tampa / St. Petersburg",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 200,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Bradenton",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 225,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Sebring",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 219,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Fort Myers",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 216,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Punta Gorda",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 192,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Naples",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 314,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Sarasota",
+    "state_or_country": "FL",
+    "is_domestic": true,
+    "lodging_usd": 205,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Atlanta",
+    "state_or_country": "GA",
+    "is_domestic": true,
+    "lodging_usd": 197,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Marietta",
+    "state_or_country": "GA",
+    "is_domestic": true,
+    "lodging_usd": 126,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Athens",
+    "state_or_country": "GA",
+    "is_domestic": true,
+    "lodging_usd": 136,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Augusta",
+    "state_or_country": "GA",
+    "is_domestic": true,
+    "lodging_usd": 125,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Savannah",
+    "state_or_country": "GA",
+    "is_domestic": true,
+    "lodging_usd": 176,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Jekyll Island / Brunswick",
+    "state_or_country": "GA",
+    "is_domestic": true,
+    "lodging_usd": 223,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Dallas",
+    "state_or_country": "IA",
+    "is_domestic": true,
+    "lodging_usd": 115,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Des Moines",
+    "state_or_country": "IA",
+    "is_domestic": true,
+    "lodging_usd": 121,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Sun Valley / Ketchum",
+    "state_or_country": "ID",
+    "is_domestic": true,
+    "lodging_usd": 300,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Boise",
+    "state_or_country": "ID",
+    "is_domestic": true,
+    "lodging_usd": 191,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Coeur d'Alene",
+    "state_or_country": "ID",
+    "is_domestic": true,
+    "lodging_usd": 217,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Chicago",
+    "state_or_country": "IL",
+    "is_domestic": true,
+    "lodging_usd": 234,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Oak Brook Terrace",
+    "state_or_country": "IL",
+    "is_domestic": true,
+    "lodging_usd": 115,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Bolingbrook / Romeoville / Lemont",
+    "state_or_country": "IL",
+    "is_domestic": true,
+    "lodging_usd": 114,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "East St. Louis / O'Fallon / Fairview Heights",
+    "state_or_country": "IL",
+    "is_domestic": true,
+    "lodging_usd": 150,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Indianapolis / Carmel",
+    "state_or_country": "IN",
+    "is_domestic": true,
+    "lodging_usd": 133,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Lafayette / West Lafayette",
+    "state_or_country": "IN",
+    "is_domestic": true,
+    "lodging_usd": 143,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Bloomington",
+    "state_or_country": "IN",
+    "is_domestic": true,
+    "lodging_usd": 139,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Kansas City / Overland Park",
+    "state_or_country": "KS",
+    "is_domestic": true,
+    "lodging_usd": 135,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Louisville",
+    "state_or_country": "KY",
+    "is_domestic": true,
+    "lodging_usd": 164,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Lexington",
+    "state_or_country": "KY",
+    "is_domestic": true,
+    "lodging_usd": 118,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Boone",
+    "state_or_country": "KY",
+    "is_domestic": true,
+    "lodging_usd": 116,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Kenton",
+    "state_or_country": "KY",
+    "is_domestic": true,
+    "lodging_usd": 163,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "New Orleans",
+    "state_or_country": "LA",
+    "is_domestic": true,
+    "lodging_usd": 179,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Alexandria / Leesville / Natchitoches",
+    "state_or_country": "LA",
+    "is_domestic": true,
+    "lodging_usd": 112,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Springfield",
+    "state_or_country": "MA",
+    "is_domestic": true,
+    "lodging_usd": 128,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Northampton",
+    "state_or_country": "MA",
+    "is_domestic": true,
+    "lodging_usd": 157,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Worcester",
+    "state_or_country": "MA",
+    "is_domestic": true,
+    "lodging_usd": 135,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Pittsfield",
+    "state_or_country": "MA",
+    "is_domestic": true,
+    "lodging_usd": 178,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Burlington / Woburn",
+    "state_or_country": "MA",
+    "is_domestic": true,
+    "lodging_usd": 178,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Andover",
+    "state_or_country": "MA",
+    "is_domestic": true,
+    "lodging_usd": 137,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Plymouth / Taunton / New Bedford",
+    "state_or_country": "MA",
+    "is_domestic": true,
+    "lodging_usd": 126,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Quincy",
+    "state_or_country": "MA",
+    "is_domestic": true,
+    "lodging_usd": 175,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Boston / Cambridge",
+    "state_or_country": "MA",
+    "is_domestic": true,
+    "lodging_usd": 349,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Hyannis",
+    "state_or_country": "MA",
+    "is_domestic": true,
+    "lodging_usd": 209,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Martha's Vineyard",
+    "state_or_country": "MA",
+    "is_domestic": true,
+    "lodging_usd": 462,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Falmouth",
+    "state_or_country": "MA",
+    "is_domestic": true,
+    "lodging_usd": 253,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Nantucket",
+    "state_or_country": "MA",
+    "is_domestic": true,
+    "lodging_usd": 471,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Cambridge / St. Michaels",
+    "state_or_country": "MD",
+    "is_domestic": true,
+    "lodging_usd": 186,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Columbia",
+    "state_or_country": "MD",
+    "is_domestic": true,
+    "lodging_usd": 113,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "District of Columbia",
+    "state_or_country": "MD",
+    "is_domestic": true,
+    "lodging_usd": 276,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Annapolis",
+    "state_or_country": "MD",
+    "is_domestic": true,
+    "lodging_usd": 161,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Aberdeen / Bel Air / Belcamp",
+    "state_or_country": "MD",
+    "is_domestic": true,
+    "lodging_usd": 113,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Baltimore City",
+    "state_or_country": "MD",
+    "is_domestic": true,
+    "lodging_usd": 150,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Centreville",
+    "state_or_country": "MD",
+    "is_domestic": true,
+    "lodging_usd": 154,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Ocean City",
+    "state_or_country": "MD",
+    "is_domestic": true,
+    "lodging_usd": 295,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Kennebunk / Kittery / Sanford",
+    "state_or_country": "ME",
+    "is_domestic": true,
+    "lodging_usd": 201,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Portland",
+    "state_or_country": "ME",
+    "is_domestic": true,
+    "lodging_usd": 211,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Bar Harbor / Rockport",
+    "state_or_country": "ME",
+    "is_domestic": true,
+    "lodging_usd": 304,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Pontiac / Auburn Hills",
+    "state_or_country": "MI",
+    "is_domestic": true,
+    "lodging_usd": 116,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Detroit",
+    "state_or_country": "MI",
+    "is_domestic": true,
+    "lodging_usd": 152,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Ann Arbor",
+    "state_or_country": "MI",
+    "is_domestic": true,
+    "lodging_usd": 146,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Midland",
+    "state_or_country": "MI",
+    "is_domestic": true,
+    "lodging_usd": 120,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Grand Rapids",
+    "state_or_country": "MI",
+    "is_domestic": true,
+    "lodging_usd": 119,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "South Haven",
+    "state_or_country": "MI",
+    "is_domestic": true,
+    "lodging_usd": 142,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Muskegon",
+    "state_or_country": "MI",
+    "is_domestic": true,
+    "lodging_usd": 149,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Holland",
+    "state_or_country": "MI",
+    "is_domestic": true,
+    "lodging_usd": 157,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Traverse City",
+    "state_or_country": "MI",
+    "is_domestic": true,
+    "lodging_usd": 235,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Petoskey",
+    "state_or_country": "MI",
+    "is_domestic": true,
+    "lodging_usd": 220,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Mackinac Island",
+    "state_or_country": "MI",
+    "is_domestic": true,
+    "lodging_usd": 195,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Minneapolis / St. Paul",
+    "state_or_country": "MN",
+    "is_domestic": true,
+    "lodging_usd": 148,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Duluth",
+    "state_or_country": "MN",
+    "is_domestic": true,
+    "lodging_usd": 220,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Rochester",
+    "state_or_country": "MN",
+    "is_domestic": true,
+    "lodging_usd": 127,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "St. Louis",
+    "state_or_country": "MO",
+    "is_domestic": true,
+    "lodging_usd": 150,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Kansas City",
+    "state_or_country": "MO",
+    "is_domestic": true,
+    "lodging_usd": 135,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Oxford",
+    "state_or_country": "MS",
+    "is_domestic": true,
+    "lodging_usd": 127,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Southaven",
+    "state_or_country": "MS",
+    "is_domestic": true,
+    "lodging_usd": 126,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Starkville",
+    "state_or_country": "MS",
+    "is_domestic": true,
+    "lodging_usd": 125,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Big Sky / West Yellowstone/Gardiner",
+    "state_or_country": "MT",
+    "is_domestic": true,
+    "lodging_usd": 310,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Helena",
+    "state_or_country": "MT",
+    "is_domestic": true,
+    "lodging_usd": 132,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Missoula",
+    "state_or_country": "MT",
+    "is_domestic": true,
+    "lodging_usd": 195,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Kalispell/Whitefish",
+    "state_or_country": "MT",
+    "is_domestic": true,
+    "lodging_usd": 232,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Greensboro",
+    "state_or_country": "NC",
+    "is_domestic": true,
+    "lodging_usd": 123,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Chapel Hill",
+    "state_or_country": "NC",
+    "is_domestic": true,
+    "lodging_usd": 140,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Durham",
+    "state_or_country": "NC",
+    "is_domestic": true,
+    "lodging_usd": 121,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Raleigh",
+    "state_or_country": "NC",
+    "is_domestic": true,
+    "lodging_usd": 131,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Kill Devil Hills",
+    "state_or_country": "NC",
+    "is_domestic": true,
+    "lodging_usd": 254,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Charlotte",
+    "state_or_country": "NC",
+    "is_domestic": true,
+    "lodging_usd": 131,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Fayetteville",
+    "state_or_country": "NC",
+    "is_domestic": true,
+    "lodging_usd": 124,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Wilmington",
+    "state_or_country": "NC",
+    "is_domestic": true,
+    "lodging_usd": 147,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Atlantic Beach / Morehead City",
+    "state_or_country": "NC",
+    "is_domestic": true,
+    "lodging_usd": 178,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Asheville",
+    "state_or_country": "NC",
+    "is_domestic": true,
+    "lodging_usd": 141,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Omaha",
+    "state_or_country": "NE",
+    "is_domestic": true,
+    "lodging_usd": 122,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Manchester",
+    "state_or_country": "NH",
+    "is_domestic": true,
+    "lodging_usd": 130,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Portsmouth",
+    "state_or_country": "NH",
+    "is_domestic": true,
+    "lodging_usd": 192,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Concord",
+    "state_or_country": "NH",
+    "is_domestic": true,
+    "lodging_usd": 124,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Laconia",
+    "state_or_country": "NH",
+    "is_domestic": true,
+    "lodging_usd": 182,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Lebanon / Lincoln / West Lebanon",
+    "state_or_country": "NH",
+    "is_domestic": true,
+    "lodging_usd": 177,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Conway",
+    "state_or_country": "NH",
+    "is_domestic": true,
+    "lodging_usd": 161,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Durham",
+    "state_or_country": "NH",
+    "is_domestic": true,
+    "lodging_usd": 152,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Edison / Piscataway",
+    "state_or_country": "NJ",
+    "is_domestic": true,
+    "lodging_usd": 122,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Newark",
+    "state_or_country": "NJ",
+    "is_domestic": true,
+    "lodging_usd": 156,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Parsippany",
+    "state_or_country": "NJ",
+    "is_domestic": true,
+    "lodging_usd": 143,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Springfield / Cranford / New Providence",
+    "state_or_country": "NJ",
+    "is_domestic": true,
+    "lodging_usd": 139,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Somerset",
+    "state_or_country": "NJ",
+    "is_domestic": true,
+    "lodging_usd": 138,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Eatontown / Freehold",
+    "state_or_country": "NJ",
+    "is_domestic": true,
+    "lodging_usd": 146,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Toms River",
+    "state_or_country": "NJ",
+    "is_domestic": true,
+    "lodging_usd": 213,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Flemington",
+    "state_or_country": "NJ",
+    "is_domestic": true,
+    "lodging_usd": 124,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Cherry Hill / Moorestown",
+    "state_or_country": "NJ",
+    "is_domestic": true,
+    "lodging_usd": 112,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Princeton / Trenton",
+    "state_or_country": "NJ",
+    "is_domestic": true,
+    "lodging_usd": 138,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Albuquerque",
+    "state_or_country": "NM",
+    "is_domestic": true,
+    "lodging_usd": 144,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Santa Fe",
+    "state_or_country": "NM",
+    "is_domestic": true,
+    "lodging_usd": 167,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Taos",
+    "state_or_country": "NM",
+    "is_domestic": true,
+    "lodging_usd": 128,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Carlsbad",
+    "state_or_country": "NM",
+    "is_domestic": true,
+    "lodging_usd": 155,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Las Vegas",
+    "state_or_country": "NV",
+    "is_domestic": true,
+    "lodging_usd": 159,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Incline Village / Reno / Sparks",
+    "state_or_country": "NV",
+    "is_domestic": true,
+    "lodging_usd": 184,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Riverhead / Ronkonkoma / Melville",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 155,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "New York City",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 342,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Tarrytown / White Plains / New Rochelle",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 161,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Albany",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 117,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Poughkeepsie",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 115,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Nyack / Palisades",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 129,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "West Point",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 123,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Floral Park / Garden City / Great Neck",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 164,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Saratoga Springs / Schenectady",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 214,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Troy",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 121,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Kingston",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 139,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Glens Falls",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 186,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Lake Placid",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 238,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Syracuse / Oswego",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 122,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Ithaca",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 144,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Binghamton",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 117,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Buffalo",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 139,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Niagara Falls",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 142,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Rochester",
+    "state_or_country": "NY",
+    "is_domestic": true,
+    "lodging_usd": 132,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Columbus",
+    "state_or_country": "OH",
+    "is_domestic": true,
+    "lodging_usd": 131,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Dayton / Fairborn",
+    "state_or_country": "OH",
+    "is_domestic": true,
+    "lodging_usd": 115,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Sandusky",
+    "state_or_country": "OH",
+    "is_domestic": true,
+    "lodging_usd": 144,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Cleveland",
+    "state_or_country": "OH",
+    "is_domestic": true,
+    "lodging_usd": 159,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Cincinnati",
+    "state_or_country": "OH",
+    "is_domestic": true,
+    "lodging_usd": 163,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Hamilton",
+    "state_or_country": "OH",
+    "is_domestic": true,
+    "lodging_usd": 124,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Oklahoma City",
+    "state_or_country": "OK",
+    "is_domestic": true,
+    "lodging_usd": 116,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Clackamas",
+    "state_or_country": "OR",
+    "is_domestic": true,
+    "lodging_usd": 136,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Beaverton",
+    "state_or_country": "OR",
+    "is_domestic": true,
+    "lodging_usd": 132,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Portland",
+    "state_or_country": "OR",
+    "is_domestic": true,
+    "lodging_usd": 155,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Seaside",
+    "state_or_country": "OR",
+    "is_domestic": true,
+    "lodging_usd": 236,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Eugene / Florence",
+    "state_or_country": "OR",
+    "is_domestic": true,
+    "lodging_usd": 192,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Lincoln City",
+    "state_or_country": "OR",
+    "is_domestic": true,
+    "lodging_usd": 167,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Bend",
+    "state_or_country": "OR",
+    "is_domestic": true,
+    "lodging_usd": 192,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Pittsburgh",
+    "state_or_country": "PA",
+    "is_domestic": true,
+    "lodging_usd": 138,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "State College",
+    "state_or_country": "PA",
+    "is_domestic": true,
+    "lodging_usd": 124,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Harrisburg",
+    "state_or_country": "PA",
+    "is_domestic": true,
+    "lodging_usd": 124,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Gettysburg",
+    "state_or_country": "PA",
+    "is_domestic": true,
+    "lodging_usd": 122,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Lancaster",
+    "state_or_country": "PA",
+    "is_domestic": true,
+    "lodging_usd": 123,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Reading",
+    "state_or_country": "PA",
+    "is_domestic": true,
+    "lodging_usd": 117,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Hershey",
+    "state_or_country": "PA",
+    "is_domestic": true,
+    "lodging_usd": 196,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Malvern / Frazer / Berwyn",
+    "state_or_country": "PA",
+    "is_domestic": true,
+    "lodging_usd": 118,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Allentown / Easton / Bethlehem",
+    "state_or_country": "PA",
+    "is_domestic": true,
+    "lodging_usd": 115,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Bucks",
+    "state_or_country": "PA",
+    "is_domestic": true,
+    "lodging_usd": 119,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Montgomery",
+    "state_or_country": "PA",
+    "is_domestic": true,
+    "lodging_usd": 126,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Chester / Radnor / Essington",
+    "state_or_country": "PA",
+    "is_domestic": true,
+    "lodging_usd": 127,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Philadelphia",
+    "state_or_country": "PA",
+    "is_domestic": true,
+    "lodging_usd": 218,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Jamestown / Middletown / Newport",
+    "state_or_country": "RI",
+    "is_domestic": true,
+    "lodging_usd": 268,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Providence / Bristol",
+    "state_or_country": "RI",
+    "is_domestic": true,
+    "lodging_usd": 154,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Columbia",
+    "state_or_country": "SC",
+    "is_domestic": true,
+    "lodging_usd": 115,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Charleston",
+    "state_or_country": "SC",
+    "is_domestic": true,
+    "lodging_usd": 288,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Myrtle Beach",
+    "state_or_country": "SC",
+    "is_domestic": true,
+    "lodging_usd": 182,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Hilton Head",
+    "state_or_country": "SC",
+    "is_domestic": true,
+    "lodging_usd": 215,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Rapid City",
+    "state_or_country": "SD",
+    "is_domestic": true,
+    "lodging_usd": 158,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Deadwood / Spearfish",
+    "state_or_country": "SD",
+    "is_domestic": true,
+    "lodging_usd": 140,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Hot Springs",
+    "state_or_country": "SD",
+    "is_domestic": true,
+    "lodging_usd": 161,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Nashville",
+    "state_or_country": "TN",
+    "is_domestic": true,
+    "lodging_usd": 248,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Brentwood / Franklin",
+    "state_or_country": "TN",
+    "is_domestic": true,
+    "lodging_usd": 130,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Chattanooga",
+    "state_or_country": "TN",
+    "is_domestic": true,
+    "lodging_usd": 117,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Memphis",
+    "state_or_country": "TN",
+    "is_domestic": true,
+    "lodging_usd": 129,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Knoxville",
+    "state_or_country": "TN",
+    "is_domestic": true,
+    "lodging_usd": 119,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Austin",
+    "state_or_country": "TX",
+    "is_domestic": true,
+    "lodging_usd": 187,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Dallas",
+    "state_or_country": "TX",
+    "is_domestic": true,
+    "lodging_usd": 191,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Plano",
+    "state_or_country": "TX",
+    "is_domestic": true,
+    "lodging_usd": 123,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Arlington / Fort Worth / Grapevine",
+    "state_or_country": "TX",
+    "is_domestic": true,
+    "lodging_usd": 181,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Houston",
+    "state_or_country": "TX",
+    "is_domestic": true,
+    "lodging_usd": 128,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Galveston",
+    "state_or_country": "TX",
+    "is_domestic": true,
+    "lodging_usd": 146,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "San Antonio",
+    "state_or_country": "TX",
+    "is_domestic": true,
+    "lodging_usd": 161,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "South Padre Island",
+    "state_or_country": "TX",
+    "is_domestic": true,
+    "lodging_usd": 140,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Midland / Odessa",
+    "state_or_country": "TX",
+    "is_domestic": true,
+    "lodging_usd": 132,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Big Spring",
+    "state_or_country": "TX",
+    "is_domestic": true,
+    "lodging_usd": 114,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Pecos",
+    "state_or_country": "TX",
+    "is_domestic": true,
+    "lodging_usd": 121,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Park City",
+    "state_or_country": "UT",
+    "is_domestic": true,
+    "lodging_usd": 483,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Provo",
+    "state_or_country": "UT",
+    "is_domestic": true,
+    "lodging_usd": 117,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Salt Lake City",
+    "state_or_country": "UT",
+    "is_domestic": true,
+    "lodging_usd": 142,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Moab",
+    "state_or_country": "UT",
+    "is_domestic": true,
+    "lodging_usd": 221,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Loudoun",
+    "state_or_country": "VA",
+    "is_domestic": true,
+    "lodging_usd": 115,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "District of Columbia",
+    "state_or_country": "VA",
+    "is_domestic": true,
+    "lodging_usd": 276,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Wallops Island",
+    "state_or_country": "VA",
+    "is_domestic": true,
+    "lodging_usd": 248,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Charlottesville",
+    "state_or_country": "VA",
+    "is_domestic": true,
+    "lodging_usd": 136,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Williamsburg / York",
+    "state_or_country": "VA",
+    "is_domestic": true,
+    "lodging_usd": 134,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Richmond",
+    "state_or_country": "VA",
+    "is_domestic": true,
+    "lodging_usd": 157,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Virginia Beach",
+    "state_or_country": "VA",
+    "is_domestic": true,
+    "lodging_usd": 210,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Lynchburg",
+    "state_or_country": "VA",
+    "is_domestic": true,
+    "lodging_usd": 115,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Roanoke",
+    "state_or_country": "VA",
+    "is_domestic": true,
+    "lodging_usd": 119,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Blacksburg",
+    "state_or_country": "VA",
+    "is_domestic": true,
+    "lodging_usd": 122,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "White River Junction",
+    "state_or_country": "VT",
+    "is_domestic": true,
+    "lodging_usd": 144,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Manchester",
+    "state_or_country": "VT",
+    "is_domestic": true,
+    "lodging_usd": 220,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Burlington",
+    "state_or_country": "VT",
+    "is_domestic": true,
+    "lodging_usd": 202,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Stowe",
+    "state_or_country": "VT",
+    "is_domestic": true,
+    "lodging_usd": 185,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Montpelier",
+    "state_or_country": "VT",
+    "is_domestic": true,
+    "lodging_usd": 227,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Spokane",
+    "state_or_country": "WA",
+    "is_domestic": true,
+    "lodging_usd": 126,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Seattle",
+    "state_or_country": "WA",
+    "is_domestic": true,
+    "lodging_usd": 248,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Everett / Lynnwood",
+    "state_or_country": "WA",
+    "is_domestic": true,
+    "lodging_usd": 140,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Tacoma",
+    "state_or_country": "WA",
+    "is_domestic": true,
+    "lodging_usd": 136,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Port Angeles / Port Townsend",
+    "state_or_country": "WA",
+    "is_domestic": true,
+    "lodging_usd": 235,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Olympia / Tumwater",
+    "state_or_country": "WA",
+    "is_domestic": true,
+    "lodging_usd": 175,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Ocean Shores",
+    "state_or_country": "WA",
+    "is_domestic": true,
+    "lodging_usd": 132,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Vancouver",
+    "state_or_country": "WA",
+    "is_domestic": true,
+    "lodging_usd": 155,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Richland / Pasco",
+    "state_or_country": "WA",
+    "is_domestic": true,
+    "lodging_usd": 130,
+    "mie_usd": 86,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Milwaukee",
+    "state_or_country": "WI",
+    "is_domestic": true,
+    "lodging_usd": 140,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Madison",
+    "state_or_country": "WI",
+    "is_domestic": true,
+    "lodging_usd": 138,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Sturgeon Bay",
+    "state_or_country": "WI",
+    "is_domestic": true,
+    "lodging_usd": 133,
+    "mie_usd": 80,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Charles Town",
+    "state_or_country": "WV",
+    "is_domestic": true,
+    "lodging_usd": 122,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Charleston",
+    "state_or_country": "WV",
+    "is_domestic": true,
+    "lodging_usd": 115,
+    "mie_usd": 68,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Cody",
+    "state_or_country": "WY",
+    "is_domestic": true,
+    "lodging_usd": 190,
+    "mie_usd": 74,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  },
+  {
+    "city": "Jackson / Pinedale",
+    "state_or_country": "WY",
+    "is_domestic": true,
+    "lodging_usd": 420,
+    "mie_usd": 92,
+    "effective_date": "FY2025",
+    "source": "gsa"
+  }
+]
