@@ -24,7 +24,7 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.4",
     "mypy>=1.10",
-    "pre-commit>=3.7",
+    "pre-commit>=4.5.1",
 ]
 
 # Optional: CLI entry point
