@@ -65,3 +65,5 @@ mypy src/
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+<!-- initial CI trigger -->
