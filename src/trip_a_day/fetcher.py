@@ -1,25 +1,35 @@
-"""External API calls: Amadeus (flights + hotels) and Numbeo (food costs).
+"""External data fetching: fast-flights (Google Flights) and per diem rate lookups.
 
-All public functions return typed dataclasses — never raw API response dicts.
-All calls check api_usage before executing and increment it after success.
+All public functions return typed dataclasses — never raw response dicts.
+Flight calls track usage in api_usage. Per diem and seed lookups are local and free.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import os
+import math
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any
+from pathlib import Path
 
-import requests
-from amadeus import Client, ResponseError
+from fast_flights import FlightData, Passengers, get_flights  # type: ignore[import]
 from sqlalchemy.orm import Session
 
 from trip_a_day.db import get_api_calls_today, record_api_call
 
 logger = logging.getLogger(__name__)
+
+_DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+_SEED_AIRPORTS_PATH = _DATA_DIR / "seed_airports.json"
+_PER_DIEM_PATH = _DATA_DIR / "per_diem_rates.json"
+
+# Lazy-loaded caches
+_seed_airports: list[dict] | None = None
+_per_diem_rates: list[dict] | None = None
+
+# Soft daily limit for Google Flights calls (self-limiting, not enforced by Google)
+_GOOGLE_FLIGHTS_DAILY_SOFT_LIMIT = 300
 
 # Maps ISO-3166-1 alpha-2 country code → world region (matches car_rates.json keys)
 _COUNTRY_TO_REGION: dict[str, str] = {
@@ -189,8 +199,8 @@ _COUNTRY_TO_REGION: dict[str, str] = {
     "VU": "Oceania",
 }
 
-# Food cost fallback rates (USD per person per day) by region
-_FOOD_FALLBACK: dict[str, float] = {
+# Regional MIE fallback rates when per diem lookup finds nothing (USD/person/day)
+_MIE_FALLBACK: dict[str, float] = {
     "North America": 60.0,
     "Mexico / Central America": 30.0,
     "Caribbean": 45.0,
@@ -207,13 +217,33 @@ _FOOD_FALLBACK: dict[str, float] = {
     "Other": 50.0,
 }
 
-# Amadeus monthly call limit (free production tier)
-_AMADEUS_MONTHLY_LIMIT = 2000
+# Regional lodging fallback (USD/night) — used when per diem has no match
+_LODGING_FALLBACK: dict[str, float] = {
+    "North America": 150.0,
+    "Mexico / Central America": 80.0,
+    "Caribbean": 120.0,
+    "South America": 90.0,
+    "Western Europe": 160.0,
+    "Eastern Europe": 90.0,
+    "Middle East": 130.0,
+    "Africa": 100.0,
+    "South Asia": 60.0,
+    "Southeast Asia": 70.0,
+    "East Asia": 140.0,
+    "Central Asia": 70.0,
+    "Oceania": 160.0,
+    "Other": 100.0,
+}
+
+
+# ---------------------------------------------------------------------------
+# Dataclasses (public API — signatures must not change)
+# ---------------------------------------------------------------------------
 
 
 @dataclass
 class FlightDestination:
-    """A cheap destination returned by Amadeus Flight Inspiration Search."""
+    """A cheap destination found by iterating the seed airport list."""
 
     origin: str
     destination: str
@@ -225,7 +255,7 @@ class FlightDestination:
 
 @dataclass
 class FlightOffer:
-    """Cheapest flight offer from Amadeus Flight Offers Search."""
+    """Cheapest flight offer for a specific route."""
 
     origin: str
     destination: str
@@ -238,7 +268,7 @@ class FlightOffer:
 
 @dataclass
 class HotelOffer:
-    """Cheapest qualifying hotel offer from Amadeus Hotel Offers Search."""
+    """Per diem lodging estimate for a destination."""
 
     hotel_id: str
     hotel_name: str
@@ -258,12 +288,14 @@ class FoodEstimate:
     country: str
     cost_per_person_per_day: float
     total_cost: float
-    source: str  # "numbeo" or "fallback"
+    source: (
+        str  # "per_diem_exact", "per_diem_country", "per_diem_regional", or "fallback"
+    )
 
 
 @dataclass
 class AirportInfo:
-    """Basic airport/city metadata from Amadeus Reference Data."""
+    """Airport/city metadata from seed_airports.json."""
 
     iata: str
     city: str
@@ -274,34 +306,91 @@ class AirportInfo:
     longitude: float
 
 
-_amadeus_client: Client | None = None
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
 
 
-def _get_amadeus() -> Client:
-    global _amadeus_client
-    if _amadeus_client is None:
-        _amadeus_client = Client(
-            client_id=os.environ["AMADEUS_API_KEY"],
-            client_secret=os.environ["AMADEUS_API_SECRET"],
-            hostname=os.environ.get("AMADEUS_ENV", "test"),
-        )
-    return _amadeus_client
+def _load_seed_airports() -> list[dict]:
+    global _seed_airports
+    if _seed_airports is None:
+        _seed_airports = json.loads(_SEED_AIRPORTS_PATH.read_text(encoding="utf-8"))
+    return _seed_airports
 
 
-def _check_amadeus_limit(session: Session) -> bool:
-    """Return True if we can make another Amadeus call; False if limit exceeded."""
-    # Monthly limit check (daily tracking approximated from db)
-    today_calls = get_api_calls_today(session, "amadeus")
-    # Conservative daily budget: monthly_limit / 30
-    daily_budget = _AMADEUS_MONTHLY_LIMIT // 30
-    if today_calls >= daily_budget:
+def _load_per_diem() -> list[dict]:
+    global _per_diem_rates
+    if _per_diem_rates is None:
+        _per_diem_rates = json.loads(_PER_DIEM_PATH.read_text(encoding="utf-8"))
+    return _per_diem_rates
+
+
+def _parse_price(price_str: str) -> float | None:
+    """Parse a price string like '$1,234' into a float."""
+    try:
+        return float(price_str.replace("$", "").replace(",", "").strip())
+    except (ValueError, AttributeError):
+        return None
+
+
+def _google_flights_url(
+    origin: str, destination: str, depart_date: date, return_date: date
+) -> str:
+    d = depart_date.isoformat()
+    r = return_date.isoformat()
+    return (
+        f"https://www.google.com/flights?hl=en"
+        f"#flt={origin}.{destination}.{d}*{destination}.{origin}.{r}"
+        f";c:USD;e:1;sd:1;t:f"
+    )
+
+
+def _check_soft_limit(session: Session) -> bool:
+    """Log a warning if today's Google Flights call count is approaching the soft limit."""
+    today_calls = get_api_calls_today(session, "google_flights")
+    if today_calls >= _GOOGLE_FLIGHTS_DAILY_SOFT_LIMIT:
         logger.warning(
-            "Amadeus daily budget of %d calls reached (%d made today). Skipping.",
-            daily_budget,
+            "Google Flights soft limit of %d calls/day reached (%d made today). "
+            "Skipping further calls to avoid abuse.",
+            _GOOGLE_FLIGHTS_DAILY_SOFT_LIMIT,
             today_calls,
         )
         return False
     return True
+
+
+def _lookup_per_diem(
+    city: str, country: str, is_domestic: bool
+) -> tuple[float, float, str]:
+    """Return (lodging_usd, mie_usd, source_label) using fuzzy fallback chain."""
+    rates = _load_per_diem()
+
+    city_upper = city.strip().upper()
+    country_upper = country.strip().upper()
+
+    # Exact city match
+    for r in rates:
+        if r.get("is_domestic") == is_domestic and r["city"].upper() == city_upper:
+            return float(r["lodging_usd"]), float(r["mie_usd"]), "per_diem_exact"
+
+    # Country-level average (international only, or state-level for domestic)
+    matches = [
+        r
+        for r in rates
+        if r.get("is_domestic") == is_domestic
+        and r["state_or_country"].upper() == country_upper
+    ]
+    if matches:
+        avg_lodging = sum(r["lodging_usd"] for r in matches) / len(matches)
+        avg_mie = sum(r["mie_usd"] for r in matches) / len(matches)
+        return round(avg_lodging, 2), round(avg_mie, 2), "per_diem_country"
+
+    return 0.0, 0.0, "fallback"
+
+
+# ---------------------------------------------------------------------------
+# Public functions (signatures identical to Phase 1)
+# ---------------------------------------------------------------------------
 
 
 def get_cheapest_destinations(
@@ -310,48 +399,69 @@ def get_cheapest_destinations(
     session: Session,
     n: int = 10,
 ) -> list[FlightDestination]:
-    """Call Amadeus Flight Inspiration Search and return up to *n* destinations."""
-    if not _check_amadeus_limit(session):
-        return []
-
-    try:
-        amadeus = _get_amadeus()
-        response = amadeus.shopping.flight_destinations.get(
-            origin=origin_iata,
-            departureDate=departure_date.isoformat(),
-            oneWay=False,
-            nonStop=True,
-        )
-        record_api_call(session, "amadeus")
-    except ResponseError as exc:
-        logger.error("Amadeus Flight Inspiration Search failed: %s", exc)
-        return []
-    except KeyError:
-        logger.warning(
-            "AMADEUS_API_KEY or AMADEUS_API_SECRET not set — skipping fetch."
-        )
-        return []
-
+    """Iterate seed airports, query Google Flights, return the n cheapest destinations."""
+    airports = _load_seed_airports()
     results: list[FlightDestination] = []
-    for item in (response.data or [])[:n]:
-        try:
-            depart = date.fromisoformat(item["departureDate"])
-            ret = date.fromisoformat(item["returnDate"])
-            price = float(item["price"]["total"])
-            results.append(
-                FlightDestination(
-                    origin=item["origin"],
-                    destination=item["destination"],
-                    departure_date=depart,
-                    return_date=ret,
-                    price_total=price,
-                    links=item.get("links", {}),
-                )
-            )
-        except (KeyError, ValueError) as exc:
-            logger.debug("Skipping malformed destination item: %s", exc)
+    errors = 0
 
-    return results
+    for airport in airports:
+        dest_iata = airport["iata"]
+        if dest_iata == origin_iata:
+            continue
+        if not _check_soft_limit(session):
+            break
+
+        try:
+            ff_result = get_flights(
+                flight_data=[
+                    FlightData(
+                        date=departure_date.isoformat(),
+                        from_airport=origin_iata,
+                        to_airport=dest_iata,
+                    ),
+                ],
+                trip="round-trip",
+                seat="economy",
+                passengers=Passengers(adults=1),
+                fetch_mode="fallback",
+            )
+            record_api_call(session, "google_flights")
+        except Exception as exc:
+            logger.debug(
+                "Google Flights query %s→%s failed: %s", origin_iata, dest_iata, exc
+            )
+            errors += 1
+            if errors >= 10:
+                logger.warning(
+                    "Too many Google Flights errors — stopping destination sweep."
+                )
+                break
+            continue
+
+        if not ff_result or not ff_result.flights:
+            continue
+
+        # Find cheapest direct flight
+        direct = [f for f in ff_result.flights if f.stops == 0]
+        candidates = direct if direct else ff_result.flights
+        prices = [(_parse_price(f.price), f) for f in candidates]
+        valid = [(p, f) for p, f in prices if p is not None]
+        if not valid:
+            continue
+
+        price, _ = min(valid, key=lambda x: x[0])
+        results.append(
+            FlightDestination(
+                origin=origin_iata,
+                destination=dest_iata,
+                departure_date=departure_date,
+                return_date=departure_date,
+                price_total=price,  # type: ignore[arg-type]
+            )
+        )
+
+    results.sort(key=lambda r: r.price_total)
+    return results[:n]
 
 
 def get_flight_offers(
@@ -363,45 +473,52 @@ def get_flight_offers(
     children: int,
     session: Session,
 ) -> FlightOffer | None:
-    """Return the cheapest nonstop flight offer, or None if unavailable."""
-    if not _check_amadeus_limit(session):
+    """Return the cheapest direct flight for the exact route, or None if unavailable."""
+    if not _check_soft_limit(session):
         return None
 
     try:
-        amadeus = _get_amadeus()
-        kwargs: dict[str, Any] = dict(
-            originLocationCode=origin,
-            destinationLocationCode=destination,
-            departureDate=depart_date.isoformat(),
-            returnDate=return_date.isoformat(),
-            adults=adults,
-            nonStop=True,
-            max=1,
-            currencyCode="USD",
+        ff_result = get_flights(
+            flight_data=[
+                FlightData(
+                    date=depart_date.isoformat(),
+                    from_airport=origin,
+                    to_airport=destination,
+                ),
+                FlightData(
+                    date=return_date.isoformat(),
+                    from_airport=destination,
+                    to_airport=origin,
+                ),
+            ],
+            trip="round-trip",
+            seat="economy",
+            passengers=Passengers(adults=adults, children=children),
+            fetch_mode="fallback",
         )
-        if children > 0:
-            kwargs["children"] = children
-        response = amadeus.shopping.flight_offers_search.get(**kwargs)
-        record_api_call(session, "amadeus")
-    except ResponseError as exc:
-        logger.debug("Flight Offers Search %s→%s failed: %s", origin, destination, exc)
-        return None
-    except KeyError:
+        record_api_call(session, "google_flights")
+    except Exception as exc:
+        logger.debug("Google Flights query %s→%s failed: %s", origin, destination, exc)
         return None
 
-    data = response.data or []
-    if not data:
+    if not ff_result or not ff_result.flights:
         return None
 
-    offer = data[0]
-    try:
-        price = float(offer["price"]["grandTotal"])
-    except (KeyError, ValueError):
+    direct = [f for f in ff_result.flights if f.stops == 0]
+    candidates = direct if direct else ff_result.flights
+    prices = [(_parse_price(f.price), f) for f in candidates]
+    valid = [(p, f) for p, f in prices if p is not None]
+    if not valid:
         return None
 
-    booking_url = (
-        offer.get("links", {}).get("flightOffers")
-        or f"https://www.google.com/flights?hl=en#flt={origin}.{destination}.{depart_date.isoformat()}"
+    price, best_flight = min(valid, key=lambda x: x[0])
+    booking_url = _google_flights_url(origin, destination, depart_date, return_date)
+    raw = json.dumps(
+        {
+            "name": best_flight.name,
+            "price": best_flight.price,
+            "stops": best_flight.stops,
+        }
     )
 
     return FlightOffer(
@@ -409,9 +526,9 @@ def get_flight_offers(
         destination=destination,
         departure_date=depart_date,
         return_date=return_date,
-        price_total=price,
+        price_total=price,  # type: ignore[arg-type]
         booking_url=booking_url,
-        raw=json.dumps(offer),
+        raw=raw,
     )
 
 
@@ -423,124 +540,70 @@ def get_hotel_offers(
     session: Session,
     min_stars: int = 4,
 ) -> HotelOffer | None:
-    """Return the cheapest hotel offer meeting *min_stars* in *city_code*, or None."""
-    if not _check_amadeus_limit(session):
-        return None
+    """Return a per diem lodging estimate for the destination. Always returns an estimate."""
+    # Resolve city and country from seed list
+    airports = _load_seed_airports()
+    airport = next((a for a in airports if a["iata"] == city_code), None)
+    city = airport["city"] if airport else city_code
+    country = airport["country"] if airport else "Unknown"
+    region = airport["region"] if airport else "Other"
+    is_domestic = country == "United States"
 
-    # Step 1: Get hotel IDs for the city
-    try:
-        amadeus = _get_amadeus()
-        hotel_list_response = amadeus.reference_data.locations.hotels.by_city.get(
-            cityCode=city_code,
-            ratings=[r for r in range(min_stars, 6)],
-        )
-        record_api_call(session, "amadeus")
-    except ResponseError as exc:
-        logger.debug("Hotel List for %s failed: %s", city_code, exc)
-        return None
-    except KeyError:
-        return None
+    nights = (checkout - checkin).days
+    rooms = max(1, math.ceil(adults / 2))
 
-    hotel_data = hotel_list_response.data or []
-    if not hotel_data:
-        logger.debug("No %d-star hotels found in %s", min_stars, city_code)
-        return None
+    lodging_per_night, _, source = _lookup_per_diem(city, country, is_domestic)
 
-    hotel_ids = [h["hotelId"] for h in hotel_data[:20] if "hotelId" in h]
-    if not hotel_ids:
-        return None
+    if lodging_per_night == 0.0:
+        lodging_per_night = _LODGING_FALLBACK.get(region, 100.0)
+        source = "fallback"
 
-    # Step 2: Get pricing for those hotels
-    if not _check_amadeus_limit(session):
-        return None
+    total = round(lodging_per_night * nights * rooms, 2)
+    booking_url = f"https://www.google.com/travel/hotels/{city.replace(' ', '%20')}"
 
-    try:
-        offers_response = amadeus.shopping.hotel_offers_search.get(
-            hotelIds=hotel_ids,
-            checkInDate=checkin.isoformat(),
-            checkOutDate=checkout.isoformat(),
-            adults=adults,
-            roomQuantity=1,
-            currency="USD",
-            bestRateOnly=True,
-        )
-        record_api_call(session, "amadeus")
-    except ResponseError as exc:
-        logger.debug("Hotel Offers Search for %s failed: %s", city_code, exc)
-        return None
-    except KeyError:
-        return None
-
-    offers = offers_response.data or []
-    if not offers:
-        return None
-
-    # Find the cheapest available offer
-    best: dict | None = None
-    best_price = float("inf")
-    for h in offers:
-        for offer in h.get("offers", []):
-            try:
-                price = float(offer["price"]["total"])
-                if price < best_price:
-                    best_price = price
-                    best = h
-            except (KeyError, ValueError):
-                continue
-
-    if best is None:
-        return None
-
-    hotel_name = best.get("hotel", {}).get("name", "Unknown Hotel")
-    hotel_id = best.get("hotel", {}).get("hotelId", "")
-    booking_url = f"https://www.booking.com/searchresults.html?ss={city_code}&checkin={checkin.isoformat()}&checkout={checkout.isoformat()}"
+    note = (
+        "Per diem lodging estimate (govt rate, typically 3-star; "
+        "actual 4-star costs may be higher). "
+        f"Source: {source}."
+    )
 
     return HotelOffer(
-        hotel_id=hotel_id,
-        hotel_name=hotel_name,
+        hotel_id=f"per_diem_{city_code}",
+        hotel_name=f"{city} (per diem estimate)",
         city_code=city_code,
         check_in=checkin,
         check_out=checkout,
-        price_total=round(best_price, 2),
+        price_total=total,
         booking_url=booking_url,
-        raw=json.dumps(best),
+        raw=json.dumps(
+            {
+                "source": source,
+                "lodging_per_night": lodging_per_night,
+                "nights": nights,
+                "rooms": rooms,
+                "note": note,
+            }
+        ),
     )
 
 
 def get_airport_info(iata: str, session: Session) -> AirportInfo | None:
-    """Return airport metadata (city, country, coordinates) from Amadeus Reference Data."""
-    if not _check_amadeus_limit(session):
+    """Return airport metadata from seed_airports.json. Lat/lon falls back to 0.0."""
+    airports = _load_seed_airports()
+    airport = next((a for a in airports if a["iata"] == iata), None)
+    if airport is None:
         return None
 
-    try:
-        amadeus = _get_amadeus()
-        response = amadeus.reference_data.locations.get(
-            keyword=iata,
-            subType="AIRPORT",
-        )
-        record_api_call(session, "amadeus")
-    except ResponseError as exc:
-        logger.debug("Airport info for %s failed: %s", iata, exc)
-        return None
-    except KeyError:
-        return None
-
-    for loc in response.data or []:
-        if loc.get("iataCode") == iata:
-            geo = loc.get("geoCode", {})
-            address = loc.get("address", {})
-            country_code = address.get("countryCode", "")
-            region = _COUNTRY_TO_REGION.get(country_code, "Other")
-            return AirportInfo(
-                iata=iata,
-                city=address.get("cityName", iata),
-                country=address.get("countryName", "Unknown"),
-                country_code=country_code,
-                region=region,
-                latitude=float(geo.get("latitude", 0.0)),
-                longitude=float(geo.get("longitude", 0.0)),
-            )
-    return None
+    region = airport.get("region", "Other")
+    return AirportInfo(
+        iata=iata,
+        city=airport["city"],
+        country=airport["country"],
+        country_code="",
+        region=region,
+        latitude=0.0,
+        longitude=0.0,
+    )
 
 
 def get_food_cost(
@@ -551,84 +614,26 @@ def get_food_cost(
     people: int,
     session: Session,
 ) -> FoodEstimate:
-    """Estimate food cost via Numbeo API, falling back to regional defaults."""
-    numbeo_key = os.environ.get("NUMBEO_API_KEY", "")
-    if numbeo_key:
-        estimate = _fetch_numbeo_food(city, country, days, people, numbeo_key, session)
-        if estimate is not None:
-            return estimate
+    """Estimate food cost via per diem M&IE rates with regional fallback."""
+    is_domestic = country == "United States"
+    _, mie_per_day, source = _lookup_per_diem(city, country, is_domestic)
 
-    # Fallback: use regional estimate
-    per_person_per_day = _FOOD_FALLBACK.get(region, 50.0)
-    total = round(per_person_per_day * people * days, 2)
-    logger.debug(
-        "Using fallback food cost for %s: $%.2f/person/day", region, per_person_per_day
-    )
+    if mie_per_day == 0.0:
+        mie_per_day = _MIE_FALLBACK.get(region, 50.0)
+        source = "fallback"
+
+    total = round(mie_per_day * people * days, 2)
     return FoodEstimate(
         city=city,
         country=country,
-        cost_per_person_per_day=per_person_per_day,
+        cost_per_person_per_day=mie_per_day,
         total_cost=total,
-        source="fallback",
-    )
-
-
-def _fetch_numbeo_food(
-    city: str,
-    country: str,
-    days: int,
-    people: int,
-    api_key: str,
-    session: Session,
-) -> FoodEstimate | None:
-    """Try to get meal costs from Numbeo. Returns None on any failure."""
-    query = f"{city}, {country}"
-    try:
-        resp = requests.get(
-            "https://www.numbeo.com/api/city_prices",
-            params={"api_key": api_key, "query": query, "currency": "USD"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        record_api_call(session, "numbeo")
-    except Exception as exc:
-        logger.debug("Numbeo request for %s failed: %s", query, exc)
-        return None
-
-    # Item IDs: 1 = Meal inexpensive restaurant, 2 = Meal for 2 mid-range
-    prices: dict[int, float] = {}
-    for item in data.get("prices", []):
-        item_id = item.get("item_id")
-        avg = item.get("average_price")
-        if item_id in (1, 2) and avg:
-            prices[item_id] = float(avg)
-
-    if not prices:
-        return None
-
-    # Estimate: 2 inexpensive meals + 1 mid-range dinner per person per day
-    inexpensive = prices.get(1, 0.0)
-    midrange_for_two = prices.get(2, 0.0)
-    per_person_per_day = inexpensive * 2 + (midrange_for_two / 2)
-
-    if per_person_per_day <= 0:
-        return None
-
-    total = round(per_person_per_day * people * days, 2)
-    return FoodEstimate(
-        city=city,
-        country=country,
-        cost_per_person_per_day=round(per_person_per_day, 2),
-        total_cost=total,
-        source="numbeo",
+        source=source,
     )
 
 
 def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculate great-circle distance in miles between two lat/lon points."""
-    import math
-
     r = 3958.8  # Earth radius in miles
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
