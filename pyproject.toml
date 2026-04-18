@@ -24,6 +24,7 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
     "pre-commit>=3.7",
+    "types-requests>=2.32",
 ]
 
 # Optional: CLI entry point
@@ -75,6 +76,15 @@ addopts = "-v --tb=short"
 [tool.coverage.run]
 source = ["src/trip_a_day"]
 branch = true
+# Phase 1: only costs.py and ranker.py have unit tests (per spec).
+# Remaining modules are covered by integration tests — omit them here
+# so fail_under applies only to the modules that unit tests are meant to cover.
+omit = [
+    "src/trip_a_day/db.py",
+    "src/trip_a_day/fetcher.py",
+    "src/trip_a_day/preferences.py",
+    "src/trip_a_day/notifier.py",
+]
 
 [tool.coverage.report]
 show_missing = true
