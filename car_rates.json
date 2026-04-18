@@ -1,0 +1,58 @@
+{
+  "North America": {
+    "daily_rate_usd": 65,
+    "note": "USA, Canada — midsize sedan estimate"
+  },
+  "Mexico / Central America": {
+    "daily_rate_usd": 40,
+    "note": "Mexico, Guatemala, Costa Rica, Panama, etc."
+  },
+  "Caribbean": {
+    "daily_rate_usd": 55,
+    "note": "Island rates tend to be higher than mainland Central America"
+  },
+  "South America": {
+    "daily_rate_usd": 45,
+    "note": "Brazil, Argentina, Colombia, Peru, Chile, etc."
+  },
+  "Western Europe": {
+    "daily_rate_usd": 70,
+    "note": "UK, France, Germany, Italy, Spain, Scandinavia, etc."
+  },
+  "Eastern Europe": {
+    "daily_rate_usd": 45,
+    "note": "Poland, Czech Republic, Hungary, Romania, Balkans, etc."
+  },
+  "Middle East": {
+    "daily_rate_usd": 50,
+    "note": "UAE, Turkey, Egypt, Saudi Arabia, Jordan, etc."
+  },
+  "Africa": {
+    "daily_rate_usd": 55,
+    "note": "Wide variation; estimate based on major tourism hubs"
+  },
+  "South Asia": {
+    "daily_rate_usd": 30,
+    "note": "India, Sri Lanka, Bangladesh, Nepal — self-drive uncommon; estimate may include driver"
+  },
+  "Southeast Asia": {
+    "daily_rate_usd": 35,
+    "note": "Thailand, Vietnam, Indonesia, Philippines, Malaysia, etc."
+  },
+  "East Asia": {
+    "daily_rate_usd": 60,
+    "note": "Japan, South Korea, China, Hong Kong, Taiwan"
+  },
+  "Central Asia": {
+    "daily_rate_usd": 40,
+    "note": "Kazakhstan, Uzbekistan, Kyrgyzstan, etc."
+  },
+  "Oceania": {
+    "daily_rate_usd": 75,
+    "note": "Australia, New Zealand, Pacific islands"
+  },
+  "Other": {
+    "daily_rate_usd": 50,
+    "note": "Fallback rate for regions not listed above"
+  }
+}
