@@ -14,18 +14,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development workflow
 
+**Start of a phase** (if not already on a feature branch):
+```bash
+git checkout main && git pull
+git checkout -b feature/<short-description>   # e.g. feature/phase-2-scheduling
+```
+
 **During a phase:** commit logical units of work as you go (one module, one test suite, one config change per commit). Use conventional prefixes from CONTRIBUTING.md.
 
-**At the end of a phase:** before pushing to remote, run the full pipeline locally end-to-end and verify it produces sensible output:
-
+**End of a phase:** before pushing, verify everything works locally:
 ```bash
 ruff check . && ruff format --check .   # must pass clean
 mypy src/                               # must pass clean
 pytest tests/unit/                      # must pass
 python main.py                          # must run without unhandled exceptions
 ```
-
-Fix any issues found, commit the fixes, then push. Do not push a phase branch until `python main.py` has completed a successful local run.
+Fix any issues found and commit them. Then push and open a PR:
+```bash
+git push -u origin feature/<short-description>
+gh pr create --title "<title>" --body "<summary>"
+```
 
 ## Commands
 
