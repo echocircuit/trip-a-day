@@ -112,3 +112,51 @@ class TestBuildCostBreakdown:
             days=1,
         )
         assert isinstance(bd, CostBreakdown)
+
+
+class TestBuildCostBreakdownNoCarRental:
+    def test_car_cost_is_zero_when_not_required(self):
+        bd = build_cost_breakdown(
+            flight_total=500.0,
+            hotel_total=700.0,
+            car_region="North America",
+            food_total=300.0,
+            days=7,
+            car_required=False,
+        )
+        assert bd.car == 0.0
+
+    def test_car_is_not_flagged_as_estimate_when_not_required(self):
+        bd = build_cost_breakdown(
+            flight_total=100.0,
+            hotel_total=200.0,
+            car_region="North America",
+            food_total=150.0,
+            days=7,
+            car_required=False,
+        )
+        assert bd.car_is_estimate is False
+
+    def test_total_excludes_car_when_not_required(self):
+        bd = build_cost_breakdown(
+            flight_total=500.0,
+            hotel_total=700.0,
+            car_region="North America",
+            food_total=300.0,
+            days=7,
+            car_required=False,
+        )
+        assert bd.total == round(500.0 + 700.0 + 300.0, 2)
+
+    def test_other_components_unaffected(self):
+        bd = build_cost_breakdown(
+            flight_total=400.0,
+            hotel_total=600.0,
+            car_region="Western Europe",
+            food_total=250.0,
+            days=7,
+            car_required=False,
+        )
+        assert bd.flights == 400.0
+        assert bd.hotel == 600.0
+        assert bd.food == 250.0
