@@ -50,12 +50,19 @@ def build_cost_breakdown(
     car_region: str,
     food_total: float,
     days: int,
+    car_required: bool = True,
 ) -> CostBreakdown:
     """Assemble a CostBreakdown from pre-computed component costs.
 
-    *car_region* is looked up against car_rates.json and is always an estimate.
+    When *car_required* is True, car cost is looked up from car_rates.json and
+    flagged as an estimate. When False, car cost is $0 and not flagged.
     """
-    car = lookup_car_cost(car_region, days)
+    if car_required:
+        car = lookup_car_cost(car_region, days)
+        car_is_estimate = True
+    else:
+        car = 0.0
+        car_is_estimate = False
     total = round(flight_total + hotel_total + car + food_total, 2)
     return CostBreakdown(
         flights=round(flight_total, 2),
@@ -63,5 +70,5 @@ def build_cost_breakdown(
         car=car,
         food=round(food_total, 2),
         total=total,
-        car_is_estimate=True,
+        car_is_estimate=car_is_estimate,
     )
