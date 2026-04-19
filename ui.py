@@ -35,6 +35,7 @@ from trip_a_day.db import (
     seed_preferences,
 )
 from trip_a_day.preferences import get_all, set_pref
+from trip_a_day.selector import STRATEGY_LABELS
 
 _PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -255,6 +256,46 @@ def _preferences() -> None:
             "Ranking strategy", _STRATEGIES, index=strategy_idx
         )
 
+        st.subheader("Destination Pool")
+        daily_batch_size = st.number_input(
+            "Daily batch size",
+            min_value=1,
+            max_value=100,
+            value=_int("daily_batch_size", 15),
+            help="Number of destinations evaluated each run.",
+        )
+        sel_strategy_keys = list(STRATEGY_LABELS.keys())
+        sel_strategy_default = prefs.get(
+            "destination_selection_strategy", "least_recently_queried"
+        )
+        sel_strategy_idx = (
+            sel_strategy_keys.index(sel_strategy_default)
+            if sel_strategy_default in sel_strategy_keys
+            else 0
+        )
+        destination_selection_strategy = st.selectbox(
+            "Destination selection strategy",
+            sel_strategy_keys,
+            index=sel_strategy_idx,
+            format_func=lambda k: STRATEGY_LABELS[k],
+        )
+        cache_ttl_enabled = st.checkbox(
+            "Enable price cache (avoid redundant API calls)",
+            value=_bool("cache_ttl_enabled"),
+        )
+        max_live_calls = st.number_input(
+            "Max live API calls per run",
+            min_value=1,
+            max_value=300,
+            value=_int("max_live_calls_per_run", 40),
+        )
+        two_pass_count = st.number_input(
+            "Two-pass candidate count (top N for night-variant search)",
+            min_value=1,
+            max_value=20,
+            value=_int("two_pass_candidate_count", 5),
+        )
+
         st.subheader("Notifications")
         raw_emails = prefs.get("notification_emails", "[]")
         try:
@@ -292,6 +333,13 @@ def _preferences() -> None:
             set_pref(s, "car_rental_required", "true" if car_required else "false")
             set_pref(s, "min_hotel_stars", str(int(min_stars)))
             set_pref(s, "ranking_strategy", ranking_strategy)
+            set_pref(s, "daily_batch_size", str(int(daily_batch_size)))
+            set_pref(
+                s, "destination_selection_strategy", destination_selection_strategy
+            )
+            set_pref(s, "cache_ttl_enabled", "true" if cache_ttl_enabled else "false")
+            set_pref(s, "max_live_calls_per_run", str(int(max_live_calls)))
+            set_pref(s, "two_pass_candidate_count", str(int(two_pass_count)))
             set_pref(s, "notification_emails", json.dumps(new_emails))
             set_pref(s, "scheduled_run_time", run_time_val.strftime("%H:%M"))
             s.commit()
