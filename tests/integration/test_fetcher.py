@@ -115,7 +115,7 @@ def test_get_airport_info_returns_seed_data(test_session):
     result = get_airport_info("JFK", test_session)
     assert result is not None
     assert result.iata == "JFK"
-    assert result.city == "New York"
+    assert result.city == "New York City"
     assert result.country == "United States"
 
 
