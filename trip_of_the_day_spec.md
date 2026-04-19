@@ -1,9 +1,11 @@
 # Trip of the Day — Project Specification
 
-**Version:** 1.2
-**Date:** 2026-04-18
+**Version:** 1.3
+**Date:** 2026-04-19
 **Language:** Python
-**Status:** Phase 1 complete; Phase 1b in progress
+**Status:** Phases 1–6 complete; Phase 7 next
+
+> **Modification policy:** This spec is the authoritative reference for the project. Do not modify it except to update phase completion status (e.g., changing "In Progress" to "Complete"). All other edits require explicit instruction from the project owner. This policy was temporarily lifted for the v1.3 phase renumbering only.
 
 ---
 
@@ -561,7 +563,7 @@ All values in Section 5.1 are stored in the `preferences` table and editable via
 
 ---
 
-### Phase 1b: Data Source Migration — 🔄 In Progress
+### Phase 1b: Data Source Migration — ✅ Complete
 
 **Goal:** Replace all unavailable data sources with confirmed free alternatives. No new features. No regressions.
 
@@ -642,24 +644,25 @@ All values in Section 5.1 are stored in the `preferences` table and editable via
 
 ---
 
-### Phase 5: Multi-Airport Departure
+### Phase 5: Architecture Improvements — ✅ Complete
 
-**Goal:** Find cheaper trips by considering nearby departure airports.
+**Goal:** Improve pipeline reliability and scalability: mock/live flight mode for safe development, an expanded destination pool with configurable selection strategies, a two-pass search that limits live API calls, and per-destination price history tracking.
 
 **Scope:**
-- `search_radius_miles` preference: if > 0, find all airports within that radius of home
-- For each nearby airport, calculate transportation cost to that airport:
-  - **Phase 5a:** Flat estimate using the current IRS standard mileage reimbursement rate (the federal government rate for personal vehicle use, updated annually and publicly available) applied to the driving distance. This is a well-understood, defensible estimate with no API dependency.
-  - **Phase 5b:** Real transit cost via a routing API (e.g., Rome2rio or Google Maps Distance Matrix) for users who want more precision or who might take a shuttle/rideshare instead of driving
-- Add transportation cost to total for any trip departing from a non-home airport
-- Best trip selected across all departure airports
-- Email indicates which departure airport the trip uses and the estimated transport cost to reach it
+- `FLIGHT_DATA_MODE` env var (`mock`/`live`): default `mock` reads `tests/fixtures/mock_flights.json`; `live` calls Google Flights. Prevents accidental API calls during development and testing.
+- Expand `data/seed_airports.json` from ~97 → 302 airports with real lat/lon, subregion, and `typical_price_tier`
+- New `Destination` columns: `country_code`, `subregion`, `typical_price_tier`, `last_queried_at`, `last_known_price_usd`, `last_known_price_date`, `query_count`, `times_selected`, `avg_price_usd`, `enabled`, `user_favorited`
+- New `PriceCache` table with TTL-aware expiry (advance-window-aware: 0–30d→2d, 31–90d→5d, 91–180d→4d, 181d+→2d)
+- 8 destination selection strategies in `selector.py`: `least_recently_queried`, `random`, `round_robin`, `maximize_short_term_region_variety`, `maximize_long_term_region_variety`, `cycle_through_regions`, `proportional_by_region`, `favorites_first`
+- Two-pass search in `main.py`: Pass 1 sweeps the daily batch with cache-first lookups, respecting `max_live_calls_per_run`; Pass 2 runs the full night-variant search only for the top `two_pass_candidate_count` candidates
+- After each run: update `last_queried_at`, `last_known_price_usd`, `query_count` per destination; update `times_selected` and rolling `avg_price_usd` for the winner
+- UI: new "Destination Pool" preferences section (batch size, strategy dropdown, cache toggle, live call cap, two-pass count)
 
-**Success criteria:** With `search_radius_miles=150`, the app considers BHM (Birmingham) and potentially ATL as alternate departure points and correctly factors in the mileage-based transport cost.
+**Success criteria:** `FLIGHT_DATA_MODE=mock python main.py` completes a full two-pass run in under 1 second with no network calls. `FLIGHT_DATA_MODE=live python main.py` sweeps a 15-destination batch, caches prices, and limits live calls to `max_live_calls_per_run`.
 
 ---
 
-### Phase 6: Region Filtering & Advanced Ranking
+### Phase 6: Region Filtering & Advanced Ranking — ✅ Complete
 
 **Goal:** User can precisely control which destinations are considered using composable filters and choose ranking strategies.
 
@@ -692,16 +695,33 @@ All values in Section 5.1 are stored in the `preferences` table and editable via
 
 ---
 
-### Phase 7: Destination Pool Expansion
+### Phase 7: Multi-Airport Departure
 
-**Goal:** Expand how candidate destinations are discovered beyond Amadeus Flight Inspiration.
+**Goal:** Find cheaper trips by considering nearby departure airports.
+
+**Scope:**
+- `search_radius_miles` preference: if > 0, find all airports within that radius of home
+- For each nearby airport, calculate transportation cost to that airport:
+  - **Phase 7a:** Flat estimate using the current IRS standard mileage reimbursement rate (the federal government rate for personal vehicle use, updated annually and publicly available) applied to the driving distance. This is a well-understood, defensible estimate with no API dependency.
+  - **Phase 7b:** Real transit cost via a routing API (e.g., Rome2rio or Google Maps Distance Matrix) for users who want more precision or who might take a shuttle/rideshare instead of driving
+- Add transportation cost to total for any trip departing from a non-home airport
+- Best trip selected across all departure airports
+- Email indicates which departure airport the trip uses and the estimated transport cost to reach it
+
+**Success criteria:** With `search_radius_miles=150`, the app considers BHM (Birmingham) and potentially ATL as alternate departure points and correctly factors in the mileage-based transport cost.
+
+---
+
+### Phase 8: Destination Pool Expansion
+
+**Goal:** Expand how candidate destinations are discovered beyond the curated seed list.
 
 **Scope:**
 - Option to supplement with curated destination lists (e.g., user-maintained CSV of desired cities)
 - Option to enable/disable specific data sources per run
 - Improve destination metadata (points of interest count, safety index, climate data)
 
-**Success criteria:** User can add custom destinations to the candidate pool and the app treats them equally alongside API-sourced candidates.
+**Success criteria:** User can add custom destinations to the candidate pool and the app treats them equally alongside seed airport candidates.
 
 ---
 
@@ -757,7 +777,7 @@ These items are explicitly out of scope for all current phases but should not be
 - **Traveler rescaling estimates** — From any saved or historical trip result, allow the user to input a different traveler count (e.g., reduce from 4 to 2) and instantly see a recalculated cost estimate. Flights and meals scale proportionally; hotel scales slightly (one room vs. two); car stays flat. Clearly labeled as a rough estimate to help the user evaluate a trip before clicking through to book, without re-running the full query.
 - **Trip favorites and saved trips** — Allow users to "favorite" or "save" any trip from the history, marking it for later reference. Saved trips would have their own UI page and could be used to trigger a cost refresh (see below).
 - **Trip cost refresh** — From any saved or historical trip result, allow the user to input new dates and/or a different traveler configuration and re-run the cost query for that specific destination. This lets a user revisit a great destination they weren't ready to book at the time without waiting for it to come up again in the daily run.
-- **Booked trip tracking** — User can mark a trip as booked. Booked destinations can optionally be excluded from future daily picks (see Phase 6). Booked trips stored for personal travel history and analytics.
+- **Booked trip tracking** — User can mark a trip as booked. Booked destinations can optionally be excluded from future daily picks (see Phase 6 — already implemented). Booked trips stored for personal travel history and analytics.
 - **Min/max total cost thresholds** — filter out trips below a "too cheap to be real" floor or above a budget ceiling
 - **User-defined cost weighting** — let users weight flight/hotel/car/food differently in the ranking score
 - **Multiple daily candidates** — email the top 3 instead of just the top 1
