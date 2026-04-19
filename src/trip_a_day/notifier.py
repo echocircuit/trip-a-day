@@ -238,3 +238,50 @@ def _send_via_resend(
     except Exception as exc:
         logger.error("Failed to send email via Resend: %s", exc)
         return False
+
+
+def send_test_email(prefs: dict[str, str]) -> tuple[bool, str]:
+    """Send a test email to configured recipients.
+
+    Returns (success, message) where message describes the outcome.
+    """
+    api_key = os.environ.get("RESEND_API_KEY", "")
+    from_email = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+
+    if not api_key:
+        return False, "No RESEND_API_KEY configured. Set it in your .env file."
+
+    recipients = _parse_recipients(prefs)
+    if not recipients:
+        return (
+            False,
+            "No notification emails configured. Add at least one email address.",
+        )
+
+    subject = "Trip of the Day — Test Email"
+    html_body = textwrap.dedent(f"""\
+        <!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        <h2>&#x2705; Trip of the Day — Test Email</h2>
+        <p>This is a test email confirming that your notification configuration is working.</p>
+        <ul>
+          <li><strong>Sender:</strong> {from_email}</li>
+          <li><strong>Recipients:</strong> {", ".join(recipients)}</li>
+          <li><strong>Flight data mode:</strong> {os.environ.get("FLIGHT_DATA_MODE", "mock")}</li>
+        </ul>
+        <p>If you received this, your Resend integration is set up correctly.</p>
+        </body></html>
+    """)
+    plain_body = (
+        "Trip of the Day — Test Email\n\n"
+        "This is a test email confirming your notification configuration is working.\n"
+        f"Sender: {from_email}\n"
+        f"Recipients: {', '.join(recipients)}\n"
+        f"Flight data mode: {os.environ.get('FLIGHT_DATA_MODE', 'mock')}\n"
+    )
+
+    ok = _send_via_resend(
+        api_key, from_email, recipients, subject, html_body, plain_body
+    )
+    if ok:
+        return True, f"Test email sent to {', '.join(recipients)}."
+    return False, "Failed to send test email — check logs for details."

@@ -185,6 +185,8 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     "exclude_previously_selected": "false",
     "exclude_previously_selected_days": "0",
     "exclude_booked": "false",
+    # Phase 7 (pre-work)
+    "notifications_enabled": "true",
 }
 
 # Destination columns added via ALTER TABLE migration (idempotent).

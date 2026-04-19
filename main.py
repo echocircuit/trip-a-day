@@ -43,7 +43,7 @@ from trip_a_day.fetcher import (
 )
 from trip_a_day.filters import apply_destination_filters
 from trip_a_day.notifier import send_trip_notification
-from trip_a_day.preferences import get, get_all, get_bool, get_int
+from trip_a_day.preferences import get, get_all, get_bool, get_int, get_or
 from trip_a_day.ranker import TripCandidate, rank_trips
 from trip_a_day.selector import select_daily_batch
 
@@ -470,15 +470,20 @@ def run(triggered_by: str = "manual") -> None:
         session.commit()
 
         # ── Notify ────────────────────────────────────────────────────────────
-        notified = send_trip_notification(
-            winner, all_prefs, filter_fallback=filter_fallback, is_mock=is_mock
+        notifications_enabled = (
+            get_or(session, "notifications_enabled", "true") == "true"
         )
-
-        if notified:
-            winner_row = session.get(Trip, winner_trip_id)
-            if winner_row:
-                winner_row.notified = True
-            session.commit()
+        if not notifications_enabled:
+            logger.info("Notifications disabled — skipping email.")
+        else:
+            notified = send_trip_notification(
+                winner, all_prefs, filter_fallback=filter_fallback, is_mock=is_mock
+            )
+            if notified:
+                winner_row = session.get(Trip, winner_trip_id)
+                if winner_row:
+                    winner_row.notified = True
+                session.commit()
 
     logger.info(
         "Run complete in %.1fs. Evaluated %d Pass-2 candidates.",

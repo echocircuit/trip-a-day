@@ -37,6 +37,7 @@ from trip_a_day.db import (
     init_db,
     seed_preferences,
 )
+from trip_a_day.notifier import send_test_email
 from trip_a_day.preferences import get_all, set_pref
 from trip_a_day.selector import STRATEGY_LABELS
 
@@ -95,6 +96,11 @@ def _dashboard() -> None:
             "Set `FLIGHT_DATA_MODE=live` in your `.env` to use live data.",
             icon=None,
         )
+
+    with SessionFactory() as _s:
+        _notifs_enabled = get_all(_s).get("notifications_enabled", "true") == "true"
+    if not _notifs_enabled:
+        st.info("🔕 Notifications disabled — email will not be sent after runs.")
 
     with SessionFactory() as s:
         last_run: RunLog | None = s.query(RunLog).order_by(desc(RunLog.run_at)).first()
@@ -409,16 +415,49 @@ def _preferences() -> None:
         )
 
         st.subheader("Notifications")
+        _from_email = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+        _is_test_sender = (
+            not _from_email.strip() or "onboarding@resend.dev" in _from_email
+        )
+        if _is_test_sender:
+            st.info(
+                "📧 **Email sender: Resend shared test sender** (`onboarding@resend.dev`)  \n"
+                "In test sender mode, emails can only be delivered to your verified Resend "
+                "developer email address. To send to additional recipients, set up a custom "
+                "verified domain and update `RESEND_FROM_EMAIL` in your `.env` file.  \n"
+                "[→ Resend domain setup guide](https://resend.com/docs/dashboard/domains/introduction)"
+            )
+        else:
+            st.success(f"📧 **Email sender:** {_from_email} (custom domain configured)")
+
         raw_emails = prefs.get("notification_emails", "[]")
         try:
-            parsed = json.loads(raw_emails)
-            emails_str = ", ".join(parsed) if isinstance(parsed, list) else ""
+            _parsed_emails = json.loads(raw_emails)
+            emails_str = (
+                ", ".join(_parsed_emails) if isinstance(_parsed_emails, list) else ""
+            )
         except (json.JSONDecodeError, TypeError):
             emails_str = ""
-        notification_emails = st.text_input(
-            "Notification emails (comma-separated)",
-            value=emails_str,
-            help="Leave blank to print the trip to stdout instead of emailing.",
+        if _is_test_sender:
+            st.text_input(
+                "Notification emails (read-only in test sender mode)",
+                value=emails_str,
+                disabled=True,
+                help="Email recipients cannot be changed while using the shared test sender.",
+            )
+            notification_emails = emails_str
+        else:
+            notification_emails = st.text_input(
+                "Notification emails (comma-separated)",
+                value=emails_str,
+                help="Leave blank to print the trip to stdout instead of emailing.",
+            )
+
+        notifications_enabled_val = st.checkbox(
+            "Disable notification emails",
+            value=not _bool("notifications_enabled", default=True),
+            help="When checked, runs complete normally but no email is sent. "
+            "Useful during development to avoid consuming Resend's monthly limit.",
         )
 
         st.subheader("Scheduler")
@@ -477,10 +516,32 @@ def _preferences() -> None:
                 str(int(exclude_selected_days)),
             )
             set_pref(s, "exclude_booked", "true" if exclude_booked else "false")
-            set_pref(s, "notification_emails", json.dumps(new_emails))
+            # Only update notification_emails when not in test sender mode
+            _from_saved = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+            if "onboarding@resend.dev" not in _from_saved and _from_saved.strip():
+                set_pref(s, "notification_emails", json.dumps(new_emails))
+            set_pref(
+                s,
+                "notifications_enabled",
+                "false" if notifications_enabled_val else "true",
+            )
             set_pref(s, "scheduled_run_time", run_time_val.strftime("%H:%M"))
             s.commit()
         st.success("Preferences saved.")
+
+    # Test email button — outside the form so it sends without form submission
+    st.subheader("Test Email")
+    st.caption(
+        "Send a test email to your configured recipients to verify Resend is set up correctly."
+    )
+    if st.button("📨 Send Test Email"):
+        with SessionFactory() as _ts:
+            _test_prefs = get_all(_ts)
+        _ok, _msg = send_test_email(_test_prefs)
+        if _ok:
+            st.success(_msg)
+        else:
+            st.error(_msg)
 
 
 # ── Exclusion List ─────────────────────────────────────────────────────────────
