@@ -1,0 +1,253 @@
+{
+  "HSV-ATL": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Delta", "departure": "HSV", "arrival": "ATL", "departure_time": "06:00 AM", "arrival_time": "07:10 AM", "duration": "1h 10m", "stops": 0, "price": "$198", "is_best": true},
+      {"name": "American", "departure": "HSV", "arrival": "ATL", "departure_time": "09:30 AM", "arrival_time": "11:15 AM", "duration": "1h 45m", "stops": 1, "price": "$154", "is_best": false}
+    ]
+  },
+  "HSV-ORD": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "United", "departure": "HSV", "arrival": "ORD", "departure_time": "07:15 AM", "arrival_time": "09:00 AM", "duration": "1h 45m", "stops": 0, "price": "$312", "is_best": true},
+      {"name": "American", "departure": "HSV", "arrival": "ORD", "departure_time": "11:00 AM", "arrival_time": "01:45 PM", "duration": "2h 45m", "stops": 1, "price": "$248", "is_best": false}
+    ]
+  },
+  "HSV-JFK": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Delta", "departure": "HSV", "arrival": "JFK", "departure_time": "06:45 AM", "arrival_time": "11:30 AM", "duration": "2h 45m", "stops": 1, "price": "$387", "is_best": false},
+      {"name": "American", "departure": "HSV", "arrival": "JFK", "departure_time": "08:00 AM", "arrival_time": "02:00 PM", "duration": "3h 00m", "stops": 1, "price": "$342", "is_best": true}
+    ]
+  },
+  "HSV-LAX": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Delta", "departure": "HSV", "arrival": "LAX", "departure_time": "06:00 AM", "arrival_time": "10:30 AM", "duration": "4h 30m", "stops": 1, "price": "$498", "is_best": true},
+      {"name": "Southwest", "departure": "HSV", "arrival": "LAX", "departure_time": "09:00 AM", "arrival_time": "02:15 PM", "duration": "5h 15m", "stops": 1, "price": "$412", "is_best": false}
+    ]
+  },
+  "HSV-MIA": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "American", "departure": "HSV", "arrival": "MIA", "departure_time": "07:00 AM", "arrival_time": "10:45 AM", "duration": "1h 45m", "stops": 0, "price": "$298", "is_best": true},
+      {"name": "Delta", "departure": "HSV", "arrival": "MIA", "departure_time": "10:00 AM", "arrival_time": "02:30 PM", "duration": "2h 30m", "stops": 1, "price": "$254", "is_best": false}
+    ]
+  },
+  "HSV-DFW": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "American", "departure": "HSV", "arrival": "DFW", "departure_time": "08:30 AM", "arrival_time": "10:15 AM", "duration": "1h 45m", "stops": 0, "price": "$276", "is_best": true}
+    ]
+  },
+  "HSV-DEN": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "United", "departure": "HSV", "arrival": "DEN", "departure_time": "07:00 AM", "arrival_time": "10:00 AM", "duration": "3h 00m", "stops": 1, "price": "$389", "is_best": true},
+      {"name": "Southwest", "departure": "HSV", "arrival": "DEN", "departure_time": "09:30 AM", "arrival_time": "12:45 PM", "duration": "3h 15m", "stops": 1, "price": "$356", "is_best": false}
+    ]
+  },
+  "HSV-SEA": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Delta", "departure": "HSV", "arrival": "SEA", "departure_time": "06:00 AM", "arrival_time": "11:15 AM", "duration": "5h 15m", "stops": 1, "price": "$542", "is_best": true}
+    ]
+  },
+  "HSV-LAS": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Southwest", "departure": "HSV", "arrival": "LAS", "departure_time": "07:30 AM", "arrival_time": "10:45 AM", "duration": "3h 15m", "stops": 1, "price": "$378", "is_best": true},
+      {"name": "Spirit", "departure": "HSV", "arrival": "LAS", "departure_time": "05:00 AM", "arrival_time": "08:30 AM", "duration": "3h 30m", "stops": 1, "price": "$289", "is_best": false}
+    ]
+  },
+  "HSV-CUN": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Southwest", "departure": "HSV", "arrival": "CUN", "departure_time": "08:00 AM", "arrival_time": "11:30 AM", "duration": "3h 30m", "stops": 0, "price": "$487", "is_best": true},
+      {"name": "United", "departure": "HSV", "arrival": "CUN", "departure_time": "06:30 AM", "arrival_time": "11:45 AM", "duration": "5h 15m", "stops": 1, "price": "$398", "is_best": false}
+    ]
+  },
+  "HSV-MEX": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "American", "departure": "HSV", "arrival": "MEX", "departure_time": "06:00 AM", "arrival_time": "11:45 AM", "duration": "5h 45m", "stops": 1, "price": "$612", "is_best": true}
+    ]
+  },
+  "HSV-MBJ": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "American", "departure": "HSV", "arrival": "MBJ", "departure_time": "07:15 AM", "arrival_time": "12:30 PM", "duration": "2h 15m", "stops": 0, "price": "$543", "is_best": true},
+      {"name": "Delta", "departure": "HSV", "arrival": "MBJ", "departure_time": "09:00 AM", "arrival_time": "03:15 PM", "duration": "3h 15m", "stops": 1, "price": "$476", "is_best": false}
+    ]
+  },
+  "HSV-NAS": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "American", "departure": "HSV", "arrival": "NAS", "departure_time": "08:30 AM", "arrival_time": "12:45 PM", "duration": "2h 15m", "stops": 0, "price": "$512", "is_best": true}
+    ]
+  },
+  "HSV-SJU": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "JetBlue", "departure": "HSV", "arrival": "SJU", "departure_time": "06:00 AM", "arrival_time": "01:00 PM", "duration": "4h 00m", "stops": 1, "price": "$498", "is_best": true}
+    ]
+  },
+  "HSV-BOG": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Avianca", "departure": "HSV", "arrival": "BOG", "departure_time": "07:00 AM", "arrival_time": "04:30 PM", "duration": "6h 30m", "stops": 1, "price": "$687", "is_best": true}
+    ]
+  },
+  "HSV-GRU": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "American", "departure": "HSV", "arrival": "GRU", "departure_time": "06:00 AM", "arrival_time": "09:15 PM", "duration": "12h 15m", "stops": 1, "price": "$987", "is_best": true}
+    ]
+  },
+  "HSV-EZE": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "American", "departure": "HSV", "arrival": "EZE", "departure_time": "06:00 AM", "arrival_time": "11:45 PM", "duration": "14h 45m", "stops": 2, "price": "$1124", "is_best": true}
+    ]
+  },
+  "HSV-LHR": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "British Airways", "departure": "HSV", "arrival": "LHR", "departure_time": "06:45 AM", "arrival_time": "08:30 PM", "duration": "11h 45m", "stops": 1, "price": "$820", "is_best": true},
+      {"name": "Delta", "departure": "HSV", "arrival": "LHR", "departure_time": "07:30 AM", "arrival_time": "10:00 PM", "duration": "12h 30m", "stops": 1, "price": "$756", "is_best": false}
+    ]
+  },
+  "HSV-CDG": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Air France", "departure": "HSV", "arrival": "CDG", "departure_time": "07:00 AM", "arrival_time": "09:45 PM", "duration": "11h 45m", "stops": 1, "price": "$874", "is_best": true}
+    ]
+  },
+  "HSV-AMS": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "KLM", "departure": "HSV", "arrival": "AMS", "departure_time": "06:30 AM", "arrival_time": "09:15 PM", "duration": "11h 45m", "stops": 1, "price": "$891", "is_best": true}
+    ]
+  },
+  "HSV-FRA": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Lufthansa", "departure": "HSV", "arrival": "FRA", "departure_time": "06:00 AM", "arrival_time": "09:30 PM", "duration": "12h 30m", "stops": 1, "price": "$912", "is_best": true}
+    ]
+  },
+  "HSV-MAD": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Iberia", "departure": "HSV", "arrival": "MAD", "departure_time": "06:00 AM", "arrival_time": "10:15 PM", "duration": "13h 15m", "stops": 1, "price": "$867", "is_best": true}
+    ]
+  },
+  "HSV-FCO": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "American", "departure": "HSV", "arrival": "FCO", "departure_time": "07:00 AM", "arrival_time": "11:30 PM", "duration": "13h 30m", "stops": 1, "price": "$934", "is_best": true}
+    ]
+  },
+  "HSV-ATH": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Delta", "departure": "HSV", "arrival": "ATH", "departure_time": "06:00 AM", "arrival_time": "11:45 PM", "duration": "14h 45m", "stops": 1, "price": "$987", "is_best": true}
+    ]
+  },
+  "HSV-IST": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Turkish Airlines", "departure": "HSV", "arrival": "IST", "departure_time": "07:00 AM", "arrival_time": "01:30 AM", "duration": "15h 30m", "stops": 1, "price": "$876", "is_best": true}
+    ]
+  },
+  "HSV-DXB": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Emirates", "departure": "HSV", "arrival": "DXB", "departure_time": "06:00 AM", "arrival_time": "04:30 AM", "duration": "19h 30m", "stops": 1, "price": "$1234", "is_best": true}
+    ]
+  },
+  "HSV-DOH": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Qatar Airways", "departure": "HSV", "arrival": "DOH", "departure_time": "06:00 AM", "arrival_time": "05:00 AM", "duration": "20h 00m", "stops": 1, "price": "$1189", "is_best": true}
+    ]
+  },
+  "HSV-NBO": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Kenya Airways", "departure": "HSV", "arrival": "NBO", "departure_time": "06:00 AM", "arrival_time": "09:30 AM", "duration": "22h 30m", "stops": 2, "price": "$1456", "is_best": true}
+    ]
+  },
+  "HSV-DEL": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Air India", "departure": "HSV", "arrival": "DEL", "departure_time": "06:00 AM", "arrival_time": "05:30 AM", "duration": "22h 30m", "stops": 1, "price": "$1087", "is_best": true}
+    ]
+  },
+  "HSV-BKK": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Thai Airways", "departure": "HSV", "arrival": "BKK", "departure_time": "06:00 AM", "arrival_time": "07:30 AM", "duration": "26h 30m", "stops": 2, "price": "$987", "is_best": true}
+    ]
+  },
+  "HSV-SIN": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Singapore Airlines", "departure": "HSV", "arrival": "SIN", "departure_time": "06:00 AM", "arrival_time": "10:30 AM", "duration": "27h 30m", "stops": 1, "price": "$1123", "is_best": true}
+    ]
+  },
+  "HSV-NRT": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Japan Airlines", "departure": "HSV", "arrival": "NRT", "departure_time": "06:00 AM", "arrival_time": "02:00 PM", "duration": "17h 00m", "stops": 1, "price": "$1087", "is_best": true},
+      {"name": "ANA", "departure": "HSV", "arrival": "NRT", "departure_time": "08:00 AM", "arrival_time": "06:00 PM", "duration": "17h 00m", "stops": 1, "price": "$1034", "is_best": false}
+    ]
+  },
+  "HSV-ICN": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Korean Air", "departure": "HSV", "arrival": "ICN", "departure_time": "06:00 AM", "arrival_time": "12:30 PM", "duration": "16h 30m", "stops": 1, "price": "$1012", "is_best": true}
+    ]
+  },
+  "HSV-SYD": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Qantas", "departure": "HSV", "arrival": "SYD", "departure_time": "06:00 AM", "arrival_time": "06:30 AM", "duration": "23h 30m", "stops": 1, "price": "$2134", "is_best": true}
+    ]
+  },
+  "HSV-YYZ": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Air Canada", "departure": "HSV", "arrival": "YYZ", "departure_time": "07:00 AM", "arrival_time": "10:45 AM", "duration": "1h 45m", "stops": 0, "price": "$287", "is_best": true}
+    ]
+  },
+  "HSV-HNL": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Hawaiian Airlines", "departure": "HSV", "arrival": "HNL", "departure_time": "06:00 AM", "arrival_time": "02:30 PM", "duration": "11h 30m", "stops": 1, "price": "$876", "is_best": true}
+    ]
+  },
+  "HSV-BOS": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "JetBlue", "departure": "HSV", "arrival": "BOS", "departure_time": "06:30 AM", "arrival_time": "10:45 AM", "duration": "2h 15m", "stops": 0, "price": "$334", "is_best": true}
+    ]
+  },
+  "HSV-SFO": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "United", "departure": "HSV", "arrival": "SFO", "departure_time": "06:00 AM", "arrival_time": "10:45 AM", "duration": "4h 45m", "stops": 1, "price": "$521", "is_best": true}
+    ]
+  },
+  "HSV-PRG": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "Delta", "departure": "HSV", "arrival": "PRG", "departure_time": "06:00 AM", "arrival_time": "11:00 PM", "duration": "14h 00m", "stops": 1, "price": "$876", "is_best": true}
+    ]
+  },
+  "HSV-WAW": {
+    "current_price": "typical",
+    "flights": [
+      {"name": "LOT Polish", "departure": "HSV", "arrival": "WAW", "departure_time": "06:00 AM", "arrival_time": "11:30 PM", "duration": "14h 30m", "stops": 1, "price": "$823", "is_best": true}
+    ]
+  }
+}
