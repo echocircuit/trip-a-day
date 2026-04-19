@@ -398,8 +398,13 @@ def get_cheapest_destinations(
     departure_date: date,
     session: Session,
     n: int = 10,
+    direct_only: bool = True,
 ) -> list[FlightDestination]:
-    """Iterate seed airports, query Google Flights, return the n cheapest destinations."""
+    """Iterate seed airports, query Google Flights, return the n cheapest destinations.
+
+    When *direct_only* is True, destinations reachable only via connecting flights
+    are excluded. When False, connecting flights are accepted as a fallback.
+    """
     airports = _load_seed_airports()
     results: list[FlightDestination] = []
     errors = 0
@@ -441,9 +446,8 @@ def get_cheapest_destinations(
         if not ff_result or not ff_result.flights:
             continue
 
-        # Find cheapest direct flight
         direct = [f for f in ff_result.flights if f.stops == 0]
-        candidates = direct if direct else ff_result.flights
+        candidates = direct if direct_only else (direct or ff_result.flights)
         prices = [(_parse_price(f.price), f) for f in candidates]
         valid = [(p, f) for p, f in prices if p is not None]
         if not valid:
@@ -472,8 +476,14 @@ def get_flight_offers(
     adults: int,
     children: int,
     session: Session,
+    direct_only: bool = True,
 ) -> FlightOffer | None:
-    """Return the cheapest direct flight for the exact route, or None if unavailable."""
+    """Return the cheapest qualifying flight for the exact route, or None if unavailable.
+
+    When *direct_only* is True, only nonstop flights are considered; the function
+    returns None if no direct option exists. When False, connecting flights are
+    accepted as a fallback when no direct flight is available.
+    """
     if not _check_soft_limit(session):
         return None
 
@@ -505,7 +515,7 @@ def get_flight_offers(
         return None
 
     direct = [f for f in ff_result.flights if f.stops == 0]
-    candidates = direct if direct else ff_result.flights
+    candidates = direct if direct_only else (direct or ff_result.flights)
     prices = [(_parse_price(f.price), f) for f in candidates]
     valid = [(p, f) for p, f in prices if p is not None]
     if not valid:

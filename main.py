@@ -39,7 +39,7 @@ from trip_a_day.fetcher import (
     haversine_miles,
 )
 from trip_a_day.notifier import send_trip_notification
-from trip_a_day.preferences import get, get_all, get_int
+from trip_a_day.preferences import get, get_all, get_bool, get_int
 from trip_a_day.ranker import TripCandidate, rank_trips
 
 logging.basicConfig(
@@ -143,6 +143,8 @@ def run(triggered_by: str = "manual") -> None:
         num_children = get_int(session, "num_children")
         min_stars = get_int(session, "min_hotel_stars")
         ranking_strategy = get(session, "ranking_strategy")
+        direct_flights_only = get_bool(session, "direct_flights_only")
+        car_rental_required = get_bool(session, "car_rental_required")
 
         departure_date = run_date + timedelta(days=advance_days)
         return_date = departure_date + timedelta(days=trip_nights)
@@ -162,6 +164,7 @@ def run(triggered_by: str = "manual") -> None:
             departure_date=departure_date,
             session=session,
             n=10,
+            direct_only=direct_flights_only,
         )
         session.commit()
 
@@ -205,6 +208,7 @@ def run(triggered_by: str = "manual") -> None:
                 adults=num_adults,
                 children=num_children,
                 session=session,
+                direct_only=direct_flights_only,
             )
             if flight is None:
                 logger.info("  No flight found — skipping.")
@@ -242,6 +246,7 @@ def run(triggered_by: str = "manual") -> None:
                 car_region=region,
                 food_total=food.total_cost,
                 days=trip_nights,
+                car_required=car_rental_required,
             )
 
             # Calculate distance

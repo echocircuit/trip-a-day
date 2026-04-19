@@ -4,7 +4,7 @@ Determines the cheapest trip that can be booked each day. Runs once daily, finds
 
 ---
 
-## Current phase: Phase 2 — Scheduling + UI complete
+## Current phase: Phase 3 — Trip config wired into pipeline
 
 **What works now:**
 

@@ -10,12 +10,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current phase
 
-**Phase 2 — In Progress.** Scheduling + Basic UI. `scheduler.py` (APScheduler daily runner) and `ui.py` (Streamlit: Dashboard, Preferences, Exclusion List, Trip History) implemented.
+**Phase 3 — In Progress.** Trip config preferences wired into pipeline. `direct_flights_only` and `car_rental_required` preferences now actively filter fetcher results and cost assembly.
 
 **Launch UI:** `streamlit run ui.py`
 **Launch scheduler:** `python scheduler.py` (daily at time in `scheduled_run_time` pref, default 07:00 local)
 
-**Next: Phase 3** (traveler + trip config) after this PR merges. Begin with `git checkout main && git pull && git checkout -b feature/phase-3-<description>`.
+**Next: Phase 4** after this PR merges. Begin with `git checkout main && git pull && git checkout -b feature/phase-4-<description>`.
 
 ## Development workflow
 
