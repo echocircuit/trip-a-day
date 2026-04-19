@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Phase: Phase 3 — Trip Config Wired
+## Current Phase: Phase 4 — Trip Length Flexibility
 ## Status: In Progress (PR open)
-## Last updated: 2026-04-18 — direct_flights_only and car_rental_required wired into pipeline; 39 unit tests passing
+## Last updated: 2026-04-18 — trip_length_flex_nights preference added; flex-window search loop in main.py; 47 unit tests passing
 
 ### Phase 1 Checklist
 
@@ -50,13 +50,22 @@
 - [x] All 30 unit tests pass; ruff + mypy clean (2026-04-18)
 - [x] PR merged (2026-04-18)
 
-### Phase 3 Checklist — In Progress (PR open)
+### Phase 3 Checklist — Complete
 
 - [x] Add `direct_only` parameter to `get_cheapest_destinations` and `get_flight_offers` in fetcher.py (2026-04-18)
 - [x] Add `car_required` parameter to `build_cost_breakdown` in costs.py (2026-04-18)
 - [x] Wire `direct_flights_only` and `car_rental_required` prefs into main.py pipeline (2026-04-18)
 - [x] Add unit tests: `TestBuildCostBreakdownNoCarRental` (4 tests) + `TestDirectOnlyFiltering` (5 tests) (2026-04-18)
 - [x] All 39 unit tests pass; ruff + mypy clean (2026-04-18)
+- [x] PR merged (2026-04-18)
+
+### Phase 4 Checklist — In Progress (PR open)
+
+- [x] Add `trip_length_flex_nights` preference (default "0") to db.py (2026-04-18)
+- [x] Add `_build_night_variants(target, flex)` helper to main.py (2026-04-18)
+- [x] Refactor main.py destination loop to try all variants, keep cheapest (2026-04-18)
+- [x] Expose `trip_length_flex_nights` input in Preferences UI (2026-04-18)
+- [x] Add unit tests for `_build_night_variants` (8 tests) — 47 total pass (2026-04-18)
 - [ ] PR merged
 
 ### Decisions Made This Phase

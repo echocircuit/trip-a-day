@@ -199,14 +199,21 @@ def _preferences() -> None:
         home_airport = st.text_input(
             "Home Airport (IATA code)", value=prefs.get("home_airport", "HSV")
         )
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         trip_nights = col1.number_input(
             "Trip length (nights)",
             min_value=1,
             max_value=30,
             value=_int("trip_length_nights", 7),
         )
-        advance_days = col2.number_input(
+        trip_flex = col2.number_input(
+            "Flex (±nights)",
+            min_value=0,
+            max_value=7,
+            value=_int("trip_length_flex_nights", 0),
+            help="Search trip_length ± this many nights and pick the cheapest.",
+        )
+        advance_days = col3.number_input(
             "Days ahead to search",
             min_value=1,
             max_value=365,
@@ -277,6 +284,7 @@ def _preferences() -> None:
         with SessionFactory() as s:
             set_pref(s, "home_airport", home_airport.upper().strip())
             set_pref(s, "trip_length_nights", str(int(trip_nights)))
+            set_pref(s, "trip_length_flex_nights", str(int(trip_flex)))
             set_pref(s, "advance_days", str(int(advance_days)))
             set_pref(s, "num_adults", str(int(num_adults)))
             set_pref(s, "num_children", str(int(num_children)))
