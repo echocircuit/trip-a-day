@@ -148,16 +148,15 @@ def _dashboard() -> None:
 
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("✈️ Flights", f"${winner.flight_cost_usd:,.0f}")
-        c2.metric("🏨 Hotel", f"${winner.hotel_cost_usd:,.0f}")
-        c3.metric(
-            "🚗 Car" + (" *(est.)*" if winner.car_cost_is_estimate else ""),
-            f"${winner.car_cost_usd:,.0f}",
-        )
-        c4.metric("🍽️ Food", f"${winner.food_cost_usd:,.0f}")
+        c2.metric("🏨 Hotel *", f"${winner.hotel_cost_usd:,.0f}")
+        c3.metric("🚗 Car *", f"${winner.car_cost_usd:,.0f}")
+        c4.metric("🍽️ Food *", f"${winner.food_cost_usd:,.0f}")
         c5.metric("💰 Total", f"${winner.total_cost_usd:,.0f}")
 
-        if winner.car_cost_is_estimate:
-            st.caption("Car rental is a regional estimate, not a live quote.")
+        st.caption(
+            "* Hotel and food are government per diem estimates (GSA / State Dept); "
+            "car rental is a regional average. Only flight prices are live quotes."
+        )
 
         bc1, bc2, bc3 = st.columns(3)
         if winner.flight_booking_url:
