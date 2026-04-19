@@ -115,6 +115,7 @@ class ApiUsage(Base):
 _PREFERENCE_DEFAULTS: dict[str, str] = {
     "home_airport": "HSV",
     "trip_length_nights": "7",
+    "trip_length_flex_nights": "0",
     "advance_days": "7",
     "num_adults": "2",
     "num_children": "2",
