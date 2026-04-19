@@ -48,6 +48,9 @@ coverage.xml
 # Linting
 .ruff_cache/
 
+# uv lockfile — project uses requirements.txt for pinning; uv.lock is redundant
+uv.lock
+
 # Project-specific build artifacts
 *.so
 *.dylib

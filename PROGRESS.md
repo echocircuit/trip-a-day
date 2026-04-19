@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Phase: Phase 1 — Proof of Concept
-## Status: Complete
-## Last updated: 2026-04-18 — All Phase 1 modules implemented; 21 unit tests pass; ruff + mypy clean
+## Current Phase: Phase 2 — Scheduling + Basic UI
+## Status: In Progress
+## Last updated: 2026-04-18 — scheduler.py and ui.py implemented; ruff + mypy + pytest pending
 
 ### Phase 1 Checklist
 
@@ -28,7 +28,26 @@
 - [x] Run full test suite — 21 unit tests pass (2026-04-18)
 - [x] Run `ruff check .` and `mypy src/` — both clean (2026-04-18)
 - [x] Commit all work in logical chunks with conventional commit messages (2026-04-18)
-- [ ] End-to-end test: `python main.py` with real Amadeus sandbox credentials
+
+### Phase 1b Checklist — Complete
+
+- [x] Replaced Amadeus calls with fast-flights + seed_airports.json (2026-04-18)
+- [x] Replaced Numbeo calls with GSA + State Dept per diem lookups (2026-04-18)
+- [x] Replaced SendGrid with Resend (2026-04-18)
+- [x] Added `data/seed_airports.json` (96 airports) and `data/per_diem_rates.json` (1,377 locations) (2026-04-18)
+- [x] Added `scripts/update_rates.py` (refresh each October) (2026-04-18)
+- [x] Updated run_log columns: api_calls_flights, api_calls_gsa (2026-04-18)
+- [x] All 30 unit tests pass; ruff + mypy clean; python main.py live run verified (2026-04-18)
+
+### Phase 2 Checklist — In Progress
+
+- [x] Add APScheduler 3.11.2 + Streamlit 1.56.0 to requirements.txt (2026-04-18)
+- [x] Add `scheduled_run_time` preference (default "07:00") to db.py defaults (2026-04-18)
+- [x] Update `main.py` — add `triggered_by` parameter to `run()` (2026-04-18)
+- [x] Created `scheduler.py` — APScheduler BlockingScheduler, configurable run time (2026-04-18)
+- [x] Created `ui.py` — Streamlit: Dashboard, Preferences, Exclusion List, Trip History (2026-04-18)
+- [ ] Run ruff + mypy + pytest — must pass clean
+- [ ] Open PR
 
 ### Decisions Made This Phase
 
@@ -40,11 +59,14 @@
 - Numbeo food cost falls back to $50/person/day if NUMBEO_API_KEY not set
 - `TripCandidate` defined in `ranker.py` to avoid circular imports
 - `AMADEUS_ENV=test` locked for all Phase 1 development per spec requirement
+- Phase 2: "Run Now" in UI uses `subprocess.run(main.py)` to avoid sys.exit leaking into Streamlit
+- Phase 2: APScheduler 3.x BlockingScheduler chosen over 4.x for simpler sync API
+- Phase 2: `scheduled_run_time` stored as "HH:MM" string preference; defaults to "07:00"
 
 ### Blockers / Open Questions
 
-- None currently. If Amadeus sandbox returns unexpected data structures, update fetcher.py and note here.
+- None currently.
 
 ### Next Action
 
-Phase 1 is complete. To begin Phase 2: add API keys to `.env`, run `python main.py` end-to-end with Amadeus sandbox to verify the full pipeline. Then start Phase 2 (APScheduler + Streamlit UI) per spec Section 12.
+Complete Phase 2: run quality checks, fix any issues, commit, and open PR.

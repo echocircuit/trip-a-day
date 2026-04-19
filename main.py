@@ -121,11 +121,13 @@ def _store_results(
     return trip_ids
 
 
-def run() -> None:
+def run(triggered_by: str = "manual") -> None:
     start_time = time.monotonic()
     run_date = date.today()
 
-    logger.info("trip-a-day starting run for %s", run_date)
+    logger.info(
+        "trip-a-day starting run for %s (triggered_by=%s)", run_date, triggered_by
+    )
 
     init_db()
 
@@ -291,7 +293,7 @@ def run() -> None:
             log = RunLog(
                 run_at=datetime.now(UTC),
                 status="failed",
-                triggered_by="manual",
+                triggered_by=triggered_by,
                 destinations_evaluated=len(raw_destinations),
                 error_message="No valid candidates after filtering",
                 duration_seconds=duration,
@@ -320,7 +322,7 @@ def run() -> None:
         log = RunLog(
             run_at=datetime.now(UTC),
             status="success",
-            triggered_by="manual",
+            triggered_by=triggered_by,
             destinations_evaluated=len(candidates),
             winner_trip_id=winner_trip_id,
             duration_seconds=duration,

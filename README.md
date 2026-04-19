@@ -4,11 +4,13 @@ Determines the cheapest trip that can be booked each day. Runs once daily, finds
 
 ---
 
-## Current phase: Phase 1b — Data Source Migration complete
+## Current phase: Phase 2 — Scheduling + UI complete
 
-**What works now:** Run `python main.py` manually to get a trip recommendation printed to the terminal (or emailed if Resend is configured). No scheduling, no UI yet.
+**What works now:**
 
-**What's coming:** Phase 2 adds a daily scheduler and a Streamlit browser UI for managing preferences and exclusions.
+- `python main.py` — one-off run, finds and emails (or prints) today's cheapest trip
+- `python scheduler.py` — keeps running and fires the pipeline automatically once per day at a configurable time (default 7:00 AM local)
+- `streamlit run ui.py` — browser UI for managing preferences, exclusions, and viewing trip history
 
 ---
 
@@ -76,12 +78,46 @@ NOTIFICATION_EMAILS=you@example.com,partner@example.com
 
 ## Running
 
+### One-off run
+
 ```bash
-# One-off run — finds today's cheapest trip and prints/emails it
 python main.py
 ```
 
-On the first run, the local SQLite database (`trip_of_the_day.db`) is created automatically and seeded with default preferences:
+Finds today's cheapest trip and prints or emails it. The local SQLite database (`trip_of_the_day.db`) is created automatically on first run and seeded with default preferences.
+
+### Browser UI
+
+```bash
+streamlit run ui.py
+```
+
+Opens at `http://localhost:8501`. Four pages:
+
+| Page | What it does |
+|---|---|
+| **Dashboard** | Last run status, API usage, Trip of the Day card with booking links, Run Now button |
+| **Preferences** | Edit all settings (home airport, trip length, travelers, notifications, scheduler time) |
+| **Exclusion List** | Add destinations to skip, restore them, or clear all exclusions |
+| **Trip History** | Paginated table of all past evaluated trip candidates |
+
+### Automatic daily scheduling
+
+```bash
+python scheduler.py
+```
+
+Keeps running and fires the full pipeline once per calendar day at the time configured in **Preferences → Daily run time** (default 7:00 AM local). Keep this process alive or register it with your OS init system:
+
+**macOS (launchd):** Create a plist in `~/Library/LaunchAgents/` that runs `python scheduler.py` at login.
+
+**Linux (systemd):** Create a user service unit that `ExecStart`s `python scheduler.py`.
+
+**Windows:** Use Task Scheduler to launch `python scheduler.py` at startup, or run it in the background with `pythonw scheduler.py`.
+
+---
+
+## Default preferences
 
 | Preference | Default |
 |---|---|
@@ -92,14 +128,9 @@ On the first run, the local SQLite database (`trip_of_the_day.db`) is created au
 | Flights | Direct only |
 | Hotels | 4 stars and up |
 | Car rental | Included (estimated cost) |
+| Daily run time | 7:00 AM local |
 
-To change the home airport or any other preference before Phase 2 (UI) is available, edit the database directly:
-
-```bash
-sqlite3 trip_of_the_day.db "UPDATE preferences SET value='ATL' WHERE key='home_airport';"
-```
-
-**Without Resend:** Notification is printed to the terminal instead of emailed.
+All preferences are editable in the UI under **Preferences**.
 
 ---
 
@@ -134,7 +165,9 @@ mypy src/
 ## Project structure
 
 ```
-├── main.py                  # Entry point — run this
+├── main.py                  # Entry point — one-off run
+├── scheduler.py             # APScheduler daily runner
+├── ui.py                    # Streamlit browser UI
 ├── src/trip_a_day/
 │   ├── db.py                # SQLite schema and ORM (SQLAlchemy 2.x)
 │   ├── preferences.py       # Read/write user preferences from DB
