@@ -25,6 +25,7 @@ class TripCandidate:
     car_booking_url: str
     raw_flight_data: str
     raw_hotel_data: str
+    departure_airport: str = ""
 
 
 def rank_trips(

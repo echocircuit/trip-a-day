@@ -187,6 +187,8 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     "exclude_booked": "false",
     # Phase 7 (pre-work)
     "notifications_enabled": "true",
+    # Phase 7 — multi-airport departure
+    "irs_mileage_rate": "0.70",
 }
 
 # Destination columns added via ALTER TABLE migration (idempotent).

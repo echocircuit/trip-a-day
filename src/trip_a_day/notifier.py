@@ -7,6 +7,7 @@ import logging
 import os
 import textwrap
 
+from trip_a_day.fetcher import get_airport_city
 from trip_a_day.ranker import TripCandidate
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ def send_trip_notification(
     *,
     filter_fallback: bool = False,
     is_mock: bool = False,
+    home_airport: str = "",
 ) -> bool:
     """Send the daily trip notification email (or print to stdout if no API key).
 
@@ -25,8 +27,18 @@ def send_trip_notification(
     """
     recipients = _parse_recipients(prefs)
     subject = _build_subject(trip)
-    html_body = _build_html(trip, filter_fallback=filter_fallback, is_mock=is_mock)
-    plain_body = _build_plain(trip, filter_fallback=filter_fallback, is_mock=is_mock)
+    html_body = _build_html(
+        trip,
+        filter_fallback=filter_fallback,
+        is_mock=is_mock,
+        home_airport=home_airport,
+    )
+    plain_body = _build_plain(
+        trip,
+        filter_fallback=filter_fallback,
+        is_mock=is_mock,
+        home_airport=home_airport,
+    )
 
     api_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
@@ -99,8 +111,25 @@ _MOCK_DATA_BANNER_TEXT = (
 )
 
 
+def _nearby_dep_html(trip: TripCandidate, home_airport: str) -> str:
+    if not trip.departure_airport or trip.departure_airport == home_airport:
+        return ""
+    city = get_airport_city(trip.departure_airport)
+    return (
+        f'  <div style="background:#e8f4fd;border:1px solid #90caf9;border-radius:4px;'
+        f'padding:10px 14px;margin-bottom:12px;">'
+        f"&#x2708; Departing from <strong>{city} ({trip.departure_airport})</strong>"
+        f" &mdash; estimated <strong>${trip.cost.transport_usd:,.0f}</strong> transport"
+        f" to reach this airport (IRS mileage estimate).</div>\n"
+    )
+
+
 def _build_html(
-    trip: TripCandidate, *, filter_fallback: bool = False, is_mock: bool = False
+    trip: TripCandidate,
+    *,
+    filter_fallback: bool = False,
+    is_mock: bool = False,
+    home_airport: str = "",
 ) -> str:
     nights = (trip.return_date - trip.departure_date).days
     distance_str = (
@@ -128,6 +157,7 @@ def _build_html(
   <h1>&#x2708;&#xFE0F; Trip of the Day</h1>
   {_MOCK_DATA_BANNER_HTML if is_mock else ""}
   {_FILTER_FALLBACK_WARNING_HTML if filter_fallback else ""}
+  {_nearby_dep_html(trip, home_airport)}
   <h2>{trip.city}, {trip.country}</h2>
   <p>
     <strong>Region:</strong> {trip.region}<br>
@@ -160,7 +190,11 @@ def _build_html(
 
 
 def _build_plain(
-    trip: TripCandidate, *, filter_fallback: bool = False, is_mock: bool = False
+    trip: TripCandidate,
+    *,
+    filter_fallback: bool = False,
+    is_mock: bool = False,
+    home_airport: str = "",
 ) -> str:
     nights = (trip.return_date - trip.departure_date).days
     distance_str = (
@@ -168,9 +202,23 @@ def _build_plain(
     )
     mock_warning = _MOCK_DATA_BANNER_TEXT if is_mock else ""
     filter_warning = _FILTER_FALLBACK_WARNING_TEXT if filter_fallback else ""
+    if (
+        trip.departure_airport
+        and trip.departure_airport != home_airport
+        and trip.cost.transport_usd > 0
+    ):
+        dep_city = get_airport_city(trip.departure_airport)
+        nearby_dep_note = (
+            f"Departing from {dep_city} ({trip.departure_airport})"
+            f" — estimated ${trip.cost.transport_usd:,.0f} transport"
+            " to reach this airport (IRS mileage estimate).\n\n"
+        )
+    else:
+        nearby_dep_note = ""
     return (
         mock_warning
         + filter_warning
+        + nearby_dep_note
         + textwrap.dedent(f"""\
         ✈️  TRIP OF THE DAY
         ==================

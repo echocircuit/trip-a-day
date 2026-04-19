@@ -283,6 +283,31 @@ def _preferences() -> None:
             value=_int("advance_days", 7),
         )
 
+        st.markdown("**Multi-Airport Departure**")
+        st.caption(
+            "When search radius > 0, the pipeline also searches from nearby airports "
+            "and adds IRS-rate round-trip driving cost. Set to 0 to disable."
+        )
+        ma1, ma2 = st.columns(2)
+        search_radius_miles = ma1.number_input(
+            "Nearby airport search radius (miles, 0 = disabled)",
+            min_value=0,
+            max_value=500,
+            value=_int("search_radius_miles", 0),
+        )
+        try:
+            _irs_default = float(prefs.get("irs_mileage_rate", "0.70"))
+        except ValueError:
+            _irs_default = 0.70
+        irs_mileage_rate = ma2.number_input(
+            "IRS mileage rate ($/mile)",
+            min_value=0.0,
+            max_value=2.0,
+            value=_irs_default,
+            step=0.01,
+            format="%.2f",
+        )
+
         st.subheader("Travelers")
         ca, cb, cc = st.columns(3)
         num_adults = ca.number_input(
@@ -478,6 +503,8 @@ def _preferences() -> None:
             set_pref(s, "trip_length_nights", str(int(trip_nights)))
             set_pref(s, "trip_length_flex_nights", str(int(trip_flex)))
             set_pref(s, "advance_days", str(int(advance_days)))
+            set_pref(s, "search_radius_miles", str(int(search_radius_miles)))
+            set_pref(s, "irs_mileage_rate", f"{float(irs_mileage_rate):.2f}")
             set_pref(s, "num_adults", str(int(num_adults)))
             set_pref(s, "num_children", str(int(num_children)))
             set_pref(s, "num_rooms", str(int(num_rooms)))

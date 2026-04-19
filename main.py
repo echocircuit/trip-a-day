@@ -39,6 +39,7 @@ from trip_a_day.fetcher import (
     get_flight_offers,
     get_food_cost,
     get_hotel_offers,
+    get_nearby_airports,
     haversine_miles,
 )
 from trip_a_day.filters import apply_destination_filters
@@ -193,89 +194,286 @@ def run(triggered_by: str = "manual") -> None:
             "Batch: %d destinations via strategy '%s'", len(batch), selection_strategy
         )
 
-        # ── Pass 1: quick price estimate per destination ──────────────────────
+        # ── Phase 7: resolve departure airports ──────────────────────────────
+        search_radius_miles = get_int(session, "search_radius_miles")
+        irs_mileage_rate = float(get_or(session, "irs_mileage_rate", "0.70"))
+
+        if search_radius_miles > 0:
+            nearby_airports = get_nearby_airports(
+                home_airport, float(search_radius_miles), session
+            )
+            logger.info(
+                "Multi-airport: %d nearby airport(s) within %d mi of %s: %s",
+                len(nearby_airports),
+                search_radius_miles,
+                home_airport,
+                [a.iata for a in nearby_airports],
+            )
+        else:
+            nearby_airports = []
+
+        departure_iatas = [home_airport] + [a.iata for a in nearby_airports]
+
+        # ── Two-pass search across all departure airports ─────────────────────
         flights_calls_start = get_api_calls_today(session, "google_flights")
         live_calls_made = 0
         now_utc = datetime.now(UTC)
+        all_candidates: list[TripCandidate] = []
+        any_pass1_prices = False
 
-        # iata -> estimated base-night flight price
-        pass1_prices: dict[str, float] = {}
-
-        for dest in batch:
-            iata = dest.iata_code
-
-            if _is_excluded(session, iata):
-                continue
-
-            # Cache check
-            hit = None
-            if cache_ttl_enabled:
-                hit = get_cached_flight(
-                    session,
-                    home_airport,
-                    iata,
-                    departure_date,
-                    base_return,
-                    num_adults,
-                    num_children,
-                )
-
-            if hit is not None:
-                pass1_prices[iata] = hit.price_usd
-                logger.info("  [cache] %s — $%.0f", iata, hit.price_usd)
+        for dep_iata in departure_iatas:
+            # Round-trip IRS-rate driving cost from home to this departure airport
+            if dep_iata == home_airport:
+                transport_usd = 0.0
             else:
-                # Respect live call cap (mock calls are free)
-                if not is_mock and live_calls_made >= max_live_calls:
-                    logger.info("  [skip]  %s — live call cap reached", iata)
+                dep_info = get_airport_info(dep_iata, session)
+                if dep_info and dep_info.latitude and dep_info.longitude:
+                    dep_dist = haversine_miles(
+                        home_lat, home_lon, dep_info.latitude, dep_info.longitude
+                    )
+                    transport_usd = round(dep_dist * 2 * irs_mileage_rate, 2)
+                else:
+                    transport_usd = 0.0
+
+            logger.info(
+                "--- Searching from %s (transport cost: $%.2f) ---",
+                dep_iata,
+                transport_usd,
+            )
+
+            # ── Pass 1: quick price estimate per destination ──────────────────
+            pass1_prices: dict[str, float] = {}
+
+            for dest in batch:
+                iata = dest.iata_code
+
+                if _is_excluded(session, iata):
                     continue
 
-                flight = get_flight_offers(
-                    origin=home_airport,
-                    destination=iata,
-                    depart_date=departure_date,
-                    return_date=base_return,
-                    adults=num_adults,
-                    children=num_children,
-                    session=session,
-                    direct_only=direct_flights_only,
-                )
-                if not is_mock:
-                    live_calls_made += 1
-
-                if flight is None:
-                    continue
-
-                pass1_prices[iata] = flight.price_total
-
+                hit = None
                 if cache_ttl_enabled:
-                    store_flight_cache(
+                    hit = get_cached_flight(
                         session,
-                        home_airport,
+                        dep_iata,
                         iata,
                         departure_date,
                         base_return,
                         num_adults,
                         num_children,
-                        flight.price_total,
-                        None,
-                        None,
-                        advance_days,
-                        is_mock,
                     )
 
-                logger.info("  [live]  %s — $%.0f", iata, flight.price_total)
+                if hit is not None:
+                    pass1_prices[iata] = hit.price_usd
+                    logger.info(
+                        "  [cache] %s→%s — $%.0f", dep_iata, iata, hit.price_usd
+                    )
+                else:
+                    if not is_mock and live_calls_made >= max_live_calls:
+                        logger.info("  [skip]  %s — live call cap reached", iata)
+                        continue
 
-            # Update destination query tracking
-            dest.last_queried_at = now_utc
-            dest.last_known_price_usd = pass1_prices.get(iata)
-            dest.last_known_price_date = run_date
-            dest.query_count = (dest.query_count or 0) + 1
+                    flight = get_flight_offers(
+                        origin=dep_iata,
+                        destination=iata,
+                        depart_date=departure_date,
+                        return_date=base_return,
+                        adults=num_adults,
+                        children=num_children,
+                        session=session,
+                        direct_only=direct_flights_only,
+                    )
+                    if not is_mock:
+                        live_calls_made += 1
 
-        session.commit()
+                    if flight is None:
+                        continue
 
-        if not pass1_prices:
-            logger.error("Pass 1 returned no prices — check connectivity or pool.")
-            duration = round(time.monotonic() - start_time, 1)
+                    pass1_prices[iata] = flight.price_total
+
+                    if cache_ttl_enabled:
+                        store_flight_cache(
+                            session,
+                            dep_iata,
+                            iata,
+                            departure_date,
+                            base_return,
+                            num_adults,
+                            num_children,
+                            flight.price_total,
+                            None,
+                            None,
+                            advance_days,
+                            is_mock,
+                        )
+
+                    logger.info(
+                        "  [live]  %s→%s — $%.0f", dep_iata, iata, flight.price_total
+                    )
+
+                # Only track destination stats against the home airport
+                # to avoid inflating query_count for multi-airport runs.
+                if dep_iata == home_airport:
+                    dest.last_queried_at = now_utc
+                    dest.last_known_price_usd = pass1_prices.get(iata)
+                    dest.last_known_price_date = run_date
+                    dest.query_count = (dest.query_count or 0) + 1
+
+            session.commit()
+
+            if not pass1_prices:
+                logger.warning(
+                    "Pass 1 from %s returned no prices — skipping this departure airport.",
+                    dep_iata,
+                )
+                continue
+
+            any_pass1_prices = True
+            top_iatas = sorted(pass1_prices, key=lambda k: pass1_prices[k])[
+                :two_pass_count
+            ]
+            logger.info(
+                "Pass 1 from %s — top %d: %s",
+                dep_iata,
+                len(top_iatas),
+                ", ".join(f"{k}(${pass1_prices[k]:.0f})" for k in top_iatas),
+            )
+
+            # ── Pass 2: full variant search for top N ─────────────────────────
+            for iata in top_iatas:
+                logger.info("Pass 2 — %s→%s …", dep_iata, iata)
+
+                airport = get_airport_info(iata, session)
+                if airport:
+                    city = airport.city.title()
+                    country = airport.country.title()
+                    region = airport.region
+                    lat, lon = airport.latitude or 0.0, airport.longitude or 0.0
+                else:
+                    city = iata
+                    country = "Unknown"
+                    region = "Other"
+                    lat, lon = 0.0, 0.0
+
+                distance = (
+                    haversine_miles(home_lat, home_lon, lat, lon)
+                    if lat != 0.0 or lon != 0.0
+                    else 0.0
+                )
+
+                best: TripCandidate | None = None
+                for nights in night_variants:
+                    return_date_v = departure_date + timedelta(days=nights)
+
+                    flight = get_flight_offers(
+                        origin=dep_iata,
+                        destination=iata,
+                        depart_date=departure_date,
+                        return_date=return_date_v,
+                        adults=num_adults,
+                        children=num_children,
+                        session=session,
+                        direct_only=direct_flights_only,
+                    )
+                    if flight is None:
+                        logger.info(
+                            "  No flight %s→%s for %d nights — skipping variant.",
+                            dep_iata,
+                            iata,
+                            nights,
+                        )
+                        continue
+
+                    hotel = get_hotel_offers(
+                        city_code=iata,
+                        checkin=departure_date,
+                        checkout=return_date_v,
+                        adults=num_adults,
+                        session=session,
+                        min_stars=min_stars,
+                        num_rooms=num_rooms,
+                    )
+                    if hotel is None:
+                        logger.info(
+                            "  No qualifying hotel for %d nights — skipping variant.",
+                            nights,
+                        )
+                        continue
+
+                    food = get_food_cost(
+                        city=city,
+                        country=country,
+                        region=region,
+                        days=nights,
+                        people=num_adults + num_children,
+                        session=session,
+                    )
+                    cost = build_cost_breakdown(
+                        flight_total=flight.price_total,
+                        hotel_total=hotel.price_total,
+                        car_region=region,
+                        food_total=food.total_cost,
+                        days=nights,
+                        car_required=car_rental_required,
+                        transport_usd=transport_usd,
+                    )
+
+                    if best is None or cost.total < best.cost.total:
+                        car_url = (
+                            f"https://www.kayak.com/cars/{iata}"
+                            f"/{departure_date.isoformat()}/{return_date_v.isoformat()}"
+                        )
+                        best = TripCandidate(
+                            destination_iata=iata,
+                            city=city,
+                            country=country,
+                            region=region,
+                            departure_date=departure_date,
+                            return_date=return_date_v,
+                            cost=cost,
+                            distance_miles=distance,
+                            flight_booking_url=flight.booking_url,
+                            hotel_booking_url=hotel.booking_url,
+                            car_booking_url=car_url,
+                            raw_flight_data=flight.raw,
+                            raw_hotel_data=hotel.raw,
+                            departure_airport=dep_iata,
+                        )
+
+                if best is None:
+                    logger.info(
+                        "  No complete trip found for %s→%s — skipping.", dep_iata, iata
+                    )
+                    session.commit()
+                    continue
+
+                all_candidates.append(best)
+                nights_won = (best.return_date - best.departure_date).days
+                logger.info(
+                    "  Best %s→%s: %d nights — $%.2f"
+                    " (flight $%.2f | hotel $%.2f | car $%.2f"
+                    " | food $%.2f | transport $%.2f)",
+                    dep_iata,
+                    iata,
+                    nights_won,
+                    best.cost.total,
+                    best.cost.flights,
+                    best.cost.hotel,
+                    best.cost.car,
+                    best.cost.food,
+                    best.cost.transport_usd,
+                )
+                session.commit()
+
+        flights_calls_this_run = (
+            get_api_calls_today(session, "google_flights") - flights_calls_start
+        )
+        duration = round(time.monotonic() - start_time, 1)
+
+        if not any_pass1_prices:
+            logger.error(
+                "Pass 1 returned no prices from any departure airport"
+                " — check connectivity or pool."
+            )
             session.add(
                 RunLog(
                     run_at=datetime.now(UTC),
@@ -290,141 +488,14 @@ def run(triggered_by: str = "manual") -> None:
             session.commit()
             sys.exit(1)
 
-        # Sort by estimated flight price; Pass 2 narrows to top N.
-        top_iatas = sorted(pass1_prices, key=lambda k: pass1_prices[k])[:two_pass_count]
-        logger.info(
-            "Pass 1 complete — top %d: %s",
-            len(top_iatas),
-            ", ".join(f"{k}(${pass1_prices[k]:.0f})" for k in top_iatas),
-        )
-
-        # ── Pass 2: full variant search for top N ─────────────────────────────
-        candidates: list[TripCandidate] = []
-
-        for iata in top_iatas:
-            logger.info("Pass 2 — evaluating %s …", iata)
-
-            airport = get_airport_info(iata, session)
-            if airport:
-                city = airport.city.title()
-                country = airport.country.title()
-                region = airport.region
-                lat, lon = airport.latitude or 0.0, airport.longitude or 0.0
-            else:
-                city = iata
-                country = "Unknown"
-                region = "Other"
-                lat, lon = 0.0, 0.0
-
-            distance = (
-                haversine_miles(home_lat, home_lon, lat, lon)
-                if lat != 0.0 or lon != 0.0
-                else 0.0
-            )
-
-            best: TripCandidate | None = None
-            for nights in night_variants:
-                return_date_v = departure_date + timedelta(days=nights)
-
-                flight = get_flight_offers(
-                    origin=home_airport,
-                    destination=iata,
-                    depart_date=departure_date,
-                    return_date=return_date_v,
-                    adults=num_adults,
-                    children=num_children,
-                    session=session,
-                    direct_only=direct_flights_only,
-                )
-                if flight is None:
-                    logger.info("  No flight for %d nights — skipping variant.", nights)
-                    continue
-
-                hotel = get_hotel_offers(
-                    city_code=iata,
-                    checkin=departure_date,
-                    checkout=return_date_v,
-                    adults=num_adults,
-                    session=session,
-                    min_stars=min_stars,
-                    num_rooms=num_rooms,
-                )
-                if hotel is None:
-                    logger.info(
-                        "  No qualifying hotel for %d nights — skipping variant.",
-                        nights,
-                    )
-                    continue
-
-                food = get_food_cost(
-                    city=city,
-                    country=country,
-                    region=region,
-                    days=nights,
-                    people=num_adults + num_children,
-                    session=session,
-                )
-                cost = build_cost_breakdown(
-                    flight_total=flight.price_total,
-                    hotel_total=hotel.price_total,
-                    car_region=region,
-                    food_total=food.total_cost,
-                    days=nights,
-                    car_required=car_rental_required,
-                )
-
-                if best is None or cost.total < best.cost.total:
-                    car_url = (
-                        f"https://www.kayak.com/cars/{iata}"
-                        f"/{departure_date.isoformat()}/{return_date_v.isoformat()}"
-                    )
-                    best = TripCandidate(
-                        destination_iata=iata,
-                        city=city,
-                        country=country,
-                        region=region,
-                        departure_date=departure_date,
-                        return_date=return_date_v,
-                        cost=cost,
-                        distance_miles=distance,
-                        flight_booking_url=flight.booking_url,
-                        hotel_booking_url=hotel.booking_url,
-                        car_booking_url=car_url,
-                        raw_flight_data=flight.raw,
-                        raw_hotel_data=hotel.raw,
-                    )
-
-            if best is None:
-                logger.info("  No complete trip found across all variants — skipping.")
-                session.commit()
-                continue
-
-            candidates.append(best)
-            nights_won = (best.return_date - best.departure_date).days
-            logger.info(
-                "  Best: %d nights — $%.2f (flight $%.2f | hotel $%.2f | car $%.2f | food $%.2f)",
-                nights_won,
-                best.cost.total,
-                best.cost.flights,
-                best.cost.hotel,
-                best.cost.car,
-                best.cost.food,
-            )
-            session.commit()
-
-        flights_calls_this_run = (
-            get_api_calls_today(session, "google_flights") - flights_calls_start
-        )
-        duration = round(time.monotonic() - start_time, 1)
-
-        if not candidates:
+        if not all_candidates:
             logger.error("No valid trip candidates found. Logging failed run.")
             session.add(
                 RunLog(
                     run_at=datetime.now(UTC),
                     status="failed",
                     triggered_by=triggered_by,
-                    destinations_evaluated=len(pass1_prices),
+                    destinations_evaluated=0,
                     error_message="No valid candidates after Pass 2",
                     duration_seconds=duration,
                     api_calls_flights=flights_calls_this_run,
@@ -434,14 +505,20 @@ def run(triggered_by: str = "manual") -> None:
             sys.exit(1)
 
         # ── Rank and store ────────────────────────────────────────────────────
-        ranked = rank_trips(candidates, strategy=ranking_strategy)
+        ranked = rank_trips(all_candidates, strategy=ranking_strategy)
         winner = ranked[0]
 
+        dep_note = (
+            f" (departing from {winner.departure_airport})"
+            if winner.departure_airport and winner.departure_airport != home_airport
+            else ""
+        )
         logger.info(
-            "\n🏆 Winner: %s, %s — $%.2f total",
+            "\n🏆 Winner: %s, %s — $%.2f total%s",
             winner.city,
             winner.country,
             winner.cost.total,
+            dep_note,
         )
 
         trip_ids = _store_results(session, ranked, run_date)
@@ -460,7 +537,7 @@ def run(triggered_by: str = "manual") -> None:
                 run_at=datetime.now(UTC),
                 status="success",
                 triggered_by=triggered_by,
-                destinations_evaluated=len(candidates),
+                destinations_evaluated=len(all_candidates),
                 winner_trip_id=winner_trip_id,
                 duration_seconds=duration,
                 api_calls_flights=flights_calls_this_run,
@@ -477,7 +554,11 @@ def run(triggered_by: str = "manual") -> None:
             logger.info("Notifications disabled — skipping email.")
         else:
             notified = send_trip_notification(
-                winner, all_prefs, filter_fallback=filter_fallback, is_mock=is_mock
+                winner,
+                all_prefs,
+                filter_fallback=filter_fallback,
+                is_mock=is_mock,
+                home_airport=home_airport,
             )
             if notified:
                 winner_row = session.get(Trip, winner_trip_id)
@@ -488,7 +569,7 @@ def run(triggered_by: str = "manual") -> None:
     logger.info(
         "Run complete in %.1fs. Evaluated %d Pass-2 candidates.",
         duration,
-        len(candidates),
+        len(all_candidates),
     )
 
 

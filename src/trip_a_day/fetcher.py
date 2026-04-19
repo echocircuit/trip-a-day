@@ -773,3 +773,54 @@ def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float
         + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
     )
     return round(2 * r * math.asin(math.sqrt(a)), 1)
+
+
+def get_airport_city(iata: str) -> str:
+    """Return the city name for *iata* from the seed JSON, or the IATA code if not found."""
+    airports = _load_seed_airports()
+    airport = next((a for a in airports if a["iata"] == iata), None)
+    return airport["city"] if airport else iata
+
+
+def get_nearby_airports(
+    home_iata: str, radius_miles: float, session: Session
+) -> list[AirportInfo]:
+    """Return airports within *radius_miles* of *home_iata*, excluding home itself.
+
+    Performs a haversine scan over all enabled Destination rows in the DB.
+    Returns an empty list when *radius_miles* <= 0 or home coordinates are missing.
+    """
+    from trip_a_day.db import Destination  # avoid circular import at module level
+
+    if radius_miles <= 0:
+        return []
+
+    home = get_airport_info(home_iata, session)
+    if home is None or not home.latitude or not home.longitude:
+        return []
+
+    destinations = (
+        session.query(Destination).filter(Destination.enabled.is_(True)).all()
+    )
+    nearby: list[AirportInfo] = []
+    for dest in destinations:
+        if dest.iata_code == home_iata:
+            continue
+        if not dest.latitude or not dest.longitude:
+            continue
+        dist = haversine_miles(
+            home.latitude, home.longitude, dest.latitude, dest.longitude
+        )
+        if dist <= radius_miles:
+            nearby.append(
+                AirportInfo(
+                    iata=dest.iata_code,
+                    city=dest.city or dest.iata_code,
+                    country=dest.country or "Unknown",
+                    country_code=dest.country_code or "",
+                    region=dest.region or "Other",
+                    latitude=dest.latitude,
+                    longitude=dest.longitude,
+                )
+            )
+    return nearby
