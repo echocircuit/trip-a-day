@@ -471,7 +471,7 @@ def run(triggered_by: str = "manual") -> None:
 
         # ── Notify ────────────────────────────────────────────────────────────
         notified = send_trip_notification(
-            winner, all_prefs, filter_fallback=filter_fallback
+            winner, all_prefs, filter_fallback=filter_fallback, is_mock=is_mock
         )
 
         if notified:

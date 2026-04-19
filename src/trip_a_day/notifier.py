@@ -17,6 +17,7 @@ def send_trip_notification(
     prefs: dict[str, str],
     *,
     filter_fallback: bool = False,
+    is_mock: bool = False,
 ) -> bool:
     """Send the daily trip notification email (or print to stdout if no API key).
 
@@ -24,8 +25,8 @@ def send_trip_notification(
     """
     recipients = _parse_recipients(prefs)
     subject = _build_subject(trip)
-    html_body = _build_html(trip, filter_fallback=filter_fallback)
-    plain_body = _build_plain(trip, filter_fallback=filter_fallback)
+    html_body = _build_html(trip, filter_fallback=filter_fallback, is_mock=is_mock)
+    plain_body = _build_plain(trip, filter_fallback=filter_fallback, is_mock=is_mock)
 
     api_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
@@ -84,8 +85,23 @@ _FILTER_FALLBACK_WARNING_TEXT = (
     "Consider relaxing your filters in Preferences.\n\n"
 )
 
+_MOCK_DATA_BANNER_HTML = """\
+  <div style="background:#fff3cd;border:2px solid #ffc107;border-radius:4px;padding:12px 16px;margin-bottom:16px;">
+    <strong>&#9888; Development Mode</strong> &#8212; Flight prices in this email came from mock data, not live fares.
+    Set <code>FLIGHT_DATA_MODE=live</code> in your <code>.env</code> file to receive real pricing.
+  </div>
+"""
 
-def _build_html(trip: TripCandidate, *, filter_fallback: bool = False) -> str:
+_MOCK_DATA_BANNER_TEXT = (
+    "*** DEVELOPMENT MODE ***\n"
+    "Flight prices in this email came from mock data, not live fares.\n"
+    "Set FLIGHT_DATA_MODE=live in your .env file to receive real pricing.\n\n"
+)
+
+
+def _build_html(
+    trip: TripCandidate, *, filter_fallback: bool = False, is_mock: bool = False
+) -> str:
     nights = (trip.return_date - trip.departure_date).days
     distance_str = (
         f"{trip.distance_miles:,.0f} mi" if trip.distance_miles > 0 else "N/A"
@@ -110,6 +126,7 @@ def _build_html(trip: TripCandidate, *, filter_fallback: bool = False) -> str:
 </head>
 <body>
   <h1>&#x2708;&#xFE0F; Trip of the Day</h1>
+  {_MOCK_DATA_BANNER_HTML if is_mock else ""}
   {_FILTER_FALLBACK_WARNING_HTML if filter_fallback else ""}
   <h2>{trip.city}, {trip.country}</h2>
   <p>
@@ -142,13 +159,19 @@ def _build_html(trip: TripCandidate, *, filter_fallback: bool = False) -> str:
 </html>"""
 
 
-def _build_plain(trip: TripCandidate, *, filter_fallback: bool = False) -> str:
+def _build_plain(
+    trip: TripCandidate, *, filter_fallback: bool = False, is_mock: bool = False
+) -> str:
     nights = (trip.return_date - trip.departure_date).days
     distance_str = (
         f"{trip.distance_miles:,.0f} mi" if trip.distance_miles > 0 else "N/A"
     )
-    warning = _FILTER_FALLBACK_WARNING_TEXT if filter_fallback else ""
-    return warning + textwrap.dedent(f"""\
+    mock_warning = _MOCK_DATA_BANNER_TEXT if is_mock else ""
+    filter_warning = _FILTER_FALLBACK_WARNING_TEXT if filter_fallback else ""
+    return (
+        mock_warning
+        + filter_warning
+        + textwrap.dedent(f"""\
         ✈️  TRIP OF THE DAY
         ==================
         Destination : {trip.city}, {trip.country} ({trip.region})
@@ -174,6 +197,7 @@ def _build_plain(trip: TripCandidate, *, filter_fallback: bool = False) -> str:
         Hotel    : {trip.hotel_booking_url}
         Car      : {trip.car_booking_url}
     """)
+    )
 
 
 def _print_fallback(subject: str, plain_body: str) -> None:

@@ -23,6 +23,8 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
+import os
+
 import streamlit as st
 from sqlalchemy import desc
 
@@ -80,8 +82,19 @@ def _run_now() -> None:
 # ── Dashboard ──────────────────────────────────────────────────────────────────
 
 
+def _is_mock_mode() -> bool:
+    return os.environ.get("FLIGHT_DATA_MODE", "mock").lower().strip() == "mock"
+
+
 def _dashboard() -> None:
     st.title("Dashboard")
+
+    if _is_mock_mode():
+        st.warning(
+            "⚠️ Running in mock mode — flight prices are not real. "
+            "Set `FLIGHT_DATA_MODE=live` in your `.env` to use live data.",
+            icon=None,
+        )
 
     with SessionFactory() as s:
         last_run: RunLog | None = s.query(RunLog).order_by(desc(RunLog.run_at)).first()
@@ -154,7 +167,8 @@ def _dashboard() -> None:
         )
 
         c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("✈️ Flights", f"${winner.flight_cost_usd:,.0f}")
+        flights_label = "✈️ Flights" + (" ⚠️ mock" if _is_mock_mode() else "")
+        c1.metric(flights_label, f"${winner.flight_cost_usd:,.0f}")
         c2.metric("🏨 Hotel *", f"${winner.hotel_cost_usd:,.0f}")
         c3.metric("🚗 Car *", f"${winner.car_cost_usd:,.0f}")
         c4.metric("🍽️ Food *", f"${winner.food_cost_usd:,.0f}")
@@ -223,6 +237,19 @@ def _preferences() -> None:
             return val if isinstance(val, list) else []
         except (json.JSONDecodeError, TypeError):
             return []
+
+    # Read-only flight data mode indicator (env var, not a DB preference)
+    mode = os.environ.get("FLIGHT_DATA_MODE", "mock").lower().strip()
+    if mode == "mock":
+        st.info(
+            "**Flight data mode: mock** — Prices come from static fixtures, not Google Flights. "
+            "Set `FLIGHT_DATA_MODE=live` in your `.env` to use live pricing. "
+            "Mock mode is safe for development and testing.",
+        )
+    else:
+        st.success(
+            "**Flight data mode: live** — Prices are fetched from Google Flights in real time.",
+        )
 
     with st.form("preferences_form"):
         st.subheader("Trip Configuration")
