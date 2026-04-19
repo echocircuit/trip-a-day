@@ -2,7 +2,7 @@
 
 ## Current Phase: Phase 6 — Region Filtering + Post-Phase 6 Fixes
 ## Status: Complete (merged)
-## Last updated: 2026-04-19 — hotel pricing fixes, mock mode fix, num_rooms preference, 97 unit tests passing
+## Last updated: 2026-04-19 — hotel pricing fixes, mock mode fix, num_rooms preference, filter architecture fix, 101 unit tests passing
 
 ### Phase 1 Checklist
 
@@ -101,7 +101,8 @@
 - [x] Fix `_synthetic_flight_result` `stops=1` → `stops=0`; mock mode now works for any home airport, not just HSV (2026-04-19)
 - [x] Add `num_rooms` preference (default: 1); remove `ceil(adults/2)` room calculation from `get_hotel_offers`; expose in UI (2026-04-19)
 - [x] Add `test_domestic_national_average_fallback` test; update `test_domestic_does_not_match_international` (2026-04-19)
-- [x] All 97 unit tests pass; ruff + mypy clean (2026-04-19)
+- [x] Fix filter architecture: `apply_destination_filters` now runs on full 302-airport pool before `select_daily_batch`, not on the already-selected batch; add 4 pool-parameter tests to `test_selector.py` (2026-04-19)
+- [x] All 101 unit tests pass; ruff + mypy clean (2026-04-19)
 
 ### Decisions Made This Phase
 
@@ -133,6 +134,7 @@
 - City names in `seed_airports.json` must exactly match GSA per diem `city` field (case-insensitive) for the exact-match lookup to hit; any mismatch silently falls through to the $150 North America fallback
 - `_lookup_per_diem` domestic fallback now uses a national average (~$140/night) rather than $0; the state-level fallback is impossible without state codes in seed data
 - `num_rooms` preference replaces the silent `ceil(adults/2)` formula so users can control hotel room count directly
+- Filters must run on the full pool before batch selection; applying them post-selection caused the NA-heavy default batch to be entirely rejected, triggering a spurious fallback
 
 ### Blockers / Open Questions
 
