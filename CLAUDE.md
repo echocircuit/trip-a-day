@@ -10,12 +10,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current phase
 
-**Phase 3 — In Progress.** Trip config preferences wired into pipeline. `direct_flights_only` and `car_rental_required` preferences now actively filter fetcher results and cost assembly.
+**Phase 4 — In Progress.** Trip length flexibility. `trip_length_flex_nights` preference (default 0) lets the pipeline search `trip_length_nights ± flex` and pick the cheapest variant per destination.
 
 **Launch UI:** `streamlit run ui.py`
 **Launch scheduler:** `python scheduler.py` (daily at time in `scheduled_run_time` pref, default 07:00 local)
 
-**Next: Phase 4** after this PR merges. Begin with `git checkout main && git pull && git checkout -b feature/phase-4-<description>`.
+**Next: Phase 5** after this PR merges. Begin with `git checkout main && git pull && git checkout -b feature/phase-5-<description>`.
 
 ## Development workflow
 
