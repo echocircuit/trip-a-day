@@ -86,10 +86,9 @@ def _dashboard() -> None:
     with SessionFactory() as s:
         last_run: RunLog | None = s.query(RunLog).order_by(desc(RunLog.run_at)).first()
         winner: Trip | None = (
-            s.query(Trip)
-            .filter(Trip.selected.is_(True))
-            .order_by(desc(Trip.run_date))
-            .first()
+            s.get(Trip, last_run.winner_trip_id)
+            if last_run and last_run.winner_trip_id
+            else None
         )
         today = date.today()
         api_rows: list[ApiUsage] = (
