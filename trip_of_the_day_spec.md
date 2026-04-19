@@ -734,7 +734,7 @@ No keys are ever committed to the repository. This is documented explicitly in t
 
 - **Primary development platform:** macOS, VS Code
 - **Target runtime platforms:** macOS, Windows 10/11, Linux (including headless server environments)
-- **Python version:** 3.11+ (required for all platforms)
+- **Python version:** 3.12+ (required for all platforms)
 - **Path handling:** All file paths constructed using `pathlib.Path` — never string concatenation — to ensure cross-platform compatibility
 - **Line endings:** Repository enforces LF line endings via `.gitattributes` to prevent Windows CRLF issues
 - **Scheduling note:** APScheduler works consistently across all platforms. On Windows, the app must be running (as a foreground process or Windows Service) for scheduled runs to fire — it does not register with Task Scheduler automatically. On macOS, a `launchd` plist can be provided. On Linux, a systemd unit file or crontab entry can be provided. The README will include setup instructions for all three.

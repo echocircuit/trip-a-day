@@ -125,7 +125,7 @@ cp .env.example .env
 python main.py
 ```
 
-**Python version:** 3.11+ (tested on 3.14)
+**Python version:** 3.12+ (tested on 3.14)
 **Venv:** `.venv/`
 **DB file:** `trip_of_the_day.db` (auto-created at project root on first run; gitignored)
 

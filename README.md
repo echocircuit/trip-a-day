@@ -14,7 +14,7 @@ Determines the cheapest trip that can be booked each day. Runs once daily, finds
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - [`uv`](https://github.com/astral-sh/uv) — `brew install uv` (or see [uv docs](https://docs.astral.sh/uv/))
 - Optional free API accounts (details below)
 
