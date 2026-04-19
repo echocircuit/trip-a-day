@@ -125,6 +125,7 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     "ranking_strategy": "cheapest_then_farthest",
     "search_radius_miles": "0",
     "region_filter": "null",
+    "scheduled_run_time": "07:00",
 }
 
 
