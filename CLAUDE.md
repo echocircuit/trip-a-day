@@ -170,3 +170,24 @@ python main.py
 - Per diem lodging is a government rate (typically 3-star level); actual 4-star costs may be higher. This is noted in the hotel booking note.
 - Google Flights occasionally fails for specific routes (returns no data); those destinations are silently skipped.
 - Mock flight prices are static fixtures; they don't reflect real market prices or trends.
+
+## Branch Convention
+
+Each phase gets its own branch: `feature/phase-5`, `feature/phase-6`, etc.
+Branch is created from `main` at the start of the phase.
+All commits for a phase go on that branch.
+Phase is merged to `main` only when complete and all tests pass.
+Never commit directly to `main`.
+If a session starts and no phase branch exists yet, create it before writing any code.
+
+## Interrupted Session Recovery
+
+If a Claude Code session ends unexpectedly mid-phase:
+1. Start a new session
+2. Run: `git status`, `git branch -a`, `git log --oneline -10`
+3. If on a detached HEAD or wrong branch: do NOT commit anything yet — sort the branch first
+4. Read `CLAUDE.md`, then `PROGRESS.md`
+5. Resume from the "Next Action" line in `PROGRESS.md` exactly
+6. If "Next Action" is ambiguous, read the last commit message for context
+7. Never cherry-pick unless explicitly instructed to do so
+8. If in doubt about branch state, ask before proceeding
