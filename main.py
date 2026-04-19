@@ -41,6 +41,7 @@ from trip_a_day.fetcher import (
     get_hotel_offers,
     haversine_miles,
 )
+from trip_a_day.filters import apply_destination_filters
 from trip_a_day.notifier import send_trip_notification
 from trip_a_day.preferences import get, get_all, get_bool, get_int
 from trip_a_day.ranker import TripCandidate, rank_trips
@@ -167,6 +168,16 @@ def run(triggered_by: str = "manual") -> None:
         logger.info(
             "Batch: %d destinations via strategy '%s'", len(batch), selection_strategy
         )
+
+        # ── Apply destination filters ─────────────────────────────────────────
+        all_prefs = get_all(session)
+        batch, filter_fallback = apply_destination_filters(batch, session, all_prefs)
+        if filter_fallback:
+            logger.warning(
+                "All filters combined produced an empty pool — running unfiltered."
+            )
+        else:
+            logger.info("After filters: %d destinations remain.", len(batch))
 
         # ── Pass 1: quick price estimate per destination ──────────────────────
         flights_calls_start = get_api_calls_today(session, "google_flights")
@@ -438,13 +449,15 @@ def run(triggered_by: str = "manual") -> None:
                 winner_trip_id=winner_trip_id,
                 duration_seconds=duration,
                 api_calls_flights=flights_calls_this_run,
+                filter_fallback=filter_fallback,
             )
         )
         session.commit()
 
         # ── Notify ────────────────────────────────────────────────────────────
-        all_prefs = get_all(session)
-        notified = send_trip_notification(winner, all_prefs)
+        notified = send_trip_notification(
+            winner, all_prefs, filter_fallback=filter_fallback
+        )
 
         if notified:
             winner_row = session.get(Trip, winner_trip_id)

@@ -12,6 +12,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import subprocess
 import sys
@@ -113,6 +114,12 @@ def _dashboard() -> None:
                 st.write(f"**Duration:** {last_run.duration_seconds:.1f}s")
             if last_run.error_message:
                 st.error(last_run.error_message)
+            if getattr(last_run, "filter_fallback", False):
+                st.warning(
+                    "Filter fallback triggered — destination filters produced no "
+                    "matches and the run used the unfiltered pool. "
+                    "Consider relaxing your filters in Preferences."
+                )
         else:
             st.info("No runs yet. Click **Run Now** below to get started.")
 
@@ -178,6 +185,22 @@ def _dashboard() -> None:
 
 _STRATEGIES = ["cheapest_then_farthest", "farthest_then_cheapest", "random"]
 
+_ALL_REGIONS = [
+    "Africa",
+    "Caribbean",
+    "Central Asia",
+    "East Asia",
+    "Eastern Europe",
+    "Mexico / Central America",
+    "Middle East",
+    "North America",
+    "Oceania",
+    "South America",
+    "South Asia",
+    "Southeast Asia",
+    "Western Europe",
+]
+
 
 def _preferences() -> None:
     st.title("Preferences")
@@ -194,6 +217,13 @@ def _preferences() -> None:
 
     def _bool(key: str, default: bool = True) -> bool:
         return prefs.get(key, "true" if default else "false").strip().lower() == "true"
+
+    def _parse_json_pref(p: dict, key: str) -> list:
+        try:
+            val = json.loads(p.get(key, "[]"))
+            return val if isinstance(val, list) else []
+        except (json.JSONDecodeError, TypeError):
+            return []
 
     with st.form("preferences_form"):
         st.subheader("Trip Configuration")
@@ -296,6 +326,59 @@ def _preferences() -> None:
             value=_int("two_pass_candidate_count", 5),
         )
 
+        st.subheader("Filters")
+        st.caption(
+            "Filters narrow the destination pool before each run. "
+            "If all filters combined produce no results, the run falls back to the "
+            "unfiltered pool and you'll see a warning in the email and dashboard."
+        )
+        region_allowlist_val = st.multiselect(
+            "Region allowlist (worldwide if empty)",
+            _ALL_REGIONS,
+            default=_parse_json_pref(prefs, "region_allowlist"),
+        )
+        region_blocklist_val = st.multiselect(
+            "Region blocklist (takes precedence over allowlist)",
+            _ALL_REGIONS,
+            default=_parse_json_pref(prefs, "region_blocklist"),
+        )
+        st.markdown("**Favorite-location radius**")
+        st.caption(
+            "Enter one location per line as `lat,lon` (e.g. `48.8566,2.3522` for Paris). "
+            "Only destinations within the radius below will be considered."
+        )
+        raw_locs = _parse_json_pref(prefs, "favorite_locations")
+        fav_locs_text = st.text_area(
+            "Favorite locations (lat,lon — one per line)",
+            value="\n".join(
+                f"{loc['lat']},{loc['lon']}"
+                for loc in raw_locs
+                if isinstance(loc, dict)
+            ),
+            height=80,
+        )
+        fav_radius = st.number_input(
+            "Favorite radius (miles, 0 = disabled)",
+            min_value=0,
+            max_value=10000,
+            value=_int("favorite_radius_miles", 0),
+        )
+        exclude_selected = st.checkbox(
+            "Exclude previously selected destinations",
+            value=_bool("exclude_previously_selected", default=False),
+        )
+        exclude_selected_days = st.number_input(
+            "Rolling window for exclusion (days, 0 = all-time)",
+            min_value=0,
+            max_value=3650,
+            value=_int("exclude_previously_selected_days", 0),
+            disabled=not exclude_selected,
+        )
+        exclude_booked = st.checkbox(
+            "Exclude booked destinations",
+            value=_bool("exclude_booked", default=False),
+        )
+
         st.subheader("Notifications")
         raw_emails = prefs.get("notification_emails", "[]")
         try:
@@ -340,6 +423,30 @@ def _preferences() -> None:
             set_pref(s, "cache_ttl_enabled", "true" if cache_ttl_enabled else "false")
             set_pref(s, "max_live_calls_per_run", str(int(max_live_calls)))
             set_pref(s, "two_pass_candidate_count", str(int(two_pass_count)))
+            set_pref(s, "region_allowlist", json.dumps(region_allowlist_val))
+            set_pref(s, "region_blocklist", json.dumps(region_blocklist_val))
+            # Parse fav_locs_text: "lat,lon" lines -> [{"lat":..., "lon":...}]
+            parsed_locs = []
+            for line in fav_locs_text.splitlines():
+                parts = line.strip().split(",")
+                if len(parts) == 2:
+                    with contextlib.suppress(ValueError):
+                        parsed_locs.append(
+                            {"lat": float(parts[0]), "lon": float(parts[1])}
+                        )
+            set_pref(s, "favorite_locations", json.dumps(parsed_locs))
+            set_pref(s, "favorite_radius_miles", str(int(fav_radius)))
+            set_pref(
+                s,
+                "exclude_previously_selected",
+                "true" if exclude_selected else "false",
+            )
+            set_pref(
+                s,
+                "exclude_previously_selected_days",
+                str(int(exclude_selected_days)),
+            )
+            set_pref(s, "exclude_booked", "true" if exclude_booked else "false")
             set_pref(s, "notification_emails", json.dumps(new_emails))
             set_pref(s, "scheduled_run_time", run_time_val.strftime("%H:%M"))
             s.commit()
@@ -491,6 +598,63 @@ def _trip_history() -> None:
         f"Showing {lo}-{hi} of {total} trips  -  Page {page_num} of {total_pages}"
     )
     st.dataframe(rows, use_container_width=True, hide_index=True)
+
+    # ── Mark as Booked ────────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("Mark Destination as Booked")
+    st.caption(
+        "Mark a destination as booked to optionally exclude it from future picks "
+        "(toggle 'Exclude booked destinations' in Preferences → Filters)."
+    )
+    with SessionFactory() as s:
+        all_dests: list[Destination] = (
+            s.query(Destination).order_by(Destination.iata_code).all()
+        )
+        booked_iatas = {d.iata_code for d in all_dests if d.user_booked}
+        dest_labels = {
+            d.iata_code: f"{d.city or d.iata_code}, {d.country or ''} ({d.iata_code})"
+            for d in all_dests
+        }
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("**Book a destination**")
+        book_iata = st.selectbox(
+            "Destination",
+            options=[i for i in dest_labels if i not in booked_iatas],
+            format_func=lambda k: dest_labels[k],
+            key="book_dest_select",
+            index=None,
+            placeholder="Select a destination…",
+        )
+        if st.button("Mark as Booked") and book_iata:
+            with SessionFactory() as s:
+                d = s.get(Destination, book_iata)
+                if d:
+                    d.user_booked = True
+                    s.commit()
+            st.success(f"{dest_labels[book_iata]} marked as booked.")
+            st.rerun()
+
+    with col_b:
+        st.markdown("**Currently booked**")
+        if booked_iatas:
+            unbook_iata = st.selectbox(
+                "Booked destination",
+                options=sorted(booked_iatas),
+                format_func=lambda k: dest_labels.get(k, k),
+                key="unbook_dest_select",
+            )
+            if st.button("Unmark as Booked") and unbook_iata:
+                with SessionFactory() as s:
+                    d = s.get(Destination, unbook_iata)
+                    if d:
+                        d.user_booked = False
+                        s.commit()
+                st.success(f"{dest_labels.get(unbook_iata, unbook_iata)} unmarked.")
+                st.rerun()
+        else:
+            st.info("No destinations currently marked as booked.")
 
 
 # ── routing ────────────────────────────────────────────────────────────────────

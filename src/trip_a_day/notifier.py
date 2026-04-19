@@ -12,15 +12,20 @@ from trip_a_day.ranker import TripCandidate
 logger = logging.getLogger(__name__)
 
 
-def send_trip_notification(trip: TripCandidate, prefs: dict[str, str]) -> bool:
+def send_trip_notification(
+    trip: TripCandidate,
+    prefs: dict[str, str],
+    *,
+    filter_fallback: bool = False,
+) -> bool:
     """Send the daily trip notification email (or print to stdout if no API key).
 
     Returns True if delivery succeeded, False otherwise.
     """
     recipients = _parse_recipients(prefs)
     subject = _build_subject(trip)
-    html_body = _build_html(trip)
-    plain_body = _build_plain(trip)
+    html_body = _build_html(trip, filter_fallback=filter_fallback)
+    plain_body = _build_plain(trip, filter_fallback=filter_fallback)
 
     api_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
@@ -66,7 +71,21 @@ def _build_subject(trip: TripCandidate) -> str:
     )
 
 
-def _build_html(trip: TripCandidate) -> str:
+_FILTER_FALLBACK_WARNING_HTML = """\
+  <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:12px 16px;margin-bottom:16px;">
+    <strong>&#9888; Filter notice:</strong> Your active destination filters produced no matches.
+    Today&#8217;s result is from the unfiltered pool. Consider relaxing your filters in Preferences.
+  </div>
+"""
+
+_FILTER_FALLBACK_WARNING_TEXT = (
+    "NOTE: Your active destination filters produced no matches. "
+    "Today's result is from the unfiltered pool. "
+    "Consider relaxing your filters in Preferences.\n\n"
+)
+
+
+def _build_html(trip: TripCandidate, *, filter_fallback: bool = False) -> str:
     nights = (trip.return_date - trip.departure_date).days
     distance_str = (
         f"{trip.distance_miles:,.0f} mi" if trip.distance_miles > 0 else "N/A"
@@ -91,6 +110,7 @@ def _build_html(trip: TripCandidate) -> str:
 </head>
 <body>
   <h1>&#x2708;&#xFE0F; Trip of the Day</h1>
+  {_FILTER_FALLBACK_WARNING_HTML if filter_fallback else ""}
   <h2>{trip.city}, {trip.country}</h2>
   <p>
     <strong>Region:</strong> {trip.region}<br>
@@ -122,12 +142,13 @@ def _build_html(trip: TripCandidate) -> str:
 </html>"""
 
 
-def _build_plain(trip: TripCandidate) -> str:
+def _build_plain(trip: TripCandidate, *, filter_fallback: bool = False) -> str:
     nights = (trip.return_date - trip.departure_date).days
     distance_str = (
         f"{trip.distance_miles:,.0f} mi" if trip.distance_miles > 0 else "N/A"
     )
-    return textwrap.dedent(f"""\
+    warning = _FILTER_FALLBACK_WARNING_TEXT if filter_fallback else ""
+    return warning + textwrap.dedent(f"""\
         ✈️  TRIP OF THE DAY
         ==================
         Destination : {trip.city}, {trip.country} ({trip.region})
