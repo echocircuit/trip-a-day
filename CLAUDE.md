@@ -10,12 +10,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current phase
 
-**Phase 5 — Complete.** Architecture improvements: mock/live flight mode (`FLIGHT_DATA_MODE`), 302-airport destination pool with 8 selection strategies, two-pass search (Pass 1 broad sweep with price cache, Pass 2 full variant search for top N), price history tracking per destination.
+**Phase 6 — Complete.** Region filtering (allowlist/blocklist), favorite-location radius filter, exclusion rules (previously-selected, booked), booked destination tracking. 101 unit tests passing.
+
+**Post-Phase 6 fixes (2026-04-19):**
+- Fixed 9 US airport city names in `data/seed_airports.json` to match GSA per diem table entries (e.g. IAD `"Washington DC"` → `"District of Columbia"`, restoring the $276/night GSA rate instead of the $150 North America fallback).
+- Fixed `_lookup_per_diem` domestic fallback: now computes a national domestic average when no exact city match is found, replacing a state-code match that could never fire (per diem stores 2-letter state codes, not "United States").
+- Fixed `_synthetic_flight_result` `stops=1` → `stops=0` so mock mode works for any home airport (previously any home airport other than HSV caused "Pass 1 returned no prices" because all synthetic flights were filtered by `direct_only=True`).
+- Added `num_rooms` preference (default: 1) and removed the silent `rooms = ceil(adults/2)` calculation from `get_hotel_offers`. Exposed in UI Travelers section alongside Adults and Children.
+- Fixed filter architecture: `apply_destination_filters` now runs on the full 302-airport pool *before* `select_daily_batch`, not on the already-selected batch. Previously a North America blocklist would reject the entire (all-NA) batch and trigger a spurious filter-fallback warning.
 
 **Launch UI:** `streamlit run ui.py`
 **Launch scheduler:** `python scheduler.py` (daily at time in `scheduled_run_time` pref, default 07:00 local)
 
-**Next: Phase 6** after this PR merges. Begin with `git checkout main && git pull && git checkout -b feature/phase-6-<description>`.
+**Next: Phase 7.** Begin with `git checkout main && git pull && git checkout -b feature/phase-7-<description>`.
 
 ## Development workflow
 
@@ -31,7 +38,7 @@ git checkout -b feature/<short-description>   # e.g. feature/phase-2-scheduling
 ```bash
 ruff check . && ruff format --check .   # must pass clean
 mypy src/                               # must pass clean
-pytest tests/unit/                      # must pass (80 tests, no API calls)
+pytest tests/unit/                      # must pass (101 tests, no API calls)
 python main.py                          # full live run — takes ~2 min (sweeps 95 airports)
 ```
 Fix any issues found and commit them. Then push and open a PR:
@@ -62,7 +69,8 @@ python scripts/update_rates.py               # refresh per diem data (run each O
 **Data flow:**
 ```
 main.py
-  → selector.py  (select daily batch from 302-airport pool, 8 strategies)
+  → filters.py   (apply region allowlist/blocklist, favorite-radius, exclusion rules to full pool)
+  → selector.py  (select daily batch from eligible pool, 8 strategies)
   → fetcher.py   (fast-flights [mock/live] + per diem rates → typed dataclasses)
   → cache.py     (TTL-aware price cache, check before live call)
   → costs.py     (CostBreakdown assembly)
@@ -96,16 +104,21 @@ main.py
 | Two-pass search: Pass 1 selects batch, Pass 2 runs top N | Limits live API calls to `max_live_calls_per_run`; TTL cache avoids redundant lookups |
 | `PriceCache` table with advance-window TTL | 0–30d→2d, 31–90d→5d, 91–180d→4d, 181d+→2d; prices change faster near departure |
 | 8 destination selection strategies in selector.py | Covers common exploration patterns; strategy state (round_robin_offset, region_cycle_index) persisted in preferences table |
+| `num_rooms` preference (default 1) replaces `ceil(adults/2)` | Silent formula obscured hotel costs; explicit preference lets users control it directly |
+| City names in seed_airports.json match GSA per diem table | Exact-match lookup in `_lookup_per_diem` requires the city string to match; mismatches fell through to $150 regional fallback silently |
+| Domestic per diem fallback uses national average | State-code fallback can't fire without state codes in seed data; national average is more accurate than $150 for any domestic city miss |
+| Filters applied to full pool before `select_daily_batch` | Applying filters after selection meant a NA blocklist would reject the entire NA-heavy batch and trigger fallback; filtering first ensures the batch is drawn from the eligible set |
 
 ## Key file map
 
 | File | Purpose |
 |---|---|
-| `main.py` | Entry point; two-pass pipeline (select batch → Pass 1 cache sweep → Pass 2 variant search → rank → notify) |
+| `main.py` | Entry point; two-pass pipeline (filter full pool → select batch → Pass 1 cache sweep → Pass 2 variant search → rank → notify) |
 | `src/trip_a_day/db.py` | SQLAlchemy engine, ORM models, `init_db()`, `seed_preferences()`, `_seed_destinations()` |
 | `src/trip_a_day/preferences.py` | Typed get/set wrappers over the `preferences` table |
 | `src/trip_a_day/fetcher.py` | fast-flights (mock or live) + per diem lookups; returns typed dataclasses |
 | `src/trip_a_day/selector.py` | 8 destination selection strategies; `select_daily_batch()` public interface |
+| `src/trip_a_day/filters.py` | Phase 6 destination filters: region allowlist/blocklist, favorite-radius, exclusion rules |
 | `src/trip_a_day/cache.py` | TTL-aware flight price cache: `get_cached_flight()`, `store_flight_cache()` |
 | `src/trip_a_day/costs.py` | `CostBreakdown` dataclass; `build_cost_breakdown()`; `lookup_car_cost()` |
 | `src/trip_a_day/ranker.py` | `TripCandidate` dataclass; `rank_trips()` with pluggable strategy |
@@ -118,9 +131,11 @@ main.py
 | `trip_of_the_day_spec.md` | Authoritative specification — do not modify |
 | `tests/unit/test_costs.py` | Cost calculation tests |
 | `tests/unit/test_ranker.py` | Ranking and sorting tests |
-| `tests/unit/test_selector.py` | All 8 destination selection strategies (in-memory DB) |
+| `tests/unit/test_selector.py` | All 8 destination selection strategies + pool parameter tests (in-memory DB) |
 | `tests/unit/test_cache.py` | TTL logic, cache hit/miss, is_mock flag |
-| `tests/unit/test_fetcher_perdiem.py` | Per diem lookup fallback chain tests |
+| `tests/unit/test_fetcher_perdiem.py` | Per diem lookup fallback chain tests (7 tests incl. domestic national-average fallback) |
+| `tests/unit/test_fetcher_flights.py` | direct_only filtering tests |
+| `tests/unit/test_filters.py` | Region allowlist/blocklist, favorite-radius, exclusion rule tests (16 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
 
 ## Environment setup

@@ -41,6 +41,7 @@ from trip_a_day.fetcher import (
     get_hotel_offers,
     haversine_miles,
 )
+from trip_a_day.filters import apply_destination_filters
 from trip_a_day.notifier import send_trip_notification
 from trip_a_day.preferences import get, get_all, get_bool, get_int
 from trip_a_day.ranker import TripCandidate, rank_trips
@@ -128,6 +129,7 @@ def run(triggered_by: str = "manual") -> None:
         advance_days = get_int(session, "advance_days")
         num_adults = get_int(session, "num_adults")
         num_children = get_int(session, "num_children")
+        num_rooms = get_int(session, "num_rooms")
         min_stars = get_int(session, "min_hotel_stars")
         ranking_strategy = get(session, "ranking_strategy")
         direct_flights_only = get_bool(session, "direct_flights_only")
@@ -161,8 +163,31 @@ def run(triggered_by: str = "manual") -> None:
             home_info.longitude if home_info and home_info.longitude else _HSV_LON
         )
 
-        # ── Select daily batch ────────────────────────────────────────────────
-        batch = select_daily_batch(selection_strategy, daily_batch_size, session)
+        # ── Apply destination filters to full pool before batch selection ──────
+        all_prefs = get_all(session)
+        full_pool: list[Destination] = (
+            session.query(Destination)
+            .filter(Destination.enabled.is_(True), Destination.excluded.is_(False))
+            .all()
+        )
+        eligible_pool, filter_fallback = apply_destination_filters(
+            full_pool, session, all_prefs
+        )
+        if filter_fallback:
+            logger.warning(
+                "All filters combined produced an empty pool — running unfiltered."
+            )
+        else:
+            logger.info(
+                "After filters: %d / %d destinations eligible.",
+                len(eligible_pool),
+                len(full_pool),
+            )
+
+        # ── Select daily batch from eligible pool ─────────────────────────────
+        batch = select_daily_batch(
+            selection_strategy, daily_batch_size, session, pool=eligible_pool
+        )
         session.commit()
         logger.info(
             "Batch: %d destinations via strategy '%s'", len(batch), selection_strategy
@@ -322,6 +347,7 @@ def run(triggered_by: str = "manual") -> None:
                     adults=num_adults,
                     session=session,
                     min_stars=min_stars,
+                    num_rooms=num_rooms,
                 )
                 if hotel is None:
                     logger.info(
@@ -438,13 +464,15 @@ def run(triggered_by: str = "manual") -> None:
                 winner_trip_id=winner_trip_id,
                 duration_seconds=duration,
                 api_calls_flights=flights_calls_this_run,
+                filter_fallback=filter_fallback,
             )
         )
         session.commit()
 
         # ── Notify ────────────────────────────────────────────────────────────
-        all_prefs = get_all(session)
-        notified = send_trip_notification(winner, all_prefs)
+        notified = send_trip_notification(
+            winner, all_prefs, filter_fallback=filter_fallback
+        )
 
         if notified:
             winner_row = session.get(Trip, winner_trip_id)

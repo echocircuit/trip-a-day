@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Phase: Phase 5 — Architecture Improvements
-## Status: Complete (PR open)
-## Last updated: 2026-04-18 — mock/live flight mode, 302-airport pool, 8 selection strategies, two-pass search, price cache, 80 unit tests passing
+## Current Phase: Phase 6 — Region Filtering + Post-Phase 6 Fixes
+## Status: Complete (merged)
+## Last updated: 2026-04-19 — hotel pricing fixes, mock mode fix, num_rooms preference, filter architecture fix, 101 unit tests passing
 
 ### Phase 1 Checklist
 
@@ -68,7 +68,7 @@
 - [x] Add unit tests for `_build_night_variants` (8 tests) — 47 total pass (2026-04-18)
 - [x] PR merged (2026-04-18)
 
-### Phase 5 Checklist — Complete (PR open)
+### Phase 5 Checklist — Complete (merged)
 
 - [x] Add `FLIGHT_DATA_MODE=mock` env var; mock path reads `tests/fixtures/mock_flights.json` (2026-04-18)
 - [x] Create `tests/fixtures/mock_flights.json` with 40 HSV routes (2026-04-18)
@@ -81,7 +81,28 @@
 - [x] Refactor `main.py` — two-pass search, cache integration, price history updates, live call cap (2026-04-18)
 - [x] Add `tests/unit/test_selector.py` (18 tests) and `tests/unit/test_cache.py` (15 tests) (2026-04-18)
 - [x] All 80 unit tests pass; ruff + mypy clean (2026-04-18)
-- [ ] PR merged
+- [x] PR merged (2026-04-18)
+
+### Phase 6 Checklist — Complete (merged)
+
+- [x] Create `src/trip_a_day/filters.py` — `apply_destination_filters()` with region allowlist/blocklist, favorite-location radius, exclude-previously-selected, exclude-booked (2026-04-18)
+- [x] Add Phase 6 preferences to `db.py` defaults: `region_allowlist`, `region_blocklist`, `favorite_locations`, `favorite_radius_miles`, `exclude_previously_selected`, `exclude_previously_selected_days`, `exclude_booked` (2026-04-18)
+- [x] Add `user_booked` column to `Destination` via `_migrate_schema()` (2026-04-18)
+- [x] Wire `apply_destination_filters()` into `main.py` pipeline; log filter fallback (2026-04-18)
+- [x] Update `ui.py` — Filters section with allowlist/blocklist multiselect, favorite-radius, exclusion toggles; Trip History section with Mark as Booked (2026-04-18)
+- [x] Add `RunLog.filter_fallback` column; show warning in UI dashboard when triggered (2026-04-18)
+- [x] Add `tests/unit/test_filters.py` (16 tests) — all 96 unit tests pass; ruff + mypy clean (2026-04-18)
+- [x] PR merged (2026-04-18)
+
+### Post-Phase 6 Fixes (2026-04-19)
+
+- [x] Fix 9 US airport city names in `seed_airports.json` to match GSA per diem table (IAD, JFK, DEN, BOS, MSP, PHX, TPA, IND, SJC) — was silently returning $150/night regional fallback instead of actual GSA rates (2026-04-19)
+- [x] Fix `_lookup_per_diem` domestic fallback: use national domestic average instead of state-code match that could never fire (2026-04-19)
+- [x] Fix `_synthetic_flight_result` `stops=1` → `stops=0`; mock mode now works for any home airport, not just HSV (2026-04-19)
+- [x] Add `num_rooms` preference (default: 1); remove `ceil(adults/2)` room calculation from `get_hotel_offers`; expose in UI (2026-04-19)
+- [x] Add `test_domestic_national_average_fallback` test; update `test_domestic_does_not_match_international` (2026-04-19)
+- [x] Fix filter architecture: `apply_destination_filters` now runs on full 302-airport pool before `select_daily_batch`, not on the already-selected batch; add 4 pool-parameter tests to `test_selector.py` (2026-04-19)
+- [x] All 101 unit tests pass; ruff + mypy clean (2026-04-19)
 
 ### Decisions Made This Phase
 
@@ -105,10 +126,20 @@
 - Phase 5: `round_robin_offset` and `region_cycle_index` stored as preferences for cross-run persistence
 - Phase 5: Cache TTL is advance-window-aware: prices change faster near departure
 
+### Decisions Made in Phase 6 / Fixes
+
+- `filters.py` is a pure function module (`apply_destination_filters` takes batch + session + prefs dict); no side effects, easy to unit test
+- Filter fallback (empty pool → unfiltered run) logged in `RunLog.filter_fallback` and surfaced as a warning in the UI dashboard and email
+- Booked destinations tracked in `Destination.user_booked`; exclusion from the pool is opt-in via `exclude_booked` preference
+- City names in `seed_airports.json` must exactly match GSA per diem `city` field (case-insensitive) for the exact-match lookup to hit; any mismatch silently falls through to the $150 North America fallback
+- `_lookup_per_diem` domestic fallback now uses a national average (~$140/night) rather than $0; the state-level fallback is impossible without state codes in seed data
+- `num_rooms` preference replaces the silent `ceil(adults/2)` formula so users can control hotel room count directly
+- Filters must run on the full pool before batch selection; applying them post-selection caused the NA-heavy default batch to be entirely rejected, triggering a spurious fallback
+
 ### Blockers / Open Questions
 
 - None currently.
 
 ### Next Action
 
-Merge Phase 5 PR, then begin Phase 6.
+Begin Phase 7. Branch: `git checkout main && git pull && git checkout -b feature/phase-7-<description>`.

@@ -73,6 +73,7 @@ class Destination(Base):
     avg_price_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     user_favorited: Mapped[bool] = mapped_column(Boolean, default=False)
+    user_booked: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class PriceCache(Base):
@@ -137,6 +138,7 @@ class RunLog(Base):
     duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     api_calls_flights: Mapped[int] = mapped_column(Integer, default=0)
     api_calls_gsa: Mapped[int] = mapped_column(Integer, default=0)
+    filter_fallback: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class ApiUsage(Base):
@@ -157,6 +159,7 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     "advance_days": "7",
     "num_adults": "2",
     "num_children": "2",
+    "num_rooms": "1",
     "direct_flights_only": "true",
     "min_hotel_stars": "4",
     "car_rental_required": "true",
@@ -174,9 +177,17 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     # Internal strategy state (not user-facing)
     "round_robin_offset": "0",
     "region_cycle_index": "0",
+    # Phase 6 filter preferences
+    "region_allowlist": "[]",
+    "region_blocklist": "[]",
+    "favorite_locations": "[]",
+    "favorite_radius_miles": "0",
+    "exclude_previously_selected": "false",
+    "exclude_previously_selected_days": "0",
+    "exclude_booked": "false",
 }
 
-# New destination columns added in Phase 5 (for ALTER TABLE migration).
+# Destination columns added via ALTER TABLE migration (idempotent).
 _DESTINATION_NEW_COLUMNS: list[tuple[str, str]] = [
     ("country_code", "TEXT"),
     ("subregion", "TEXT"),
@@ -189,18 +200,34 @@ _DESTINATION_NEW_COLUMNS: list[tuple[str, str]] = [
     ("avg_price_usd", "REAL"),
     ("enabled", "BOOLEAN DEFAULT 1"),
     ("user_favorited", "BOOLEAN DEFAULT 0"),
+    # Phase 6
+    ("user_booked", "BOOLEAN DEFAULT 0"),
+]
+
+# run_log columns added via ALTER TABLE migration (idempotent).
+_RUN_LOG_NEW_COLUMNS: list[tuple[str, str]] = [
+    ("filter_fallback", "BOOLEAN DEFAULT 0"),
 ]
 
 
 def _migrate_schema() -> None:
     """Add any new columns to existing tables via ALTER TABLE (idempotent)."""
     with engine.connect() as conn:
-        result = conn.execute(text("PRAGMA table_info(destinations)"))
-        existing = {row[1] for row in result}
+        dest_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(destinations)"))
+        }
         for col_name, col_def in _DESTINATION_NEW_COLUMNS:
-            if col_name not in existing:
+            if col_name not in dest_cols:
                 conn.execute(
                     text(f"ALTER TABLE destinations ADD COLUMN {col_name} {col_def}")
+                )
+        run_log_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(run_log)"))
+        }
+        for col_name, col_def in _RUN_LOG_NEW_COLUMNS:
+            if col_name not in run_log_cols:
+                conn.execute(
+                    text(f"ALTER TABLE run_log ADD COLUMN {col_name} {col_def}")
                 )
         conn.commit()
 
@@ -252,6 +279,7 @@ def _seed_destinations() -> None:
                         excluded=False,
                         enabled=True,
                         user_favorited=False,
+                        user_booked=False,
                         query_count=0,
                         times_selected=0,
                     )
