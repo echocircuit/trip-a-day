@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Phase: Phase 4 — Trip Length Flexibility
-## Status: In Progress (PR open)
-## Last updated: 2026-04-18 — trip_length_flex_nights preference added; flex-window search loop in main.py; 47 unit tests passing
+## Current Phase: Phase 5 — Architecture Improvements
+## Status: Complete (PR open)
+## Last updated: 2026-04-18 — mock/live flight mode, 302-airport pool, 8 selection strategies, two-pass search, price cache, 80 unit tests passing
 
 ### Phase 1 Checklist
 
@@ -59,13 +59,28 @@
 - [x] All 39 unit tests pass; ruff + mypy clean (2026-04-18)
 - [x] PR merged (2026-04-18)
 
-### Phase 4 Checklist — In Progress (PR open)
+### Phase 4 Checklist — Complete
 
 - [x] Add `trip_length_flex_nights` preference (default "0") to db.py (2026-04-18)
 - [x] Add `_build_night_variants(target, flex)` helper to main.py (2026-04-18)
 - [x] Refactor main.py destination loop to try all variants, keep cheapest (2026-04-18)
 - [x] Expose `trip_length_flex_nights` input in Preferences UI (2026-04-18)
 - [x] Add unit tests for `_build_night_variants` (8 tests) — 47 total pass (2026-04-18)
+- [x] PR merged (2026-04-18)
+
+### Phase 5 Checklist — Complete (PR open)
+
+- [x] Add `FLIGHT_DATA_MODE=mock` env var; mock path reads `tests/fixtures/mock_flights.json` (2026-04-18)
+- [x] Create `tests/fixtures/mock_flights.json` with 40 HSV routes (2026-04-18)
+- [x] Expand `data/seed_airports.json` from 97 → 302 airports with lat/lon, subregion, price tier (2026-04-18)
+- [x] Add new `Destination` columns + `PriceCache` table to `db.py`; idempotent `_migrate_schema()` (2026-04-18)
+- [x] Update `fetcher.py`: mock/live branching in `get_flight_offers`; DB-first `get_airport_info` (2026-04-18)
+- [x] Create `src/trip_a_day/cache.py` — TTL logic, `get_cached_flight`, `store_flight_cache` (2026-04-18)
+- [x] Create `src/trip_a_day/selector.py` — 8 selection strategies, `select_daily_batch()` (2026-04-18)
+- [x] Update `ui.py` — "Destination Pool" section with 5 new Phase 5 preferences (2026-04-18)
+- [x] Refactor `main.py` — two-pass search, cache integration, price history updates, live call cap (2026-04-18)
+- [x] Add `tests/unit/test_selector.py` (18 tests) and `tests/unit/test_cache.py` (15 tests) (2026-04-18)
+- [x] All 80 unit tests pass; ruff + mypy clean (2026-04-18)
 - [ ] PR merged
 
 ### Decisions Made This Phase
@@ -84,6 +99,11 @@
 - Phase 3: `direct_only` defaults to `True`; when False, direct flights are still preferred over connecting
 - Phase 3: Mock `trip_a_day.fetcher.get_api_calls_today` (not the db module) — name bound at import time
 - Phase 3: `car_required=False` sets car=0.0 and car_is_estimate=False (no lookup at all)
+- Phase 5: `FLIGHT_DATA_MODE=mock` default — prevents accidental live API calls during development
+- Phase 5: `SimpleNamespace` mimics fast-flights result objects in mock mode (no library dependency)
+- Phase 5: Live call cap applies to Pass 1 only; Pass 2 (top N) always gets full variant search
+- Phase 5: `round_robin_offset` and `region_cycle_index` stored as preferences for cross-run persistence
+- Phase 5: Cache TTL is advance-window-aware: prices change faster near departure
 
 ### Blockers / Open Questions
 
@@ -91,4 +111,4 @@
 
 ### Next Action
 
-Merge Phase 3 PR, then begin Phase 4.
+Merge Phase 5 PR, then begin Phase 6.
