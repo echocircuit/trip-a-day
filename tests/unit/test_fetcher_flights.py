@@ -23,8 +23,9 @@ def _mock_result(flights: list) -> SimpleNamespace:
 
 
 @pytest.fixture()
-def mock_session():
-    """Minimal session stub — patch the names as imported into fetcher's namespace."""
+def mock_session(monkeypatch):
+    """Minimal session stub — forces live code path so get_flights patches apply."""
+    monkeypatch.setenv("FLIGHT_DATA_MODE", "live")
     session = object()  # DB functions are patched; session value is irrelevant
     with (
         patch("trip_a_day.fetcher.get_api_calls_today", return_value=0),

@@ -3,13 +3,16 @@
 Usage:
     python main.py
 
-Reads preferences from the local SQLite DB, fetches candidates via Amadeus,
-ranks them, stores results, and sends (or prints) the daily trip notification.
+Reads preferences from the local SQLite DB, selects a destination batch via
+the configured strategy, runs a two-pass flight search (Pass 1: broad cache-
+first sweep; Pass 2: full variant search for the top N candidates), ranks
+results, stores them, and sends (or prints) the daily trip notification.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 from datetime import UTC, date, datetime, timedelta
@@ -20,6 +23,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
+from trip_a_day.cache import get_cached_flight, store_flight_cache
 from trip_a_day.costs import build_cost_breakdown
 from trip_a_day.db import (
     Destination,
@@ -32,7 +36,6 @@ from trip_a_day.db import (
 )
 from trip_a_day.fetcher import (
     get_airport_info,
-    get_cheapest_destinations,
     get_flight_offers,
     get_food_cost,
     get_hotel_offers,
@@ -41,6 +44,7 @@ from trip_a_day.fetcher import (
 from trip_a_day.notifier import send_trip_notification
 from trip_a_day.preferences import get, get_all, get_bool, get_int
 from trip_a_day.ranker import TripCandidate, rank_trips
+from trip_a_day.selector import select_daily_batch
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,7 +53,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("main")
 
-# HSV coordinates for distance calculation (hardcoded home airport for Phase 1)
+# HSV coordinates — fallback if home airport has no coordinates in DB.
 _HSV_LAT = 34.6418
 _HSV_LON = -86.7751
 
@@ -64,36 +68,6 @@ def _build_night_variants(target: int, flex: int) -> list[int]:
             seen.add(n)
             result.append(n)
     return result
-
-
-def _upsert_destination(
-    session, iata: str, city: str, country: str, region: str, lat: float, lon: float
-) -> None:
-    existing = session.get(Destination, iata)
-    if existing is None:
-        session.add(
-            Destination(
-                iata_code=iata,
-                city=city,
-                country=country,
-                region=region,
-                latitude=lat,
-                longitude=lon,
-                excluded=False,
-            )
-        )
-    else:
-        # Update metadata if we have better info
-        if city and city != iata:
-            existing.city = city
-        if country:
-            existing.country = country
-        if region:
-            existing.region = region
-        if lat:
-            existing.latitude = lat
-        if lon:
-            existing.longitude = lon
 
 
 def _is_excluded(session, iata: str) -> bool:
@@ -147,7 +121,7 @@ def run(triggered_by: str = "manual") -> None:
         seed_preferences(session)
         session.commit()
 
-        # Read preferences
+        # ── Read preferences ──────────────────────────────────────────────────
         home_airport = get(session, "home_airport")
         trip_nights = get_int(session, "trip_length_nights")
         trip_flex = get_int(session, "trip_length_flex_nights")
@@ -158,67 +132,171 @@ def run(triggered_by: str = "manual") -> None:
         ranking_strategy = get(session, "ranking_strategy")
         direct_flights_only = get_bool(session, "direct_flights_only")
         car_rental_required = get_bool(session, "car_rental_required")
+        # Phase 5 pool prefs
+        daily_batch_size = get_int(session, "daily_batch_size")
+        selection_strategy = get(session, "destination_selection_strategy")
+        cache_ttl_enabled = get_bool(session, "cache_ttl_enabled")
+        max_live_calls = get_int(session, "max_live_calls_per_run")
+        two_pass_count = get_int(session, "two_pass_candidate_count")
 
         departure_date = run_date + timedelta(days=advance_days)
         night_variants = _build_night_variants(trip_nights, trip_flex)
+        base_return = departure_date + timedelta(days=trip_nights)
+        is_mock = os.environ.get("FLIGHT_DATA_MODE", "mock") == "mock"
 
         logger.info(
-            "Searching from %s | depart %s | nights %s | %d adults %d children",
+            "Searching from %s | depart %s | nights %s | %d adults %d children | mode=%s",
             home_airport,
             departure_date,
             night_variants,
             num_adults,
             num_children,
+            "mock" if is_mock else "live",
         )
 
-        # Get top cheapest destinations
-        raw_destinations = get_cheapest_destinations(
-            origin_iata=home_airport,
-            departure_date=departure_date,
-            session=session,
-            n=10,
-            direct_only=direct_flights_only,
+        # Resolve home airport coordinates
+        home_info = get_airport_info(home_airport, session)
+        home_lat = home_info.latitude if home_info and home_info.latitude else _HSV_LAT
+        home_lon = (
+            home_info.longitude if home_info and home_info.longitude else _HSV_LON
         )
+
+        # ── Select daily batch ────────────────────────────────────────────────
+        batch = select_daily_batch(selection_strategy, daily_batch_size, session)
         session.commit()
+        logger.info(
+            "Batch: %d destinations via strategy '%s'", len(batch), selection_strategy
+        )
 
-        if not raw_destinations:
-            logger.warning(
-                "No destinations returned — check fast-flights connectivity and seed_airports.json."
-            )
-
-        candidates: list[TripCandidate] = []
+        # ── Pass 1: quick price estimate per destination ──────────────────────
         flights_calls_start = get_api_calls_today(session, "google_flights")
+        live_calls_made = 0
+        now_utc = datetime.now(UTC)
 
-        for dest in raw_destinations:
-            iata = dest.destination
-            logger.info("Evaluating %s …", iata)
+        # iata -> estimated base-night flight price
+        pass1_prices: dict[str, float] = {}
+
+        for dest in batch:
+            iata = dest.iata_code
 
             if _is_excluded(session, iata):
-                logger.info("  Skipped — on exclusion list.")
                 continue
 
-            # Resolve airport metadata (city, country, coordinates)
+            # Cache check
+            hit = None
+            if cache_ttl_enabled:
+                hit = get_cached_flight(
+                    session,
+                    home_airport,
+                    iata,
+                    departure_date,
+                    base_return,
+                    num_adults,
+                    num_children,
+                )
+
+            if hit is not None:
+                pass1_prices[iata] = hit.price_usd
+                logger.info("  [cache] %s — $%.0f", iata, hit.price_usd)
+            else:
+                # Respect live call cap (mock calls are free)
+                if not is_mock and live_calls_made >= max_live_calls:
+                    logger.info("  [skip]  %s — live call cap reached", iata)
+                    continue
+
+                flight = get_flight_offers(
+                    origin=home_airport,
+                    destination=iata,
+                    depart_date=departure_date,
+                    return_date=base_return,
+                    adults=num_adults,
+                    children=num_children,
+                    session=session,
+                    direct_only=direct_flights_only,
+                )
+                if not is_mock:
+                    live_calls_made += 1
+
+                if flight is None:
+                    continue
+
+                pass1_prices[iata] = flight.price_total
+
+                if cache_ttl_enabled:
+                    store_flight_cache(
+                        session,
+                        home_airport,
+                        iata,
+                        departure_date,
+                        base_return,
+                        num_adults,
+                        num_children,
+                        flight.price_total,
+                        None,
+                        None,
+                        advance_days,
+                        is_mock,
+                    )
+
+                logger.info("  [live]  %s — $%.0f", iata, flight.price_total)
+
+            # Update destination query tracking
+            dest.last_queried_at = now_utc
+            dest.last_known_price_usd = pass1_prices.get(iata)
+            dest.last_known_price_date = run_date
+            dest.query_count = (dest.query_count or 0) + 1
+
+        session.commit()
+
+        if not pass1_prices:
+            logger.error("Pass 1 returned no prices — check connectivity or pool.")
+            duration = round(time.monotonic() - start_time, 1)
+            session.add(
+                RunLog(
+                    run_at=datetime.now(UTC),
+                    status="failed",
+                    triggered_by=triggered_by,
+                    destinations_evaluated=0,
+                    error_message="Pass 1 returned no prices",
+                    duration_seconds=duration,
+                    api_calls_flights=live_calls_made,
+                )
+            )
+            session.commit()
+            sys.exit(1)
+
+        # Sort by estimated flight price; Pass 2 narrows to top N.
+        top_iatas = sorted(pass1_prices, key=lambda k: pass1_prices[k])[:two_pass_count]
+        logger.info(
+            "Pass 1 complete — top %d: %s",
+            len(top_iatas),
+            ", ".join(f"{k}(${pass1_prices[k]:.0f})" for k in top_iatas),
+        )
+
+        # ── Pass 2: full variant search for top N ─────────────────────────────
+        candidates: list[TripCandidate] = []
+
+        for iata in top_iatas:
+            logger.info("Pass 2 — evaluating %s …", iata)
+
             airport = get_airport_info(iata, session)
             if airport:
                 city = airport.city.title()
                 country = airport.country.title()
                 region = airport.region
-                lat, lon = airport.latitude, airport.longitude
+                lat, lon = airport.latitude or 0.0, airport.longitude or 0.0
             else:
                 city = iata
                 country = "Unknown"
                 region = "Other"
                 lat, lon = 0.0, 0.0
 
-            _upsert_destination(session, iata, city, country, region, lat, lon)
-
             distance = (
-                haversine_miles(_HSV_LAT, _HSV_LON, lat, lon)
+                haversine_miles(home_lat, home_lon, lat, lon)
                 if lat != 0.0 or lon != 0.0
                 else 0.0
             )
 
-            # Try each night variant; keep the cheapest complete trip.
             best: TripCandidate | None = None
             for nights in night_variants:
                 return_date_v = departure_date + timedelta(days=nights)
@@ -306,7 +384,6 @@ def run(triggered_by: str = "manual") -> None:
                 best.cost.car,
                 best.cost.food,
             )
-
             session.commit()
 
         flights_calls_this_run = (
@@ -316,20 +393,21 @@ def run(triggered_by: str = "manual") -> None:
 
         if not candidates:
             logger.error("No valid trip candidates found. Logging failed run.")
-            log = RunLog(
-                run_at=datetime.now(UTC),
-                status="failed",
-                triggered_by=triggered_by,
-                destinations_evaluated=len(raw_destinations),
-                error_message="No valid candidates after filtering",
-                duration_seconds=duration,
-                api_calls_flights=flights_calls_this_run,
+            session.add(
+                RunLog(
+                    run_at=datetime.now(UTC),
+                    status="failed",
+                    triggered_by=triggered_by,
+                    destinations_evaluated=len(pass1_prices),
+                    error_message="No valid candidates after Pass 2",
+                    duration_seconds=duration,
+                    api_calls_flights=flights_calls_this_run,
+                )
             )
-            session.add(log)
             session.commit()
             sys.exit(1)
 
-        # Rank
+        # ── Rank and store ────────────────────────────────────────────────────
         ranked = rank_trips(candidates, strategy=ranking_strategy)
         winner = ranked[0]
 
@@ -340,24 +418,31 @@ def run(triggered_by: str = "manual") -> None:
             winner.cost.total,
         )
 
-        # Store all candidates to DB
         trip_ids = _store_results(session, ranked, run_date)
         winner_trip_id = trip_ids[0]
 
-        # Mark winner as notified after sending
-        log = RunLog(
-            run_at=datetime.now(UTC),
-            status="success",
-            triggered_by=triggered_by,
-            destinations_evaluated=len(candidates),
-            winner_trip_id=winner_trip_id,
-            duration_seconds=duration,
-            api_calls_flights=flights_calls_this_run,
+        # Update winner destination stats
+        winner_dest = session.get(Destination, winner.destination_iata)
+        if winner_dest is not None:
+            winner_dest.times_selected = (winner_dest.times_selected or 0) + 1
+            n = winner_dest.query_count or 1
+            old_avg = winner_dest.avg_price_usd or winner.cost.total
+            winner_dest.avg_price_usd = (old_avg * (n - 1) + winner.cost.total) / n
+
+        session.add(
+            RunLog(
+                run_at=datetime.now(UTC),
+                status="success",
+                triggered_by=triggered_by,
+                destinations_evaluated=len(candidates),
+                winner_trip_id=winner_trip_id,
+                duration_seconds=duration,
+                api_calls_flights=flights_calls_this_run,
+            )
         )
-        session.add(log)
         session.commit()
 
-        # Send notification
+        # ── Notify ────────────────────────────────────────────────────────────
         all_prefs = get_all(session)
         notified = send_trip_notification(winner, all_prefs)
 
@@ -368,7 +453,9 @@ def run(triggered_by: str = "manual") -> None:
             session.commit()
 
     logger.info(
-        "Run complete in %.1fs. Evaluated %d candidates.", duration, len(candidates)
+        "Run complete in %.1fs. Evaluated %d Pass-2 candidates.",
+        duration,
+        len(candidates),
     )
 
 

@@ -8,6 +8,7 @@ bugs that wouldn't be caught by unit tests on individual modules.
 from __future__ import annotations
 
 from datetime import date, timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -17,7 +18,6 @@ from sqlalchemy.orm import sessionmaker
 from trip_a_day.db import Base
 from trip_a_day.fetcher import (
     AirportInfo,
-    FlightDestination,
     FlightOffer,
     FoodEstimate,
     HotelOffer,
@@ -41,13 +41,14 @@ def in_memory_session(tmp_path, monkeypatch):
     return factory
 
 
-def _fake_destination(depart: date) -> FlightDestination:
-    return FlightDestination(
-        origin="HSV",
-        destination="JFK",
-        departure_date=depart,
-        return_date=depart + timedelta(days=7),
-        price_total=400.0,
+def _fake_dest(iata: str = "JFK") -> SimpleNamespace:
+    return SimpleNamespace(
+        iata_code=iata,
+        excluded=False,
+        last_queried_at=None,
+        query_count=0,
+        last_known_price_usd=None,
+        last_known_price_date=None,
     )
 
 
@@ -107,9 +108,9 @@ def test_run_succeeds_with_one_candidate(in_memory_session):
     with (
         patch("main.init_db"),
         patch("main.SessionFactory", in_memory_session),
-        patch(
-            "main.get_cheapest_destinations", return_value=[_fake_destination(depart)]
-        ),
+        patch("main.select_daily_batch", return_value=[_fake_dest()]),
+        patch("main.get_cached_flight", return_value=None),
+        patch("main.store_flight_cache"),
         patch("main.get_airport_info", return_value=_fake_airport()),
         patch("main.get_flight_offers", return_value=_fake_flight(depart)),
         patch("main.get_hotel_offers", return_value=_fake_hotel(depart)),
@@ -120,13 +121,15 @@ def test_run_succeeds_with_one_candidate(in_memory_session):
 
 
 def test_run_exits_1_when_no_destinations(in_memory_session):
-    """Pipeline exits with code 1 (not a crash) when fetcher returns nothing."""
+    """Pipeline exits with code 1 (not a crash) when Pass 1 yields no prices."""
     import main
 
     with (
         patch("main.init_db"),
         patch("main.SessionFactory", in_memory_session),
-        patch("main.get_cheapest_destinations", return_value=[]),
+        patch("main.select_daily_batch", return_value=[_fake_dest()]),
+        patch("main.get_cached_flight", return_value=None),
+        patch("main.get_flight_offers", return_value=None),
         pytest.raises(SystemExit) as exc_info,
     ):
         main.run()
@@ -135,7 +138,7 @@ def test_run_exits_1_when_no_destinations(in_memory_session):
 
 
 def test_run_exits_1_when_all_flights_missing(in_memory_session):
-    """Pipeline exits with code 1 when destinations exist but no flights match."""
+    """Pipeline exits with code 1 when Pass 1 has prices but Pass 2 yields no complete trips."""
     import main
 
     depart = date.today() + timedelta(days=7)
@@ -143,11 +146,14 @@ def test_run_exits_1_when_all_flights_missing(in_memory_session):
     with (
         patch("main.init_db"),
         patch("main.SessionFactory", in_memory_session),
-        patch(
-            "main.get_cheapest_destinations", return_value=[_fake_destination(depart)]
-        ),
+        patch("main.select_daily_batch", return_value=[_fake_dest()]),
+        patch("main.get_cached_flight", return_value=None),
+        patch("main.store_flight_cache"),
         patch("main.get_airport_info", return_value=_fake_airport()),
-        patch("main.get_flight_offers", return_value=None),
+        # Pass 1 succeeds (returns price)…
+        patch("main.get_flight_offers", return_value=_fake_flight(depart)),
+        # …but hotel lookup always fails, so Pass 2 builds no candidates.
+        patch("main.get_hotel_offers", return_value=None),
         pytest.raises(SystemExit) as exc_info,
     ):
         main.run()

@@ -9,9 +9,12 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 from fast_flights import FlightData, Passengers, get_flights  # type: ignore[import]
 from sqlalchemy.orm import Session
@@ -23,10 +26,18 @@ logger = logging.getLogger(__name__)
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SEED_AIRPORTS_PATH = _DATA_DIR / "seed_airports.json"
 _PER_DIEM_PATH = _DATA_DIR / "per_diem_rates.json"
+_MOCK_FLIGHTS_PATH = (
+    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "mock_flights.json"
+)
 
 # Lazy-loaded caches
 _seed_airports: list[dict] | None = None
 _per_diem_rates: list[dict] | None = None
+_mock_flights: dict | None = None
+
+# Approximate USD/mile rate used to synthesise prices for unknown route pairs.
+_SYNTHETIC_PRICE_PER_MILE = 0.18
+_SYNTHETIC_MIN_PRICE = 150.0
 
 # Soft daily limit for Google Flights calls (self-limiting, not enforced by Google)
 _GOOGLE_FLIGHTS_DAILY_SOFT_LIMIT = 300
@@ -325,6 +336,88 @@ def _load_per_diem() -> list[dict]:
     return _per_diem_rates
 
 
+def _flight_data_mode() -> str:
+    """Return 'mock' or 'live' based on the FLIGHT_DATA_MODE env var (default: 'mock')."""
+    return os.environ.get("FLIGHT_DATA_MODE", "mock").lower().strip()
+
+
+def _load_mock_flights() -> dict:
+    global _mock_flights
+    if _mock_flights is None:
+        _mock_flights = json.loads(_MOCK_FLIGHTS_PATH.read_text(encoding="utf-8"))
+    return _mock_flights
+
+
+def _synthetic_flight_result(origin: str, destination: str) -> Any:
+    """Return a SimpleNamespace mimicking a fast-flights result for an unknown route pair.
+
+    Generates a plausible one-stop price based on haversine distance so the
+    rest of the pipeline always has data to work with in mock mode.
+    Logs a debug message so callers know the fallback fired.
+    """
+    airports = _load_seed_airports()
+    orig = next((a for a in airports if a["iata"] == origin), None)
+    dest = next((a for a in airports if a["iata"] == destination), None)
+
+    if orig and dest and orig.get("latitude") and dest.get("latitude"):
+        dist = haversine_miles(
+            orig["latitude"],
+            orig["longitude"],
+            dest["latitude"],
+            dest["longitude"],
+        )
+    else:
+        dist = 2000.0  # fallback if coordinates missing
+
+    price = max(_SYNTHETIC_MIN_PRICE, round(dist * _SYNTHETIC_PRICE_PER_MILE, 0))
+    logger.debug(
+        "Mock flight: no fixture for %s→%s; synthesising $%.0f (%.0f mi)",
+        origin,
+        destination,
+        price,
+        dist,
+    )
+    flight = SimpleNamespace(
+        name="Synthetic Air",
+        price=f"${price:.0f}",
+        stops=1,
+        departure_time="08:00 AM",
+        arrival_time="06:00 PM",
+        duration="10h 00m",
+        is_best=True,
+    )
+    return SimpleNamespace(flights=[flight])
+
+
+def _mock_flight_result(origin: str, destination: str) -> Any:
+    """Return a mock fast-flights result from the fixture or a synthetic fallback."""
+    data = _load_mock_flights()
+    key = f"{origin}-{destination}"
+    entry = data.get(key)
+    if entry is None:
+        return _synthetic_flight_result(origin, destination)
+
+    flights = []
+    for f in entry.get("flights", []):
+        flights.append(
+            SimpleNamespace(
+                name=f.get("name", ""),
+                price=f"${f['price']}"
+                if isinstance(f["price"], (int, float))
+                else f["price"],
+                stops=f.get("stops", 0),
+                departure_time=f.get("departure_time", ""),
+                arrival_time=f.get("arrival_time", ""),
+                duration=f.get("duration", ""),
+                is_best=f.get("is_best", False),
+            )
+        )
+
+    if not flights:
+        return SimpleNamespace(flights=[])
+    return SimpleNamespace(flights=flights)
+
+
 def _parse_price(price_str: str) -> float | None:
     """Parse a price string like '$1,234' into a float."""
     try:
@@ -417,20 +510,23 @@ def get_cheapest_destinations(
             break
 
         try:
-            ff_result = get_flights(
-                flight_data=[
-                    FlightData(
-                        date=departure_date.isoformat(),
-                        from_airport=origin_iata,
-                        to_airport=dest_iata,
-                    ),
-                ],
-                trip="round-trip",
-                seat="economy",
-                passengers=Passengers(adults=1),
-                fetch_mode="fallback",
-            )
-            record_api_call(session, "google_flights")
+            if _flight_data_mode() == "mock":
+                ff_result = _mock_flight_result(origin_iata, dest_iata)
+            else:
+                ff_result = get_flights(
+                    flight_data=[
+                        FlightData(
+                            date=departure_date.isoformat(),
+                            from_airport=origin_iata,
+                            to_airport=dest_iata,
+                        ),
+                    ],
+                    trip="round-trip",
+                    seat="economy",
+                    passengers=Passengers(adults=1),
+                    fetch_mode="fallback",
+                )
+                record_api_call(session, "google_flights")
         except Exception as exc:
             logger.debug(
                 "Google Flights query %s→%s failed: %s", origin_iata, dest_iata, exc
@@ -488,25 +584,28 @@ def get_flight_offers(
         return None
 
     try:
-        ff_result = get_flights(
-            flight_data=[
-                FlightData(
-                    date=depart_date.isoformat(),
-                    from_airport=origin,
-                    to_airport=destination,
-                ),
-                FlightData(
-                    date=return_date.isoformat(),
-                    from_airport=destination,
-                    to_airport=origin,
-                ),
-            ],
-            trip="round-trip",
-            seat="economy",
-            passengers=Passengers(adults=adults, children=children),
-            fetch_mode="fallback",
-        )
-        record_api_call(session, "google_flights")
+        if _flight_data_mode() == "mock":
+            ff_result = _mock_flight_result(origin, destination)
+        else:
+            ff_result = get_flights(
+                flight_data=[
+                    FlightData(
+                        date=depart_date.isoformat(),
+                        from_airport=origin,
+                        to_airport=destination,
+                    ),
+                    FlightData(
+                        date=return_date.isoformat(),
+                        from_airport=destination,
+                        to_airport=origin,
+                    ),
+                ],
+                trip="round-trip",
+                seat="economy",
+                passengers=Passengers(adults=adults, children=children),
+                fetch_mode="fallback",
+            )
+            record_api_call(session, "google_flights")
     except Exception as exc:
         logger.debug("Google Flights query %s→%s failed: %s", origin, destination, exc)
         return None
@@ -551,12 +650,10 @@ def get_hotel_offers(
     min_stars: int = 4,
 ) -> HotelOffer | None:
     """Return a per diem lodging estimate for the destination. Always returns an estimate."""
-    # Resolve city and country from seed list
-    airports = _load_seed_airports()
-    airport = next((a for a in airports if a["iata"] == city_code), None)
-    city = airport["city"] if airport else city_code
-    country = airport["country"] if airport else "Unknown"
-    region = airport["region"] if airport else "Other"
+    info = get_airport_info(city_code, session)
+    city = info.city if info else city_code
+    country = info.country if info else "Unknown"
+    region = info.region if info else "Other"
     is_domestic = country == "United States"
 
     nights = (checkout - checkin).days
@@ -598,21 +695,37 @@ def get_hotel_offers(
 
 
 def get_airport_info(iata: str, session: Session) -> AirportInfo | None:
-    """Return airport metadata from seed_airports.json. Lat/lon falls back to 0.0."""
+    """Return airport metadata from the DB (seeded from seed_airports.json).
+
+    Falls back to the in-memory JSON list for airports not yet in the DB.
+    """
+    from trip_a_day.db import Destination  # avoid circular import at module level
+
+    dest = session.get(Destination, iata)
+    if dest is not None:
+        return AirportInfo(
+            iata=iata,
+            city=dest.city or iata,
+            country=dest.country or "Unknown",
+            country_code=dest.country_code or "",
+            region=dest.region or "Other",
+            latitude=dest.latitude or 0.0,
+            longitude=dest.longitude or 0.0,
+        )
+
+    # Fallback: check in-memory JSON (e.g. before first init_db seed)
     airports = _load_seed_airports()
     airport = next((a for a in airports if a["iata"] == iata), None)
     if airport is None:
         return None
-
-    region = airport.get("region", "Other")
     return AirportInfo(
         iata=iata,
         city=airport["city"],
         country=airport["country"],
-        country_code="",
-        region=region,
-        latitude=0.0,
-        longitude=0.0,
+        country_code=airport.get("country_code", ""),
+        region=airport.get("region", "Other"),
+        latitude=airport.get("latitude", 0.0),
+        longitude=airport.get("longitude", 0.0),
     )
 
 
