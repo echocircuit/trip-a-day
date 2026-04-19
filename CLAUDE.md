@@ -10,9 +10,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current phase
 
-**Phase 1b — Complete.** Data sources migrated: Amadeus → fast-flights + seed airports, Numbeo → GSA/State Dept per diem, SendGrid → Resend. End-to-end pipeline verified live. All 30 unit tests pass.
+**Phase 2 — In Progress.** Scheduling + Basic UI. `scheduler.py` (APScheduler daily runner) and `ui.py` (Streamlit: Dashboard, Preferences, Exclusion List, Trip History) implemented.
 
-**Next: Phase 2.** Read Section 12 of the spec for Phase 2 scope before starting. Begin with `git checkout main && git pull && git checkout -b feature/phase-2-<description>`.
+**Launch UI:** `streamlit run ui.py`
+**Launch scheduler:** `python scheduler.py` (daily at time in `scheduled_run_time` pref, default 07:00 local)
+
+**Next: Phase 3** (traveler + trip config) after this PR merges. Begin with `git checkout main && git pull && git checkout -b feature/phase-3-<description>`.
 
 ## Development workflow
 
