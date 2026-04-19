@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Phase: Phase 2 — Scheduling + Basic UI
-## Status: In Progress
-## Last updated: 2026-04-18 — scheduler.py and ui.py implemented; ruff + mypy + pytest pending
+## Current Phase: Phase 3 — Trip Config Wired
+## Status: In Progress (PR open)
+## Last updated: 2026-04-18 — direct_flights_only and car_rental_required wired into pipeline; 39 unit tests passing
 
 ### Phase 1 Checklist
 
@@ -39,15 +39,25 @@
 - [x] Updated run_log columns: api_calls_flights, api_calls_gsa (2026-04-18)
 - [x] All 30 unit tests pass; ruff + mypy clean; python main.py live run verified (2026-04-18)
 
-### Phase 2 Checklist — In Progress
+### Phase 2 Checklist — Complete
 
 - [x] Add APScheduler 3.11.2 + Streamlit 1.56.0 to requirements.txt (2026-04-18)
 - [x] Add `scheduled_run_time` preference (default "07:00") to db.py defaults (2026-04-18)
 - [x] Update `main.py` — add `triggered_by` parameter to `run()` (2026-04-18)
 - [x] Created `scheduler.py` — APScheduler BlockingScheduler, configurable run time (2026-04-18)
 - [x] Created `ui.py` — Streamlit: Dashboard, Preferences, Exclusion List, Trip History (2026-04-18)
-- [ ] Run ruff + mypy + pytest — must pass clean
-- [ ] Open PR
+- [x] Updated notifier.py — hotel/food/car now labelled as estimates; unified footnote (2026-04-18)
+- [x] All 30 unit tests pass; ruff + mypy clean (2026-04-18)
+- [x] PR merged (2026-04-18)
+
+### Phase 3 Checklist — In Progress (PR open)
+
+- [x] Add `direct_only` parameter to `get_cheapest_destinations` and `get_flight_offers` in fetcher.py (2026-04-18)
+- [x] Add `car_required` parameter to `build_cost_breakdown` in costs.py (2026-04-18)
+- [x] Wire `direct_flights_only` and `car_rental_required` prefs into main.py pipeline (2026-04-18)
+- [x] Add unit tests: `TestBuildCostBreakdownNoCarRental` (4 tests) + `TestDirectOnlyFiltering` (5 tests) (2026-04-18)
+- [x] All 39 unit tests pass; ruff + mypy clean (2026-04-18)
+- [ ] PR merged
 
 ### Decisions Made This Phase
 
@@ -62,6 +72,9 @@
 - Phase 2: "Run Now" in UI uses `subprocess.run(main.py)` to avoid sys.exit leaking into Streamlit
 - Phase 2: APScheduler 3.x BlockingScheduler chosen over 4.x for simpler sync API
 - Phase 2: `scheduled_run_time` stored as "HH:MM" string preference; defaults to "07:00"
+- Phase 3: `direct_only` defaults to `True`; when False, direct flights are still preferred over connecting
+- Phase 3: Mock `trip_a_day.fetcher.get_api_calls_today` (not the db module) — name bound at import time
+- Phase 3: `car_required=False` sets car=0.0 and car_is_estimate=False (no lookup at all)
 
 ### Blockers / Open Questions
 
@@ -69,4 +82,4 @@
 
 ### Next Action
 
-Complete Phase 2: run quality checks, fix any issues, commit, and open PR.
+Merge Phase 3 PR, then begin Phase 4.
