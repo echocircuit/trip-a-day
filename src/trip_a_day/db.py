@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -15,12 +16,15 @@ from sqlalchemy import (
     String,
     Text,
     create_engine,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_DB = _PROJECT_ROOT / "trip_of_the_day.db"
 DB_PATH = Path(os.environ.get("DB_PATH", str(_DEFAULT_DB)))
+
+_SEED_AIRPORTS_PATH = _PROJECT_ROOT / "data" / "seed_airports.json"
 
 
 def _engine():
@@ -51,12 +55,46 @@ class Destination(Base):
     iata_code: Mapped[str] = mapped_column(String(10), primary_key=True)
     city: Mapped[str | None] = mapped_column(String, nullable=True)
     country: Mapped[str | None] = mapped_column(String, nullable=True)
+    country_code: Mapped[str | None] = mapped_column(String(5), nullable=True)
     region: Mapped[str | None] = mapped_column(String, nullable=True)
+    subregion: Mapped[str | None] = mapped_column(String, nullable=True)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    typical_price_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
     excluded: Mapped[bool] = mapped_column(Boolean, default=False)
     excluded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     exclusion_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Phase 5 pool tracking columns
+    last_queried_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_known_price_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_known_price_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    query_count: Mapped[int] = mapped_column(Integer, default=0)
+    times_selected: Mapped[int] = mapped_column(Integer, default=0)
+    avg_price_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    user_favorited: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class PriceCache(Base):
+    """Cached flight prices to avoid redundant live API calls."""
+
+    __tablename__ = "price_cache"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    destination_iata: Mapped[str] = mapped_column(String(10), nullable=False)
+    origin_iata: Mapped[str] = mapped_column(String(10), nullable=False)
+    departure_date: Mapped[date] = mapped_column(Date, nullable=False)
+    return_date: Mapped[date] = mapped_column(Date, nullable=False)
+    adults: Mapped[int] = mapped_column(Integer, nullable=False)
+    children: Mapped[int] = mapped_column(Integer, nullable=False)
+    price_usd: Mapped[float] = mapped_column(Float, nullable=False)
+    airline: Mapped[str | None] = mapped_column(String, nullable=True)
+    stops: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    queried_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC)
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    is_mock: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Trip(Base):
@@ -127,12 +165,51 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     "search_radius_miles": "0",
     "region_filter": "null",
     "scheduled_run_time": "07:00",
+    # Phase 5 destination pool preferences
+    "daily_batch_size": "15",
+    "destination_selection_strategy": "least_recently_queried",
+    "cache_ttl_enabled": "true",
+    "max_live_calls_per_run": "40",
+    "two_pass_candidate_count": "5",
+    # Internal strategy state (not user-facing)
+    "round_robin_offset": "0",
+    "region_cycle_index": "0",
 }
+
+# New destination columns added in Phase 5 (for ALTER TABLE migration).
+_DESTINATION_NEW_COLUMNS: list[tuple[str, str]] = [
+    ("country_code", "TEXT"),
+    ("subregion", "TEXT"),
+    ("typical_price_tier", "TEXT"),
+    ("last_queried_at", "DATETIME"),
+    ("last_known_price_usd", "REAL"),
+    ("last_known_price_date", "DATE"),
+    ("query_count", "INTEGER DEFAULT 0"),
+    ("times_selected", "INTEGER DEFAULT 0"),
+    ("avg_price_usd", "REAL"),
+    ("enabled", "BOOLEAN DEFAULT 1"),
+    ("user_favorited", "BOOLEAN DEFAULT 0"),
+]
+
+
+def _migrate_schema() -> None:
+    """Add any new columns to existing tables via ALTER TABLE (idempotent)."""
+    with engine.connect() as conn:
+        result = conn.execute(text("PRAGMA table_info(destinations)"))
+        existing = {row[1] for row in result}
+        for col_name, col_def in _DESTINATION_NEW_COLUMNS:
+            if col_name not in existing:
+                conn.execute(
+                    text(f"ALTER TABLE destinations ADD COLUMN {col_name} {col_def}")
+                )
+        conn.commit()
 
 
 def init_db() -> None:
-    """Create all tables if they do not exist. Safe to call on every startup."""
+    """Create all tables if they do not exist and run schema migrations."""
     Base.metadata.create_all(engine)
+    _migrate_schema()
+    _seed_destinations()
 
 
 def seed_preferences(session: Session) -> None:
@@ -143,6 +220,62 @@ def seed_preferences(session: Session) -> None:
         if existing is None:
             session.add(Preference(key=key, value=value, updated_at=now))
     session.flush()
+
+
+def _seed_destinations() -> None:
+    """Upsert all airports from seed_airports.json into the destinations table.
+
+    Idempotent: new airports are inserted; existing ones get metadata refreshed
+    (lat/lon, country_code, subregion, typical_price_tier) without touching
+    user-controlled fields like excluded, enabled, user_favorited.
+    """
+    if not _SEED_AIRPORTS_PATH.exists():
+        return
+    airports = json.loads(_SEED_AIRPORTS_PATH.read_text(encoding="utf-8"))
+
+    with SessionFactory() as session:
+        for ap in airports:
+            iata = ap["iata"]
+            existing = session.get(Destination, iata)
+            if existing is None:
+                session.add(
+                    Destination(
+                        iata_code=iata,
+                        city=ap.get("city"),
+                        country=ap.get("country"),
+                        country_code=ap.get("country_code"),
+                        region=ap.get("region"),
+                        subregion=ap.get("subregion"),
+                        latitude=ap.get("latitude", 0.0),
+                        longitude=ap.get("longitude", 0.0),
+                        typical_price_tier=ap.get("typical_price_tier"),
+                        excluded=False,
+                        enabled=True,
+                        user_favorited=False,
+                        query_count=0,
+                        times_selected=0,
+                    )
+                )
+            else:
+                # Refresh metadata without touching user-controlled fields.
+                existing.city = ap.get("city") or existing.city
+                existing.country = ap.get("country") or existing.country
+                existing.country_code = ap.get("country_code") or existing.country_code
+                existing.region = ap.get("region") or existing.region
+                existing.subregion = ap.get("subregion") or existing.subregion
+                existing.typical_price_tier = (
+                    ap.get("typical_price_tier") or existing.typical_price_tier
+                )
+                # Only fill in coordinates if they were missing (0.0).
+                if ap.get("latitude") and (
+                    existing.latitude is None or existing.latitude == 0.0
+                ):
+                    existing.latitude = ap["latitude"]
+                if ap.get("longitude") and (
+                    existing.longitude is None or existing.longitude == 0.0
+                ):
+                    existing.longitude = ap["longitude"]
+        session.commit()
 
 
 def record_api_call(session: Session, api_name: str) -> None:

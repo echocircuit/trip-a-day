@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 from fast_flights import FlightData, Passengers, get_flights  # type: ignore[import]
 from sqlalchemy.orm import Session
@@ -347,7 +348,7 @@ def _load_mock_flights() -> dict:
     return _mock_flights
 
 
-def _synthetic_flight_result(origin: str, destination: str) -> object:
+def _synthetic_flight_result(origin: str, destination: str) -> Any:
     """Return a SimpleNamespace mimicking a fast-flights result for an unknown route pair.
 
     Generates a plausible one-stop price based on haversine distance so the
@@ -388,7 +389,7 @@ def _synthetic_flight_result(origin: str, destination: str) -> object:
     return SimpleNamespace(flights=[flight])
 
 
-def _mock_flight_result(origin: str, destination: str) -> object:
+def _mock_flight_result(origin: str, destination: str) -> Any:
     """Return a mock fast-flights result from the fixture or a synthetic fallback."""
     data = _load_mock_flights()
     key = f"{origin}-{destination}"
@@ -649,12 +650,10 @@ def get_hotel_offers(
     min_stars: int = 4,
 ) -> HotelOffer | None:
     """Return a per diem lodging estimate for the destination. Always returns an estimate."""
-    # Resolve city and country from seed list
-    airports = _load_seed_airports()
-    airport = next((a for a in airports if a["iata"] == city_code), None)
-    city = airport["city"] if airport else city_code
-    country = airport["country"] if airport else "Unknown"
-    region = airport["region"] if airport else "Other"
+    info = get_airport_info(city_code, session)
+    city = info.city if info else city_code
+    country = info.country if info else "Unknown"
+    region = info.region if info else "Other"
     is_domestic = country == "United States"
 
     nights = (checkout - checkin).days
@@ -696,21 +695,37 @@ def get_hotel_offers(
 
 
 def get_airport_info(iata: str, session: Session) -> AirportInfo | None:
-    """Return airport metadata from seed_airports.json. Lat/lon falls back to 0.0."""
+    """Return airport metadata from the DB (seeded from seed_airports.json).
+
+    Falls back to the in-memory JSON list for airports not yet in the DB.
+    """
+    from trip_a_day.db import Destination  # avoid circular import at module level
+
+    dest = session.get(Destination, iata)
+    if dest is not None:
+        return AirportInfo(
+            iata=iata,
+            city=dest.city or iata,
+            country=dest.country or "Unknown",
+            country_code=dest.country_code or "",
+            region=dest.region or "Other",
+            latitude=dest.latitude or 0.0,
+            longitude=dest.longitude or 0.0,
+        )
+
+    # Fallback: check in-memory JSON (e.g. before first init_db seed)
     airports = _load_seed_airports()
     airport = next((a for a in airports if a["iata"] == iata), None)
     if airport is None:
         return None
-
-    region = airport.get("region", "Other")
     return AirportInfo(
         iata=iata,
         city=airport["city"],
         country=airport["country"],
-        country_code="",
-        region=region,
-        latitude=0.0,
-        longitude=0.0,
+        country_code=airport.get("country_code", ""),
+        region=airport.get("region", "Other"),
+        latitude=airport.get("latitude", 0.0),
+        longitude=airport.get("longitude", 0.0),
     )
 
 
