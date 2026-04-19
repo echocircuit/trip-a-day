@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Determines the cheapest trip that can be booked each day."
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [
     { name = "echocircuit" },
 ]
@@ -97,12 +97,12 @@ exclude_lines = [
 
 # --- Mypy ---
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false       # start permissive, tighten over time
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["amadeus.*", "sendgrid.*"]
+module = ["fast_flights.*", "resend.*"]
 ignore_missing_imports = true

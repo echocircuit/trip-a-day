@@ -165,11 +165,11 @@ def run() -> None:
 
         if not raw_destinations:
             logger.warning(
-                "No destinations returned — check Amadeus credentials and sandbox data."
+                "No destinations returned — check fast-flights connectivity and seed_airports.json."
             )
 
         candidates: list[TripCandidate] = []
-        amadeus_calls_start = get_api_calls_today(session, "amadeus")
+        flights_calls_start = get_api_calls_today(session, "google_flights")
 
         for dest in raw_destinations:
             iata = dest.destination
@@ -281,8 +281,8 @@ def run() -> None:
 
             session.commit()
 
-        amadeus_calls_this_run = (
-            get_api_calls_today(session, "amadeus") - amadeus_calls_start
+        flights_calls_this_run = (
+            get_api_calls_today(session, "google_flights") - flights_calls_start
         )
         duration = round(time.monotonic() - start_time, 1)
 
@@ -295,7 +295,7 @@ def run() -> None:
                 destinations_evaluated=len(raw_destinations),
                 error_message="No valid candidates after filtering",
                 duration_seconds=duration,
-                api_calls_amadeus=amadeus_calls_this_run,
+                api_calls_flights=flights_calls_this_run,
             )
             session.add(log)
             session.commit()
@@ -324,7 +324,7 @@ def run() -> None:
             destinations_evaluated=len(candidates),
             winner_trip_id=winner_trip_id,
             duration_seconds=duration,
-            api_calls_amadeus=amadeus_calls_this_run,
+            api_calls_flights=flights_calls_this_run,
         )
         session.add(log)
         session.commit()

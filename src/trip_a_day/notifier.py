@@ -1,4 +1,4 @@
-"""Notification delivery: SendGrid HTML email with stdout fallback."""
+"""Notification delivery: Resend HTML email with stdout fallback."""
 
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ def send_trip_notification(trip: TripCandidate, prefs: dict[str, str]) -> bool:
     html_body = _build_html(trip)
     plain_body = _build_plain(trip)
 
-    api_key = os.environ.get("SENDGRID_API_KEY", "")
-    from_email = os.environ.get("SENDGRID_FROM_EMAIL", "noreply@trip-a-day.local")
+    api_key = os.environ.get("RESEND_API_KEY", "")
+    from_email = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
 
     if not api_key:
         _print_fallback(subject, plain_body)
@@ -34,7 +34,7 @@ def send_trip_notification(trip: TripCandidate, prefs: dict[str, str]) -> bool:
         _print_fallback(subject, plain_body)
         return True
 
-    return _send_via_sendgrid(
+    return _send_via_resend(
         api_key, from_email, recipients, subject, html_body, plain_body
     )
 
@@ -44,11 +44,13 @@ def _parse_recipients(prefs: dict[str, str]) -> list[str]:
     try:
         parsed = json.loads(raw)
         if isinstance(parsed, list):
-            return [e.strip() for e in parsed if e.strip()]
+            emails = [e.strip() for e in parsed if e.strip()]
+            if emails:
+                return emails
     except (json.JSONDecodeError, TypeError):
         pass
 
-    # Also accept comma-separated value from NOTIFICATION_EMAILS env var
+    # Fall back to NOTIFICATION_EMAILS env var (also used when DB preference is empty)
     env_emails = os.environ.get("NOTIFICATION_EMAILS", "")
     if env_emails:
         return [e.strip() for e in env_emails.split(",") if e.strip()]
@@ -158,10 +160,10 @@ def _print_fallback(subject: str, plain_body: str) -> None:
     print("=" * 60)
     print(plain_body)
     print("=" * 60 + "\n")
-    logger.info("Trip notification printed to stdout (no SendGrid key configured).")
+    logger.info("Trip notification printed to stdout (no Resend key configured).")
 
 
-def _send_via_sendgrid(
+def _send_via_resend(
     api_key: str,
     from_email: str,
     recipients: list[str],
@@ -170,28 +172,23 @@ def _send_via_sendgrid(
     plain_body: str,
 ) -> bool:
     try:
-        from sendgrid import SendGridAPIClient
-        from sendgrid.helpers.mail import Content, Email, Mail, To
+        import resend  # type: ignore[import]
 
-        sg = SendGridAPIClient(api_key)
-        message = Mail(
-            from_email=Email(from_email),
-            to_emails=[To(r) for r in recipients],
-            subject=subject,
-        )
-        message.content = [
-            Content("text/plain", plain_body),
-            Content("text/html", html_body),
-        ]
-        response = sg.send(message)
-        if response.status_code in (200, 201, 202):
-            logger.info(
-                "Email sent to %s (status %d).", recipients, response.status_code
-            )
+        resend.api_key = api_key
+        params: resend.Emails.SendParams = {
+            "from": from_email,
+            "to": recipients,
+            "subject": subject,
+            "html": html_body,
+            "text": plain_body,
+        }
+        email = resend.Emails.send(params)
+        if email and email.get("id"):
+            logger.info("Email sent to %s (id: %s).", recipients, email["id"])
             return True
         else:
-            logger.error("SendGrid returned status %d.", response.status_code)
+            logger.error("Resend returned unexpected response: %s", email)
             return False
     except Exception as exc:
-        logger.error("Failed to send email via SendGrid: %s", exc)
+        logger.error("Failed to send email via Resend: %s", exc)
         return False
