@@ -54,6 +54,18 @@ _HSV_LAT = 34.6418
 _HSV_LON = -86.7751
 
 
+def _build_night_variants(target: int, flex: int) -> list[int]:
+    """Return unique night counts [target-flex … target+flex], all >= 1."""
+    seen: set[int] = set()
+    result: list[int] = []
+    for delta in range(-flex, flex + 1):
+        n = max(1, target + delta)
+        if n not in seen:
+            seen.add(n)
+            result.append(n)
+    return result
+
+
 def _upsert_destination(
     session, iata: str, city: str, country: str, region: str, lat: float, lon: float
 ) -> None:
@@ -138,6 +150,7 @@ def run(triggered_by: str = "manual") -> None:
         # Read preferences
         home_airport = get(session, "home_airport")
         trip_nights = get_int(session, "trip_length_nights")
+        trip_flex = get_int(session, "trip_length_flex_nights")
         advance_days = get_int(session, "advance_days")
         num_adults = get_int(session, "num_adults")
         num_children = get_int(session, "num_children")
@@ -147,13 +160,13 @@ def run(triggered_by: str = "manual") -> None:
         car_rental_required = get_bool(session, "car_rental_required")
 
         departure_date = run_date + timedelta(days=advance_days)
-        return_date = departure_date + timedelta(days=trip_nights)
+        night_variants = _build_night_variants(trip_nights, trip_flex)
 
         logger.info(
-            "Searching from %s | depart %s → return %s | %d adults %d children",
+            "Searching from %s | depart %s | nights %s | %d adults %d children",
             home_airport,
             departure_date,
-            return_date,
+            night_variants,
             num_adults,
             num_children,
         )
@@ -199,91 +212,99 @@ def run(triggered_by: str = "manual") -> None:
 
             _upsert_destination(session, iata, city, country, region, lat, lon)
 
-            # Flight offers
-            flight = get_flight_offers(
-                origin=home_airport,
-                destination=iata,
-                depart_date=departure_date,
-                return_date=return_date,
-                adults=num_adults,
-                children=num_children,
-                session=session,
-                direct_only=direct_flights_only,
-            )
-            if flight is None:
-                logger.info("  No flight found — skipping.")
-                session.commit()
-                continue
-
-            # Hotel offers
-            hotel = get_hotel_offers(
-                city_code=iata,
-                checkin=departure_date,
-                checkout=return_date,
-                adults=num_adults,
-                session=session,
-                min_stars=min_stars,
-            )
-            if hotel is None:
-                logger.info("  No qualifying hotel found — skipping.")
-                session.commit()
-                continue
-
-            # Food cost
-            food = get_food_cost(
-                city=city,
-                country=country,
-                region=region,
-                days=trip_nights,
-                people=num_adults + num_children,
-                session=session,
-            )
-
-            # Build cost breakdown
-            cost = build_cost_breakdown(
-                flight_total=flight.price_total,
-                hotel_total=hotel.price_total,
-                car_region=region,
-                food_total=food.total_cost,
-                days=trip_nights,
-                car_required=car_rental_required,
-            )
-
-            # Calculate distance
             distance = (
                 haversine_miles(_HSV_LAT, _HSV_LON, lat, lon)
                 if lat != 0.0 or lon != 0.0
                 else 0.0
             )
 
-            car_url = (
-                f"https://www.kayak.com/cars/{iata}/{departure_date.isoformat()}"
-                f"/{return_date.isoformat()}"
-            )
+            # Try each night variant; keep the cheapest complete trip.
+            best: TripCandidate | None = None
+            for nights in night_variants:
+                return_date_v = departure_date + timedelta(days=nights)
 
-            candidate = TripCandidate(
-                destination_iata=iata,
-                city=city,
-                country=country,
-                region=region,
-                departure_date=departure_date,
-                return_date=return_date,
-                cost=cost,
-                distance_miles=distance,
-                flight_booking_url=flight.booking_url,
-                hotel_booking_url=hotel.booking_url,
-                car_booking_url=car_url,
-                raw_flight_data=flight.raw,
-                raw_hotel_data=hotel.raw,
-            )
-            candidates.append(candidate)
+                flight = get_flight_offers(
+                    origin=home_airport,
+                    destination=iata,
+                    depart_date=departure_date,
+                    return_date=return_date_v,
+                    adults=num_adults,
+                    children=num_children,
+                    session=session,
+                    direct_only=direct_flights_only,
+                )
+                if flight is None:
+                    logger.info("  No flight for %d nights — skipping variant.", nights)
+                    continue
+
+                hotel = get_hotel_offers(
+                    city_code=iata,
+                    checkin=departure_date,
+                    checkout=return_date_v,
+                    adults=num_adults,
+                    session=session,
+                    min_stars=min_stars,
+                )
+                if hotel is None:
+                    logger.info(
+                        "  No qualifying hotel for %d nights — skipping variant.",
+                        nights,
+                    )
+                    continue
+
+                food = get_food_cost(
+                    city=city,
+                    country=country,
+                    region=region,
+                    days=nights,
+                    people=num_adults + num_children,
+                    session=session,
+                )
+                cost = build_cost_breakdown(
+                    flight_total=flight.price_total,
+                    hotel_total=hotel.price_total,
+                    car_region=region,
+                    food_total=food.total_cost,
+                    days=nights,
+                    car_required=car_rental_required,
+                )
+
+                if best is None or cost.total < best.cost.total:
+                    car_url = (
+                        f"https://www.kayak.com/cars/{iata}"
+                        f"/{departure_date.isoformat()}/{return_date_v.isoformat()}"
+                    )
+                    best = TripCandidate(
+                        destination_iata=iata,
+                        city=city,
+                        country=country,
+                        region=region,
+                        departure_date=departure_date,
+                        return_date=return_date_v,
+                        cost=cost,
+                        distance_miles=distance,
+                        flight_booking_url=flight.booking_url,
+                        hotel_booking_url=hotel.booking_url,
+                        car_booking_url=car_url,
+                        raw_flight_data=flight.raw,
+                        raw_hotel_data=hotel.raw,
+                    )
+
+            if best is None:
+                logger.info("  No complete trip found across all variants — skipping.")
+                session.commit()
+                continue
+
+            candidates.append(best)
+            nights_won = (best.return_date - best.departure_date).days
             logger.info(
-                "  Total: $%.2f (flight $%.2f | hotel $%.2f | car $%.2f | food $%.2f)",
-                cost.total,
-                cost.flights,
-                cost.hotel,
-                cost.car,
-                cost.food,
+                "  Best: %d nights — $%.2f (flight $%.2f | hotel $%.2f | car $%.2f | food $%.2f)",
+                nights_won,
+                best.cost.total,
+                best.cost.flights,
+                best.cost.hotel,
+                best.cost.car,
+                best.cost.food,
             )
 
             session.commit()
