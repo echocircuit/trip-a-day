@@ -238,3 +238,61 @@ def test_favorites_first_fills_with_lrq(session):
     assert iatas[0] == "FAV"
     assert "NEW" in iatas
     assert "OLD" in iatas
+
+
+# ── pool parameter (pre-filtered pool passed in) ──────────────────────────────
+
+
+def test_pool_parameter_draws_from_pool_not_db(session):
+    """When pool is provided, strategy ignores DB and draws from pool only."""
+    _add_dest(session, "DB1", region="North America")
+    _add_dest(session, "DB2", region="North America")
+    # Pool contains only one destination not in DB
+    pool_dest = Destination(
+        iata_code="POOL",
+        city="Pool City",
+        country="Test",
+        region="Western Europe",
+        enabled=True,
+        excluded=False,
+    )
+    result = select_daily_batch("least_recently_queried", 5, session, pool=[pool_dest])
+    assert len(result) == 1
+    assert result[0].iata_code == "POOL"
+
+
+def test_pool_parameter_blocklist_scenario(session):
+    """Simulates the blocklist bug: with NA blocklist, batch must not contain NA."""
+    # DB has 10 NA destinations + 3 European ones
+    for i in range(10):
+        _add_dest(session, f"NA{i:02d}", region="North America")
+    eu1 = _add_dest(session, "EU1", region="Western Europe")
+    eu2 = _add_dest(session, "EU2", region="Western Europe")
+    eu3 = _add_dest(session, "EU3", region="Eastern Europe")
+
+    # Simulate apply_destination_filters removing NA from pool
+    eligible_pool = [eu1, eu2, eu3]
+    result = select_daily_batch(
+        "least_recently_queried", 5, session, pool=eligible_pool
+    )
+    regions = {d.region for d in result}
+    assert "North America" not in regions
+    assert len(result) == 3  # only 3 eligible destinations
+
+
+def test_pool_parameter_empty_returns_empty(session):
+    _add_dest(session, "DB1")
+    result = select_daily_batch("least_recently_queried", 5, session, pool=[])
+    assert result == []
+
+
+def test_all_strategies_respect_pool_parameter(session):
+    """Smoke test: every strategy returns only pool destinations."""
+    _add_dest(session, "DB1", region="North America")
+    pool_dest = _add_dest(session, "EU1", region="Western Europe")
+
+    for strategy in STRATEGIES:
+        result = select_daily_batch(strategy, 5, session, pool=[pool_dest])
+        iatas = {d.iata_code for d in result}
+        assert "DB1" not in iatas, f"Strategy {strategy!r} leaked DB dest outside pool"
+        session.commit()  # round_robin / cycle_through_regions update offset prefs

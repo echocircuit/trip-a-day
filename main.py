@@ -163,22 +163,35 @@ def run(triggered_by: str = "manual") -> None:
             home_info.longitude if home_info and home_info.longitude else _HSV_LON
         )
 
-        # ── Select daily batch ────────────────────────────────────────────────
-        batch = select_daily_batch(selection_strategy, daily_batch_size, session)
-        session.commit()
-        logger.info(
-            "Batch: %d destinations via strategy '%s'", len(batch), selection_strategy
-        )
-
-        # ── Apply destination filters ─────────────────────────────────────────
+        # ── Apply destination filters to full pool before batch selection ──────
         all_prefs = get_all(session)
-        batch, filter_fallback = apply_destination_filters(batch, session, all_prefs)
+        full_pool: list[Destination] = (
+            session.query(Destination)
+            .filter(Destination.enabled.is_(True), Destination.excluded.is_(False))
+            .all()
+        )
+        eligible_pool, filter_fallback = apply_destination_filters(
+            full_pool, session, all_prefs
+        )
         if filter_fallback:
             logger.warning(
                 "All filters combined produced an empty pool — running unfiltered."
             )
         else:
-            logger.info("After filters: %d destinations remain.", len(batch))
+            logger.info(
+                "After filters: %d / %d destinations eligible.",
+                len(eligible_pool),
+                len(full_pool),
+            )
+
+        # ── Select daily batch from eligible pool ─────────────────────────────
+        batch = select_daily_batch(
+            selection_strategy, daily_batch_size, session, pool=eligible_pool
+        )
+        session.commit()
+        logger.info(
+            "Batch: %d destinations via strategy '%s'", len(batch), selection_strategy
+        )
 
         # ── Pass 1: quick price estimate per destination ──────────────────────
         flights_calls_start = get_api_calls_today(session, "google_flights")
