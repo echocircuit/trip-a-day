@@ -129,6 +129,7 @@ def run(triggered_by: str = "manual") -> None:
         advance_days = get_int(session, "advance_days")
         num_adults = get_int(session, "num_adults")
         num_children = get_int(session, "num_children")
+        num_rooms = get_int(session, "num_rooms")
         min_stars = get_int(session, "min_hotel_stars")
         ranking_strategy = get(session, "ranking_strategy")
         direct_flights_only = get_bool(session, "direct_flights_only")
@@ -333,6 +334,7 @@ def run(triggered_by: str = "manual") -> None:
                     adults=num_adults,
                     session=session,
                     min_stars=min_stars,
+                    num_rooms=num_rooms,
                 )
                 if hotel is None:
                     logger.info(

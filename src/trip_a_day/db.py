@@ -159,6 +159,7 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     "advance_days": "7",
     "num_adults": "2",
     "num_children": "2",
+    "num_rooms": "1",
     "direct_flights_only": "true",
     "min_hotel_stars": "4",
     "car_rental_required": "true",

@@ -380,7 +380,7 @@ def _synthetic_flight_result(origin: str, destination: str) -> Any:
     flight = SimpleNamespace(
         name="Synthetic Air",
         price=f"${price:.0f}",
-        stops=1,
+        stops=0,
         departure_time="08:00 AM",
         arrival_time="06:00 PM",
         duration="10h 00m",
@@ -466,13 +466,19 @@ def _lookup_per_diem(
         if r.get("is_domestic") == is_domestic and r["city"].upper() == city_upper:
             return float(r["lodging_usd"]), float(r["mie_usd"]), "per_diem_exact"
 
-    # Country-level average (international only, or state-level for domestic)
-    matches = [
-        r
-        for r in rates
-        if r.get("is_domestic") == is_domestic
-        and r["state_or_country"].upper() == country_upper
-    ]
+    # Country-level average for international; national average for domestic.
+    # Domestic per diem records store state abbreviations in state_or_country (e.g. "CA",
+    # "DC"), not "United States", so we can't do a state-level average without a state code.
+    # Fall back to the national domestic average instead.
+    if is_domestic:
+        matches = [r for r in rates if r.get("is_domestic")]
+    else:
+        matches = [
+            r
+            for r in rates
+            if not r.get("is_domestic")
+            and r["state_or_country"].upper() == country_upper
+        ]
     if matches:
         avg_lodging = sum(r["lodging_usd"] for r in matches) / len(matches)
         avg_mie = sum(r["mie_usd"] for r in matches) / len(matches)
@@ -648,6 +654,7 @@ def get_hotel_offers(
     adults: int,
     session: Session,
     min_stars: int = 4,
+    num_rooms: int = 1,
 ) -> HotelOffer | None:
     """Return a per diem lodging estimate for the destination. Always returns an estimate."""
     info = get_airport_info(city_code, session)
@@ -657,7 +664,7 @@ def get_hotel_offers(
     is_domestic = country == "United States"
 
     nights = (checkout - checkin).days
-    rooms = max(1, math.ceil(adults / 2))
+    rooms = max(1, num_rooms)
 
     lodging_per_night, _, source = _lookup_per_diem(city, country, is_domestic)
 

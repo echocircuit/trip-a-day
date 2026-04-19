@@ -252,12 +252,15 @@ def _preferences() -> None:
         )
 
         st.subheader("Travelers")
-        ca, cb = st.columns(2)
+        ca, cb, cc = st.columns(3)
         num_adults = ca.number_input(
             "Adults", min_value=1, max_value=10, value=_int("num_adults", 2)
         )
         num_children = cb.number_input(
             "Children", min_value=0, max_value=10, value=_int("num_children", 2)
+        )
+        num_rooms = cc.number_input(
+            "Rooms", min_value=1, max_value=10, value=_int("num_rooms", 1)
         )
 
         st.subheader("Filters")
@@ -412,6 +415,7 @@ def _preferences() -> None:
             set_pref(s, "advance_days", str(int(advance_days)))
             set_pref(s, "num_adults", str(int(num_adults)))
             set_pref(s, "num_children", str(int(num_children)))
+            set_pref(s, "num_rooms", str(int(num_rooms)))
             set_pref(s, "direct_flights_only", "true" if direct_only else "false")
             set_pref(s, "car_rental_required", "true" if car_required else "false")
             set_pref(s, "min_hotel_stars", str(int(min_stars)))

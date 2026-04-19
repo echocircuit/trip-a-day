@@ -97,11 +97,25 @@ def test_case_insensitive_city_match():
 
 
 def test_domestic_does_not_match_international():
-    """is_domestic flag must match — domestic query won't return international record."""
+    """Domestic query must not return international record; falls back to national average."""
     from trip_a_day.fetcher import _lookup_per_diem
 
     with _patch_rates():
-        # London is international (is_domestic=False); querying as domestic should miss
-        _lodging, _mie, source = _lookup_per_diem("London", "United Kingdom", True)
+        # London is international; domestic=True should not match the London entry.
+        # SAMPLE_RATES has one domestic entry (New York) so we expect the national average.
+        lodging, _mie, source = _lookup_per_diem("London", "United Kingdom", True)
 
-    assert source == "fallback"
+    assert source == "per_diem_country"
+    assert lodging != 200.0  # international London rate must not be returned
+
+
+def test_domestic_national_average_fallback():
+    """Unknown domestic city falls back to national average across all domestic rates."""
+    from trip_a_day.fetcher import _lookup_per_diem
+
+    with _patch_rates():
+        lodging, mie, source = _lookup_per_diem("Unknown City", "United States", True)
+
+    assert source == "per_diem_country"
+    assert lodging == 350.0  # only New York ($350) in SAMPLE_RATES domestic entries
+    assert mie == 100.0
