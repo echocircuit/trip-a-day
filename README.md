@@ -4,13 +4,14 @@ Determines the cheapest trip that can be booked each day. Runs once daily, finds
 
 ---
 
-## Current phase: Phase 4 — Trip length flexibility
+## Current phase: Phase 7 — Multi-airport departure
 
 **What works now:**
 
 - `python main.py` — one-off run, finds and emails (or prints) today's cheapest trip
 - `python scheduler.py` — keeps running and fires the pipeline automatically once per day at a configurable time (default 7:00 AM local)
 - `streamlit run ui.py` — browser UI for managing preferences, exclusions, and viewing trip history
+- Multi-airport search: set a radius in Preferences and the pipeline searches nearby airports too, adding IRS-rate driving cost, and picks the globally cheapest departure
 
 ---
 
@@ -122,13 +123,16 @@ Keeps running and fires the full pipeline once per calendar day at the time conf
 | Preference | Default |
 |---|---|
 | Home airport | `HSV` (Huntsville, AL) |
-| Trip length | 7 nights |
+| Trip length | 7 nights (±0 flex nights) |
 | Advance booking | Departing 7 days from today |
-| Travelers | 2 adults, 2 children |
+| Travelers | 2 adults, 2 children, 1 room |
 | Flights | Direct only |
 | Hotels | 4 stars and up |
 | Car rental | Included (estimated cost) |
+| Nearby airport radius | 0 mi (disabled) |
+| IRS mileage rate | $0.70/mile |
 | Daily run time | 7:00 AM local |
+| Notifications | Enabled |
 
 All preferences are editable in the UI under **Preferences**.
 
@@ -171,13 +175,16 @@ mypy src/
 ├── src/trip_a_day/
 │   ├── db.py                # SQLite schema and ORM (SQLAlchemy 2.x)
 │   ├── preferences.py       # Read/write user preferences from DB
-│   ├── fetcher.py           # fast-flights + per diem rate lookups
-│   ├── costs.py             # Cost assembly (flight + hotel + car + food)
+│   ├── fetcher.py           # fast-flights + per diem lookups + nearby airport scan
+│   ├── selector.py          # 8 destination selection strategies
+│   ├── filters.py           # Region allowlist/blocklist, favorite-radius, exclusion rules
+│   ├── cache.py             # TTL-aware flight price cache
+│   ├── costs.py             # Cost assembly (flight + hotel + car + food + transport)
 │   ├── ranker.py            # Trip sorting and selection logic
 │   └── notifier.py          # Resend email or terminal output
 ├── car_rates.json           # Static regional car rental rate estimates
 ├── data/
-│   ├── seed_airports.json   # 96 curated destination airports
+│   ├── seed_airports.json   # 302 curated destination airports with lat/lon and region
 │   └── per_diem_rates.json  # Merged GSA + State Dept per diem rates
 ├── scripts/
 │   └── update_rates.py      # Refreshes data/ from GSA and State Dept APIs

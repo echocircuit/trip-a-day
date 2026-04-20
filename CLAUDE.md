@@ -10,7 +10,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current phase
 
-**Phase 6 — Complete.** Region filtering (allowlist/blocklist), favorite-location radius filter, exclusion rules (previously-selected, booked), booked destination tracking. 101 unit tests passing.
+**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 118 unit tests passing.
+
+**Phase 7 additions (2026-04-19):**
+- `get_nearby_airports(home_iata, radius_miles, session)` in `fetcher.py`: haversine scan of enabled destinations within `search_radius_miles` of home.
+- `main.py` two-pass pipeline loops over `[home_airport] + nearby_airports`; computes `transport_usd = haversine × 2 × irs_mileage_rate` per nearby airport; accumulates candidates globally; winner is globally cheapest.
+- `CostBreakdown` gains `transport_usd: float = 0.0`; `build_cost_breakdown` accepts it as kwarg.
+- `TripCandidate` gains `departure_airport: str = ""`; notifier shows departure airport notice when winner departs from a non-home airport.
+- `ui.py` exposes `search_radius_miles` and `irs_mileage_rate` in Trip Configuration.
+- `db.py` adds `irs_mileage_rate` default (`"0.70"`) and `notifications_enabled` default (`"true"`).
+- Mock data banner in email and Streamlit UI (amber notice when `FLIGHT_DATA_MODE=mock`).
+- Notifications settings in UI: Resend sender mode indicator, `notifications_enabled` toggle, test email button. `main.py` checks `notifications_enabled` before sending.
 
 **Post-Phase 6 fixes (2026-04-19):**
 - Fixed 9 US airport city names in `data/seed_airports.json` to match GSA per diem table entries (e.g. IAD `"Washington DC"` → `"District of Columbia"`, restoring the $276/night GSA rate instead of the $150 North America fallback).
@@ -22,7 +32,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Launch UI:** `streamlit run ui.py`
 **Launch scheduler:** `python scheduler.py` (daily at time in `scheduled_run_time` pref, default 07:00 local)
 
-**Next: Phase 7.** Begin with `git checkout main && git pull && git checkout -b feature/phase-7-<description>`.
+**Next: Phase 8.** Begin with `git checkout main && git pull && git checkout -b feature/phase-8-<description>`.
 
 ## Development workflow
 
@@ -38,7 +48,7 @@ git checkout -b feature/<short-description>   # e.g. feature/phase-2-scheduling
 ```bash
 ruff check . && ruff format --check .   # must pass clean
 mypy src/                               # must pass clean
-pytest tests/unit/                      # must pass (101 tests, no API calls)
+pytest tests/unit/                      # must pass (118 tests, no API calls)
 python main.py                          # full live run — takes ~2 min (sweeps 95 airports)
 ```
 Fix any issues found and commit them. Then push and open a PR:
@@ -80,7 +90,7 @@ main.py
 ```
 
 **Key types:**
-- `CostBreakdown` (defined in `costs.py`) — flight, hotel, car, food, total, car_is_estimate
+- `CostBreakdown` (defined in `costs.py`) — flight, hotel, car, food, transport_usd, total, car_is_estimate
 - `TripCandidate` (defined in `ranker.py`) — full trip candidate with cost and metadata
 - Fetcher dataclasses (defined in `fetcher.py`): `FlightOffer`, `HotelOffer`, `FoodEstimate`, `AirportInfo`
 - SQLAlchemy ORM models (defined in `db.py`): `Preference`, `Destination`, `Trip`, `RunLog`, `ApiUsage`, `PriceCache`
@@ -108,6 +118,11 @@ main.py
 | City names in seed_airports.json match GSA per diem table | Exact-match lookup in `_lookup_per_diem` requires the city string to match; mismatches fell through to $150 regional fallback silently |
 | Domestic per diem fallback uses national average | State-code fallback can't fire without state codes in seed data; national average is more accurate than $150 for any domestic city miss |
 | Filters applied to full pool before `select_daily_batch` | Applying filters after selection meant a NA blocklist would reject the entire NA-heavy batch and trigger fallback; filtering first ensures the batch is drawn from the eligible set |
+| Multi-airport: shared destination batch, per-airport flight lookups | Re-running the same batch from each departure airport avoids double-counting destination query stats; only home airport updates `query_count`/`last_queried_at` |
+| Transport cost = `haversine × 2 × irs_mileage_rate` | Round-trip driving estimate; IRS rate is the standard US reimbursement rate and a reasonable proxy for marginal driving cost |
+| `get_nearby_airports` skipped entirely when `search_radius_miles == 0` | Early-exit avoids a DB scan for the common case; function still correctly returns `[]` for `radius <= 0` if called directly |
+| `departure_airport` on `TripCandidate` | Lets the notifier and UI display which airport the winner departs from without re-deriving it from cost |
+| `notifications_enabled` preference | Allows disabling email without removing API keys; checked in `main.py` after the pipeline completes |
 
 ## Key file map
 
@@ -136,6 +151,9 @@ main.py
 | `tests/unit/test_fetcher_perdiem.py` | Per diem lookup fallback chain tests (7 tests incl. domestic national-average fallback) |
 | `tests/unit/test_fetcher_flights.py` | direct_only filtering tests |
 | `tests/unit/test_filters.py` | Region allowlist/blocklist, favorite-radius, exclusion rule tests (16 tests) |
+| `tests/unit/test_fetcher_nearby.py` | `get_nearby_airports` haversine radius tests (9 tests) |
+| `tests/unit/test_costs_transport.py` | `transport_usd` field on `CostBreakdown` (6 tests) |
+| `tests/unit/test_multi_airport.py` | Multi-airport pipeline smoke tests (2 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
 
 ## Environment setup
