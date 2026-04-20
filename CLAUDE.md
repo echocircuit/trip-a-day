@@ -8,6 +8,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Spec reference:** `trip_of_the_day_spec.md` is the authoritative specification. Do not modify it. If a situation is not covered by the spec, stop and ask before deciding.
 
+## Documentation Requirements
+
+**Docs are updated in the same commit as the code they describe — never deferred.**
+
+If you are about to commit code-only and any of the files below are stale, fix the docs first and include them in the same commit.
+
+### What to keep current
+
+| File | What to update |
+|---|---|
+| `CLAUDE.md` | Architecture decisions table (add a row for each new design choice), Key file map (add new modules and test files), Key types (reflect field changes), test count in the end-of-phase checklist |
+| `PROGRESS.md` | "Next Action" line after every logical unit of work; phase checklist (mark items done as you go, not in bulk at the end); add a new phase checklist section before starting that phase |
+| `README.md` | Module list in Project structure, Default preferences table, feature flags, any user-facing behavior change |
+
+### Triggers — update docs in the same commit when you:
+
+- Add a new module (`src/trip_a_day/*.py`) → add it to the Key file map in `CLAUDE.md` and Project structure in `README.md`
+- Add or rename a preference or env var → update the Architecture decisions table in `CLAUDE.md` and the Default preferences table in `README.md`
+- Change a public type (`CostBreakdown`, `TripCandidate`, etc.) → update Key types in `CLAUDE.md`
+- Add a new test file → add it to the Key file map in `CLAUDE.md` and update the test count
+- Make a behavioral change visible to the user → update `README.md` "What works now"
+- Complete a logical unit of work → update "Next Action" in `PROGRESS.md`
+
+### Spec (`trip_of_the_day_spec.md`)
+
+Read-only. Do not edit it. The only permitted change is updating a phase completion marker — and only when explicitly instructed to do so.
+
+### End-of-phase doc sweep
+
+The final commit of each phase must be a doc sweep that confirms all three files above are current. Check: phase header, test count, all new modules/preferences/types reflected, "Next Action" pointing to the next phase.
+
 ## Current phase
 
 **Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 118 unit tests passing.
