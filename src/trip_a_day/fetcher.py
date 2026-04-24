@@ -619,9 +619,8 @@ def get_flight_offers(
         return None
 
     price, best_flight = min(valid, key=lambda x: x[0])
-    airline_iata = getattr(best_flight, "airline_iata", None) or None
     booking_url = build_flight_url(
-        origin, destination, depart_date, return_date, airline_iata
+        origin, destination, depart_date, return_date, adults=adults, children=children
     )
     raw = json.dumps(
         {

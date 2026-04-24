@@ -179,7 +179,7 @@ main.py
 | M&IE sanity check bounds = dataset ±20% | Per diem dataset range is $1-$287 (2026); ±20% buffer ($0.80-$344.40) catches corruption without false-positives on legitimate extremes like Calgary ($169). Warning only — destination is not excluded. |
 | `RunLog.destinations_evaluated` = `len(batch)` | Previously stored `len(all_candidates)` (Pass-2 winners, max 5); now stores the Pass-1 batch size (15 by default) so "destinations evaluated" has the user-expected meaning |
 | `RunLog.cache_hits_flights` + `destinations_excluded` | Separate integer columns so the run summary can be shown without parsing the JSON `invalid_data_exclusions` blob |
-| `_valid_airline_iata()` guards `build_flight_url` | A malformed airline name (e.g. "American Airlines operated by Skywest") in the `#flt=` fragment causes Google Flights JS to fail parsing the entire fragment, showing no pre-filled search; only 2-char alphanumeric codes pass |
+| `build_flight_url` uses `?tfs=` protobuf format | The old `#flt=` URL fragment stopped working ~2020 when Google migrated to Base64-encoded protobuf parameters. `TFSData.from_interface()` from fast-flights generates the correct encoding; origin, destination, and ISO dates are embedded in the blob and verifiable by base64-decoding |
 
 ## Key file map
 
