@@ -5,7 +5,7 @@ All tests run without network access — they patch the in-memory rate cache.
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -119,3 +119,138 @@ def test_domestic_national_average_fallback():
     assert source == "per_diem_country"
     assert lodging == 350.0  # only New York ($350) in SAMPLE_RATES domestic entries
     assert mie == 100.0
+
+
+# Thresholds: dataset range $1-$287 (2026 per_diem_rates.json) +-20% buffer.
+# Floor = 0.8, ceiling = 344.4. Calgary ($169) is well within bounds.
+_EXTREME_LOW_RATES = [
+    {
+        "city": "Cheapville",
+        "state_or_country": "Testland",
+        "is_domestic": False,
+        "lodging_usd": 30,
+        "mie_usd": 0.5,  # non-zero, below floor (0.8) — triggers warning
+        "source": "state_dept",
+    }
+]
+
+_EXTREME_HIGH_RATES = [
+    {
+        "city": "Pricytown",
+        "state_or_country": "Testland",
+        "is_domestic": False,
+        "lodging_usd": 600,
+        "mie_usd": 400,  # above ceiling (344.4) — triggers warning
+        "source": "state_dept",
+    }
+]
+
+_NORMAL_RATES = [
+    {
+        "city": "Calgary",
+        "state_or_country": "Canada",
+        "is_domestic": False,
+        "lodging_usd": 434,
+        "mie_usd": 169,  # within $0.80-$344.40 -- no warning expected
+        "source": "state_dept",
+    }
+]
+
+
+class TestFoodCostSanityCheck:
+    def _fake_session(self):
+        return MagicMock()
+
+    def test_rate_below_floor_triggers_warning(self, caplog):
+        from trip_a_day.fetcher import get_food_cost
+
+        with (
+            _patch_rates(_EXTREME_LOW_RATES),
+            caplog.at_level("WARNING", logger="trip_a_day.fetcher"),
+        ):
+            get_food_cost(
+                "Cheapville",
+                "Testland",
+                "Other",
+                days=5,
+                people=2,
+                session=self._fake_session(),
+            )
+
+        assert any(
+            "Unusual food cost estimate" in r.message and "Cheapville" in r.message
+            for r in caplog.records
+        )
+
+    def test_rate_above_ceiling_triggers_warning(self, caplog):
+        from trip_a_day.fetcher import get_food_cost
+
+        with (
+            _patch_rates(_EXTREME_HIGH_RATES),
+            caplog.at_level("WARNING", logger="trip_a_day.fetcher"),
+        ):
+            get_food_cost(
+                "Pricytown",
+                "Testland",
+                "Other",
+                days=5,
+                people=2,
+                session=self._fake_session(),
+            )
+
+        assert any(
+            "Unusual food cost estimate" in r.message and "Pricytown" in r.message
+            for r in caplog.records
+        )
+
+    def test_calgary_rate_does_not_trigger_warning(self, caplog):
+        from trip_a_day.fetcher import get_food_cost
+
+        with (
+            _patch_rates(_NORMAL_RATES),
+            caplog.at_level("WARNING", logger="trip_a_day.fetcher"),
+        ):
+            get_food_cost(
+                "Calgary",
+                "Canada",
+                "North America",
+                days=5,
+                people=4,
+                session=self._fake_session(),
+            )
+
+        assert not any(
+            "Unusual food cost estimate" in r.message for r in caplog.records
+        )
+
+    def test_dataset_max_rate_no_warning(self, caplog):
+        """$287 (Maracaibo) — highest real entry — must not trigger a warning."""
+        from trip_a_day.fetcher import get_food_cost
+
+        maracaibo_rates = [
+            {
+                "city": "Maracaibo",
+                "state_or_country": "Venezuela",
+                "is_domestic": False,
+                "lodging_usd": 100,
+                "mie_usd": 287,
+                "source": "state_dept",
+            }
+        ]
+
+        with (
+            _patch_rates(maracaibo_rates),
+            caplog.at_level("WARNING", logger="trip_a_day.fetcher"),
+        ):
+            get_food_cost(
+                "Maracaibo",
+                "Venezuela",
+                "Latin America",
+                days=1,
+                people=1,
+                session=self._fake_session(),
+            )
+
+        assert not any(
+            "Unusual food cost estimate" in r.message for r in caplog.records
+        )
