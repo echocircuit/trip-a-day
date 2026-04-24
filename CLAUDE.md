@@ -41,7 +41,7 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 ## Current phase
 
-**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 118 unit tests passing.
+**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 155 tests passing (118 unit + 18 links + 9 imports + 2 smoke + 8 misc).
 
 **Phase 7b removed (user decision):** Phase 7b (real transit cost via routing API) was dropped because it adds external API dependencies (Rome2rio or Google Maps Distance Matrix) that complicate new-user setup without sufficient value over the IRS mileage estimate already implemented in Phase 7a.
 
@@ -54,6 +54,18 @@ The final commit of each phase must be a doc sweep that confirms all three files
 - `db.py` adds `irs_mileage_rate` default (`"0.70"`) and `notifications_enabled` default (`"true"`).
 - Mock data banner in email and Streamlit UI (amber notice when `FLIGHT_DATA_MODE=mock`).
 - Notifications settings in UI: Resend sender mode indicator, `notifications_enabled` toggle, test email button. `main.py` checks `notifications_enabled` before sending.
+
+**Post-Phase-7 polish (2026-04-23):**
+- `src/trip_a_day/links.py`: centralised URL builders (`build_flight_url`, `build_hotel_url`, `build_car_url`). `fetcher.py` and `main.py` now import from here instead of building URLs inline.
+- `CostBreakdown.total` changed to computed `@property` (sum of components + transport_usd); `hotel_is_estimate: bool = False` field added.
+- `DEFAULT_PREFERENCES` public alias added to `db.py` for use in tests.
+- `min_hotel_stars` preference removed (meaningless with per-diem rates); documented in `CLAUDE.md` and `db.py`.
+- `preferred_hotel_site`, `preferred_car_site`, `preferred_hotel_site_manual_url`, `preferred_car_site_manual_url` preferences added to `db.py`; exposed in UI Booking Preferences section.
+- Favorite locations UI: replaced lat/lon textarea with city multiselect backed by `user_favorited` DB flag; `filters.py` `_filter_favorite_radius` reads DB instead of JSON pref.
+- `Trip` model: `booked`, `booked_at`, `manually_logged` columns added with idempotent migration.
+- Email footer: "✅ Mark as Booked" link via `_mark_booked_link_html/plain` helpers; `main.py` passes `trip_id` to notifier.
+- Trip History UI: URL query param handler for `?action=mark_booked&trip_id=N`; per-row action panel (mark booked, favorite, exclude/restore); "Log a Past Trip" form; Status column (✅/✈️/📝).
+- `tests/test_imports.py`, `tests/test_smoke.py`, `tests/test_links.py` added (29 new tests; 155 total).
 
 **Post-Phase 6 fixes (2026-04-19):**
 - Fixed 9 US airport city names in `data/seed_airports.json` to match GSA per diem table entries (e.g. IAD `"Washington DC"` → `"District of Columbia"`, restoring the $276/night GSA rate instead of the $150 North America fallback).
@@ -124,7 +136,7 @@ main.py
 ```
 
 **Key types:**
-- `CostBreakdown` (defined in `costs.py`) — flight, hotel, car, food, transport_usd, total, car_is_estimate
+- `CostBreakdown` (defined in `costs.py`) — flight, hotel, car, food, transport_usd, car_is_estimate, hotel_is_estimate; `total` is a computed `@property`
 - `TripCandidate` (defined in `ranker.py`) — full trip candidate with cost and metadata
 - Fetcher dataclasses (defined in `fetcher.py`): `FlightOffer`, `HotelOffer`, `FoodEstimate`, `AirportInfo`
 - SQLAlchemy ORM models (defined in `db.py`): `Preference`, `Destination`, `Trip`, `RunLog`, `ApiUsage`, `PriceCache`
@@ -155,6 +167,12 @@ main.py
 | Multi-airport: shared destination batch, per-airport flight lookups | Re-running the same batch from each departure airport avoids double-counting destination query stats; only home airport updates `query_count`/`last_queried_at` |
 | Transport cost = `haversine × 2 × irs_mileage_rate` | Round-trip driving estimate; IRS rate is the standard US reimbursement rate and a reasonable proxy for marginal driving cost |
 | `get_nearby_airports` skipped entirely when `search_radius_miles == 0` | Early-exit avoids a DB scan for the common case; function still correctly returns `[]` for `radius <= 0` if called directly |
+| `CostBreakdown.total` is a computed `@property` | Prevents stale totals if individual fields change after construction; callers can't pass a wrong value |
+| `links.py` centralises all booking URL construction | `fetcher.py` and `main.py` both needed flight/hotel/car URLs; one place to update when URL patterns change |
+| `min_hotel_stars` preference removed | Hotel costs come from GSA per diem rates, not live hotel search — star rating filtering is meaningless in this context |
+| Favorite locations read from `user_favorited` DB flag, not JSON pref | JSON list required storing lat/lon manually; DB flag lets users select cities by name and keeps favourites in sync with the destination table |
+| Mark-as-booked URL uses `http://localhost:8501/` | trip-a-day is a local-only app; no public URL to configure. Streamlit reads `?action=mark_booked&trip_id=N` query params on page load |
+| Import smoke tests use `importlib` + `hasattr` | Direct `from module import Symbol` gets stripped by ruff as "unused import"; importlib pattern keeps assertions while avoiding the lint error |
 | `departure_airport` on `TripCandidate` | Lets the notifier and UI display which airport the winner departs from without re-deriving it from cost |
 | `notifications_enabled` preference | Allows disabling email without removing API keys; checked in `main.py` after the pipeline completes |
 
@@ -171,7 +189,8 @@ main.py
 | `src/trip_a_day/cache.py` | TTL-aware flight price cache: `get_cached_flight()`, `store_flight_cache()` |
 | `src/trip_a_day/costs.py` | `CostBreakdown` dataclass; `build_cost_breakdown()`; `lookup_car_cost()` |
 | `src/trip_a_day/ranker.py` | `TripCandidate` dataclass; `rank_trips()` with pluggable strategy |
-| `src/trip_a_day/notifier.py` | `send_trip_notification()` — Resend HTML email or stdout fallback |
+| `src/trip_a_day/notifier.py` | `send_trip_notification()` — Resend HTML email or stdout fallback; `send_test_email()` |
+| `src/trip_a_day/links.py` | URL builders: `build_flight_url`, `build_hotel_url`, `build_car_url` |
 | `car_rates.json` | Static regional daily car rental rate estimates (USD) |
 | `data/seed_airports.json` | 302 curated destination airports with lat/lon, region, subregion, price tier |
 | `data/per_diem_rates.json` | Merged GSA + State Dept per diem rates (1,377 locations) |
@@ -188,6 +207,9 @@ main.py
 | `tests/unit/test_fetcher_nearby.py` | `get_nearby_airports` haversine radius tests (9 tests) |
 | `tests/unit/test_costs_transport.py` | `transport_usd` field on `CostBreakdown` (6 tests) |
 | `tests/unit/test_multi_airport.py` | Multi-airport pipeline smoke tests (2 tests) |
+| `tests/test_links.py` | URL builder tests for all three `links.py` functions (18 tests) |
+| `tests/test_imports.py` | importlib-based public symbol existence checks for all 9 modules (9 tests) |
+| `tests/test_smoke.py` | `CostBreakdown` instantiation + `DEFAULT_PREFERENCES` key coverage (2 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
 
 ## Environment setup
