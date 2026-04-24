@@ -759,6 +759,18 @@ def get_food_cost(
         mie_per_day = _MIE_FALLBACK.get(region, 50.0)
         source = "fallback"
 
+    # Dataset bounds (2026 per_diem_rates.json): min $1 (Antarctica), max $287
+    # (Maracaibo, Venezuela). Warn outside that range +-20% to catch corruption
+    # without false-positives on legitimate extremes like Calgary ($169).
+    mie_floor = 0.8  # 1 * 0.80
+    mie_ceiling = 344.4  # 287 * 1.20
+    if not (mie_floor <= mie_per_day <= mie_ceiling):
+        logger.warning(
+            "Unusual food cost estimate for %s: $%.0f/person/day -- verify per diem data.",
+            city,
+            mie_per_day,
+        )
+
     total = round(mie_per_day * people * days, 2)
     return FoodEstimate(
         city=city,

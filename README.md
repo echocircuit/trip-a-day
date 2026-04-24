@@ -147,6 +147,8 @@ Per diem rates are cached in `data/per_diem_rates.json` and committed to the rep
 python scripts/update_rates.py
 ```
 
+If a specific city's food estimate looks wrong, you can manually override its rate in `data/per_diem_rates.json` — find the entry by `city` and edit `mie_usd` (USD per person per day). The pipeline reloads the file on each run. Note that State Dept M&IE rates are for government travelers and may overstate typical vacation food costs for expensive cities.
+
 ---
 
 ## Development
