@@ -114,14 +114,34 @@ _MOCK_DATA_BANNER_TEXT = (
 )
 
 
+def _airport_label(iata: str) -> str:
+    """Return 'City (IATA)' if city is known, else just 'IATA'."""
+    city = get_airport_city(iata)
+    return iata if city == iata else f"{city} ({iata})"
+
+
+def _dep_line_html(trip: TripCandidate, home_airport: str) -> str:
+    """Always-visible 'Departing from' line; adds warning when non-home airport."""
+    if not trip.departure_airport:
+        return ""
+    label = _airport_label(trip.departure_airport)
+    if trip.departure_airport != home_airport and home_airport:
+        warning = f' <span style="color:#b26a00;">&#x26A0;&#xFE0F; Not your home airport ({home_airport})</span>'
+    else:
+        warning = ""
+    return f"    <strong>Departing from:</strong> {label}{warning}<br>\n"
+
+
 def _nearby_dep_html(trip: TripCandidate, home_airport: str) -> str:
+    """Transport-cost banner shown only when departing from a non-home airport."""
     if not trip.departure_airport or trip.departure_airport == home_airport:
         return ""
     city = get_airport_city(trip.departure_airport)
+    city_label = trip.departure_airport if city == trip.departure_airport else city
     return (
         f'  <div style="background:#e8f4fd;border:1px solid #90caf9;border-radius:4px;'
         f'padding:10px 14px;margin-bottom:12px;">'
-        f"&#x2708; Departing from <strong>{city} ({trip.departure_airport})</strong>"
+        f"&#x2708; Departing from <strong>{city_label} ({trip.departure_airport})</strong>"
         f" &mdash; estimated <strong>${trip.cost.transport_usd:,.0f}</strong> transport"
         f" to reach this airport (IRS mileage estimate).</div>\n"
     )
@@ -164,7 +184,7 @@ def _build_html(
   {_nearby_dep_html(trip, home_airport)}
   <h2>{trip.city}, {trip.country}</h2>
   <p>
-    <strong>Region:</strong> {trip.region}<br>
+{_dep_line_html(trip, home_airport)}    <strong>Region:</strong> {trip.region}<br>
     <strong>Departure:</strong> {trip.departure_date.strftime("%B %d, %Y")}<br>
     <strong>Return:</strong> {trip.return_date.strftime("%B %d, %Y")} ({nights} nights)<br>
     <strong>Distance from home:</strong> {distance_str}
@@ -207,27 +227,25 @@ def _build_plain(
     )
     mock_warning = _MOCK_DATA_BANNER_TEXT if is_mock else ""
     filter_warning = _FILTER_FALLBACK_WARNING_TEXT if filter_fallback else ""
-    if (
-        trip.departure_airport
-        and trip.departure_airport != home_airport
-        and trip.cost.transport_usd > 0
-    ):
-        dep_city = get_airport_city(trip.departure_airport)
-        nearby_dep_note = (
-            f"Departing from {dep_city} ({trip.departure_airport})"
-            f" — estimated ${trip.cost.transport_usd:,.0f} transport"
-            " to reach this airport (IRS mileage estimate).\n\n"
-        )
+    if trip.departure_airport:
+        dep_label = _airport_label(trip.departure_airport)
+        if trip.departure_airport != home_airport and home_airport:
+            dep_label += f"  ⚠️ Not your home airport ({home_airport})"
+        if trip.departure_airport != home_airport and trip.cost.transport_usd > 0:
+            dep_label += (
+                f" — est. ${trip.cost.transport_usd:,.0f} transport (IRS mileage)"
+            )
+        dep_line = f"Departing from: {dep_label}"
     else:
-        nearby_dep_note = ""
+        dep_line = ""
     return (
         mock_warning
         + filter_warning
-        + nearby_dep_note
         + textwrap.dedent(f"""\
         ✈️  TRIP OF THE DAY
         ==================
         Destination : {trip.city}, {trip.country} ({trip.region})
+        {dep_line}
         Departure   : {trip.departure_date.strftime("%B %d, %Y")}
         Return      : {trip.return_date.strftime("%B %d, %Y")} ({nights} nights)
         Distance    : {distance_str}

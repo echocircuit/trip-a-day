@@ -104,6 +104,7 @@ def _store_results(
             selected=(rank == 1),
             notified=False,
             car_cost_is_estimate=candidate.cost.car_is_estimate,
+            departure_iata=candidate.departure_airport or None,
         )
         session.add(db_trip)
         session.flush()

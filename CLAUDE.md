@@ -41,7 +41,7 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 ## Current phase
 
-**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 174 tests passing (137 unit + 26 links + 9 imports + 2 smoke).
+**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 186 tests passing (149 unit + 26 links + 9 imports + 2 smoke).
 
 **Phase 7b removed (user decision):** Phase 7b (real transit cost via routing API) was dropped because it adds external API dependencies (Rome2rio or Google Maps Distance Matrix) that complicate new-user setup without sufficient value over the IRS mileage estimate already implemented in Phase 7a.
 
@@ -175,6 +175,7 @@ main.py
 | Import smoke tests use `importlib` + `hasattr` | Direct `from module import Symbol` gets stripped by ruff as "unused import"; importlib pattern keeps assertions while avoiding the lint error |
 | `departure_airport` on `TripCandidate` | Lets the notifier and UI display which airport the winner departs from without re-deriving it from cost |
 | `notifications_enabled` preference | Allows disabling email without removing API keys; checked in `main.py` after the pipeline completes |
+| `departure_iata` on `Trip` DB model | `TripCandidate.departure_airport` was never persisted; adding nullable column lets the UI and history table show which airport each trip departs from; NULL for backfilled rows shows as "—" |
 | M&IE sanity check bounds = dataset ±20% | Per diem dataset range is $1-$287 (2026); ±20% buffer ($0.80-$344.40) catches corruption without false-positives on legitimate extremes like Calgary ($169). Warning only — destination is not excluded. |
 | `RunLog.destinations_evaluated` = `len(batch)` | Previously stored `len(all_candidates)` (Pass-2 winners, max 5); now stores the Pass-1 batch size (15 by default) so "destinations evaluated" has the user-expected meaning |
 | `RunLog.cache_hits_flights` + `destinations_excluded` | Separate integer columns so the run summary can be shown without parsing the JSON `invalid_data_exclusions` blob |
@@ -211,9 +212,10 @@ main.py
 | `tests/unit/test_fetcher_nearby.py` | `get_nearby_airports` haversine radius tests (9 tests) |
 | `tests/unit/test_costs_transport.py` | `transport_usd` field on `CostBreakdown` (6 tests) |
 | `tests/unit/test_multi_airport.py` | Multi-airport pipeline smoke tests (2 tests) |
-| `tests/test_links.py` | URL builder tests for all three `links.py` functions (18 tests) |
+| `tests/test_links.py` | URL builder tests for all three `links.py` functions (26 tests) |
 | `tests/test_imports.py` | importlib-based public symbol existence checks for all 9 modules (9 tests) |
 | `tests/test_smoke.py` | `CostBreakdown` instantiation + `DEFAULT_PREFERENCES` key coverage (2 tests) |
+| `tests/unit/test_notifier_departure.py` | Departure airport line in HTML and plain text email (12 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
 
 ## Environment setup

@@ -124,6 +124,7 @@ class Trip(Base):
     booked: Mapped[bool] = mapped_column(Boolean, default=False)
     booked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     manually_logged: Mapped[bool] = mapped_column(Boolean, default=False)
+    departure_iata: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
 
 class RunLog(Base):
@@ -236,6 +237,7 @@ _TRIP_NEW_COLUMNS: list[tuple[str, str]] = [
     ("booked", "BOOLEAN DEFAULT 0"),
     ("booked_at", "DATETIME"),
     ("manually_logged", "BOOLEAN DEFAULT 0"),
+    ("departure_iata", "TEXT"),
 ]
 
 
