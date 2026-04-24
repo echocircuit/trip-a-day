@@ -20,6 +20,7 @@ from fast_flights import FlightData, Passengers, get_flights  # type: ignore[imp
 from sqlalchemy.orm import Session
 
 from trip_a_day.db import get_api_calls_today, record_api_call
+from trip_a_day.links import build_flight_url, build_hotel_url
 
 logger = logging.getLogger(__name__)
 
@@ -426,18 +427,6 @@ def _parse_price(price_str: str) -> float | None:
         return None
 
 
-def _google_flights_url(
-    origin: str, destination: str, depart_date: date, return_date: date
-) -> str:
-    d = depart_date.isoformat()
-    r = return_date.isoformat()
-    return (
-        f"https://www.google.com/flights?hl=en"
-        f"#flt={origin}.{destination}.{d}*{destination}.{origin}.{r}"
-        f";c:USD;e:1;sd:1;t:f"
-    )
-
-
 def _check_soft_limit(session: Session) -> bool:
     """Log a warning if today's Google Flights call count is approaching the soft limit."""
     today_calls = get_api_calls_today(session, "google_flights")
@@ -627,7 +616,10 @@ def get_flight_offers(
         return None
 
     price, best_flight = min(valid, key=lambda x: x[0])
-    booking_url = _google_flights_url(origin, destination, depart_date, return_date)
+    airline_iata = getattr(best_flight, "airline_iata", None) or None
+    booking_url = build_flight_url(
+        origin, destination, depart_date, return_date, airline_iata
+    )
     raw = json.dumps(
         {
             "name": best_flight.name,
@@ -676,7 +668,16 @@ def get_hotel_offers(
         source = "fallback"
 
     total = round(lodging_per_night * nights * rooms, 2)
-    booking_url = f"https://www.google.com/travel/hotels/{city.replace(' ', '%20')}"
+    booking_url = build_hotel_url(
+        city,
+        country,
+        checkin,
+        checkout,
+        adults,
+        children=0,
+        rooms=rooms,
+        site="google_hotels",
+    )
 
     note = (
         "Per diem lodging estimate (govt rate, typically 3-star; "

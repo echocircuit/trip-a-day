@@ -43,6 +43,7 @@ from trip_a_day.fetcher import (
     haversine_miles,
 )
 from trip_a_day.filters import apply_destination_filters
+from trip_a_day.links import build_car_url
 from trip_a_day.notifier import send_trip_notification
 from trip_a_day.preferences import get, get_all, get_bool, get_int, get_or
 from trip_a_day.ranker import TripCandidate, rank_trips
@@ -131,6 +132,7 @@ def run(triggered_by: str = "manual") -> None:
         num_adults = get_int(session, "num_adults")
         num_children = get_int(session, "num_children")
         num_rooms = get_int(session, "num_rooms")
+        preferred_car_site = get_or(session, "preferred_car_site", "kayak")
         ranking_strategy = get(session, "ranking_strategy")
         direct_flights_only = get_bool(session, "direct_flights_only")
         car_rental_required = get_bool(session, "car_rental_required")
@@ -416,9 +418,12 @@ def run(triggered_by: str = "manual") -> None:
                     )
 
                     if best is None or cost.total < best.cost.total:
-                        car_url = (
-                            f"https://www.kayak.com/cars/{iata}"
-                            f"/{departure_date.isoformat()}/{return_date_v.isoformat()}"
+                        car_url = build_car_url(
+                            iata,
+                            city,
+                            departure_date,
+                            return_date_v,
+                            preferred_car_site,
                         )
                         best = TripCandidate(
                             destination_iata=iata,
