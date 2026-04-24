@@ -191,6 +191,9 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     "irs_mileage_rate": "0.70",
 }
 
+# Public alias for use in tests and tooling.
+DEFAULT_PREFERENCES = _PREFERENCE_DEFAULTS
+
 # Destination columns added via ALTER TABLE migration (idempotent).
 _DESTINATION_NEW_COLUMNS: list[tuple[str, str]] = [
     ("country_code", "TEXT"),

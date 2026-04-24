@@ -79,7 +79,8 @@ git checkout -b feature/<short-description>   # e.g. feature/phase-2-scheduling
 ```bash
 ruff check . && ruff format --check .   # must pass clean
 mypy src/                               # must pass clean
-pytest tests/unit/                      # must pass (118 tests, no API calls)
+pytest tests/unit/                      # must pass (no API calls)
+pytest tests/test_imports.py tests/test_smoke.py -v  # all import smoke tests pass
 python main.py                          # full live run — takes ~2 min (sweeps 95 airports)
 ```
 Fix any issues found and commit them. Then push and open a PR:

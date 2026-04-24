@@ -100,7 +100,6 @@ class TestTransportUsd:
             hotel=200.0,
             car=50.0,
             food=75.0,
-            total=425.0,
             car_is_estimate=True,
         )
         assert bd.transport_usd == 0.0

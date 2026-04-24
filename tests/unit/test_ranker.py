@@ -14,7 +14,6 @@ def _make_cost(total: float) -> CostBreakdown:
         hotel=total * 0.3,
         car=total * 0.1,
         food=total * 0.1,
-        total=total,
         car_is_estimate=True,
     )
 

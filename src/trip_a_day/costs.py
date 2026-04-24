@@ -24,15 +24,22 @@ class CostBreakdown:
 
     All amounts are USD, covering all travelers for the full trip duration.
     transport_usd is the round-trip IRS-rate driving cost to reach a nearby departure airport.
+    total is computed from the component fields so it always stays in sync.
     """
 
     flights: float
     hotel: float
     car: float
     food: float
-    total: float
     car_is_estimate: bool
+    hotel_is_estimate: bool = False
     transport_usd: float = 0.0
+
+    @property
+    def total(self) -> float:
+        return round(
+            self.flights + self.hotel + self.car + self.food + self.transport_usd, 2
+        )
 
 
 def lookup_car_cost(region: str, days: int) -> float:
@@ -67,13 +74,11 @@ def build_cost_breakdown(
     else:
         car = 0.0
         car_is_estimate = False
-    total = round(flight_total + hotel_total + car + food_total + transport_usd, 2)
     return CostBreakdown(
         flights=round(flight_total, 2),
         hotel=round(hotel_total, 2),
         car=car,
         food=round(food_total, 2),
-        total=total,
         car_is_estimate=car_is_estimate,
         transport_usd=round(transport_usd, 2),
     )
