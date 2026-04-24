@@ -43,6 +43,8 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 **Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 118 unit tests passing.
 
+**Phase 7b removed (user decision):** Phase 7b (real transit cost via routing API) was dropped because it adds external API dependencies (Rome2rio or Google Maps Distance Matrix) that complicate new-user setup without sufficient value over the IRS mileage estimate already implemented in Phase 7a.
+
 **Phase 7 additions (2026-04-19):**
 - `get_nearby_airports(home_iata, radius_miles, session)` in `fetcher.py`: haversine scan of enabled destinations within `search_radius_miles` of home.
 - `main.py` two-pass pipeline loops over `[home_airport] + nearby_airports`; computes `transport_usd = haversine × 2 × irs_mileage_rate` per nearby airport; accumulates candidates globally; winner is globally cheapest.

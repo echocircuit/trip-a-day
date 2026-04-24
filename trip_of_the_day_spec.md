@@ -3,7 +3,7 @@
 **Version:** 1.3
 **Date:** 2026-04-19
 **Language:** Python
-**Status:** Phases 1–6 complete; Phase 7 next
+**Status:** Phases 1–7 complete; Phase 8 next
 
 > **Modification policy:** This spec is the authoritative reference for the project. Do not modify it except to update phase completion status (e.g., changing "In Progress" to "Complete"). All other edits require explicit instruction from the project owner. This policy was temporarily lifted for the v1.3 phase renumbering only.
 
@@ -695,7 +695,7 @@ All values in Section 5.1 are stored in the `preferences` table and editable via
 
 ---
 
-### Phase 7: Multi-Airport Departure
+### Phase 7: Multi-Airport Departure — ✅ Complete
 
 **Goal:** Find cheaper trips by considering nearby departure airports.
 
@@ -703,7 +703,7 @@ All values in Section 5.1 are stored in the `preferences` table and editable via
 - `search_radius_miles` preference: if > 0, find all airports within that radius of home
 - For each nearby airport, calculate transportation cost to that airport:
   - **Phase 7a:** Flat estimate using the current IRS standard mileage reimbursement rate (the federal government rate for personal vehicle use, updated annually and publicly available) applied to the driving distance. This is a well-understood, defensible estimate with no API dependency.
-  - **Phase 7b:** Real transit cost via a routing API (e.g., Rome2rio or Google Maps Distance Matrix) for users who want more precision or who might take a shuttle/rideshare instead of driving
+  - ~~**Phase 7b:** Real transit cost via a routing API~~ — **removed**. Adds external API dependencies that complicate new-user setup without sufficient value over the IRS mileage estimate. Decision documented in CLAUDE.md.
 - Add transportation cost to total for any trip departing from a non-home airport
 - Best trip selected across all departure airports
 - Email indicates which departure airport the trip uses and the estimated transport cost to reach it
@@ -712,16 +712,36 @@ All values in Section 5.1 are stored in the `preferences` table and editable via
 
 ---
 
-### Phase 8: Destination Pool Expansion
+### Phase 8: Hybrid Destination Input
 
-**Goal:** Expand how candidate destinations are discovered beyond the curated seed list.
+**Goal:** Let users add custom destinations to the candidate pool through the UI.
 
 **Scope:**
-- Option to supplement with curated destination lists (e.g., user-maintained CSV of desired cities)
-- Option to enable/disable specific data sources per run
-- Improve destination metadata (points of interest count, safety index, climate data)
+- **Primary — UI form:** Searchable dropdown populated from the destinations table (shows City, Country, IATA code). Supports free-text entry with per diem fuzzy matching; unmatched entries show a warning badge. Selecting a destination updates the destinations table immediately.
+- **Secondary — CSV upload:** Optional alternative for bulk import. Preview table shows matched/unmatched count before committing. Both methods update the destinations table immediately and feed into the same daily run pipeline.
+- Option to enable/disable specific destinations per run (existing `enabled` flag)
 
-**Success criteria:** User can add custom destinations to the candidate pool and the app treats them equally alongside seed airport candidates.
+**Success criteria:** User can add a custom destination through the UI form (or CSV upload) and the app treats it equally alongside the 302 seed airport candidates in the next daily run.
+
+---
+
+### Phase 9: Polish, Hardening, and 1.0 Release Prep
+
+**Goal:** Ensure the application is stable, well-documented, and ready for first-time users to set up independently.
+
+**Scope:**
+- End-to-end test on a clean machine (clone → configure → first daily email)
+- README audit: verify all setup steps, API key instructions, and run commands are current
+- Add CHANGELOG.md with per-phase summary of changes
+- CONTRIBUTING.md with contribution guidelines and PR checklist
+- Version bump to 1.0.0 in pyproject.toml; tag `v1.0.0`
+- Final spec review: confirm all implemented phases match the spec
+- Smoke tests on macOS and Linux (headless)
+- Verify scheduler setup instructions for macOS (launchd), Linux (systemd/cron), Windows (startup)
+
+**Success criteria:** A new developer can clone the repository and receive a working daily trip email within 30 minutes, following only the README. All unit and smoke tests pass on a clean Python 3.12 environment.
+
+> **v1.0 milestone:** After Phase 9, the application is considered feature-complete for v1.0.
 
 ---
 
