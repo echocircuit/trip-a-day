@@ -20,6 +20,7 @@ from fast_flights import FlightData, Passengers, get_flights  # type: ignore[imp
 from sqlalchemy.orm import Session
 
 from trip_a_day.db import get_api_calls_today, record_api_call
+from trip_a_day.links import build_flight_url, build_hotel_url
 
 logger = logging.getLogger(__name__)
 
@@ -426,18 +427,6 @@ def _parse_price(price_str: str) -> float | None:
         return None
 
 
-def _google_flights_url(
-    origin: str, destination: str, depart_date: date, return_date: date
-) -> str:
-    d = depart_date.isoformat()
-    r = return_date.isoformat()
-    return (
-        f"https://www.google.com/flights?hl=en"
-        f"#flt={origin}.{destination}.{d}*{destination}.{origin}.{r}"
-        f";c:USD;e:1;sd:1;t:f"
-    )
-
-
 def _check_soft_limit(session: Session) -> bool:
     """Log a warning if today's Google Flights call count is approaching the soft limit."""
     today_calls = get_api_calls_today(session, "google_flights")
@@ -627,7 +616,10 @@ def get_flight_offers(
         return None
 
     price, best_flight = min(valid, key=lambda x: x[0])
-    booking_url = _google_flights_url(origin, destination, depart_date, return_date)
+    airline_iata = getattr(best_flight, "airline_iata", None) or None
+    booking_url = build_flight_url(
+        origin, destination, depart_date, return_date, airline_iata
+    )
     raw = json.dumps(
         {
             "name": best_flight.name,
@@ -653,10 +645,13 @@ def get_hotel_offers(
     checkout: date,
     adults: int,
     session: Session,
-    min_stars: int = 4,
     num_rooms: int = 1,
 ) -> HotelOffer | None:
-    """Return a per diem lodging estimate for the destination. Always returns an estimate."""
+    """Return a per diem lodging estimate for the destination. Always returns an estimate.
+
+    min_stars is intentionally absent: hotel costs use GSA per diem rates, not live
+    hotel search — star rating is meaningless in this context.
+    """
     info = get_airport_info(city_code, session)
     city = info.city if info else city_code
     country = info.country if info else "Unknown"
@@ -673,7 +668,16 @@ def get_hotel_offers(
         source = "fallback"
 
     total = round(lodging_per_night * nights * rooms, 2)
-    booking_url = f"https://www.google.com/travel/hotels/{city.replace(' ', '%20')}"
+    booking_url = build_hotel_url(
+        city,
+        country,
+        checkin,
+        checkout,
+        adults,
+        children=0,
+        rooms=rooms,
+        site="google_hotels",
+    )
 
     note = (
         "Per diem lodging estimate (govt rate, typically 3-star; "
@@ -773,3 +777,54 @@ def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float
         + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
     )
     return round(2 * r * math.asin(math.sqrt(a)), 1)
+
+
+def get_airport_city(iata: str) -> str:
+    """Return the city name for *iata* from the seed JSON, or the IATA code if not found."""
+    airports = _load_seed_airports()
+    airport = next((a for a in airports if a["iata"] == iata), None)
+    return airport["city"] if airport else iata
+
+
+def get_nearby_airports(
+    home_iata: str, radius_miles: float, session: Session
+) -> list[AirportInfo]:
+    """Return airports within *radius_miles* of *home_iata*, excluding home itself.
+
+    Performs a haversine scan over all enabled Destination rows in the DB.
+    Returns an empty list when *radius_miles* <= 0 or home coordinates are missing.
+    """
+    from trip_a_day.db import Destination  # avoid circular import at module level
+
+    if radius_miles <= 0:
+        return []
+
+    home = get_airport_info(home_iata, session)
+    if home is None or not home.latitude or not home.longitude:
+        return []
+
+    destinations = (
+        session.query(Destination).filter(Destination.enabled.is_(True)).all()
+    )
+    nearby: list[AirportInfo] = []
+    for dest in destinations:
+        if dest.iata_code == home_iata:
+            continue
+        if not dest.latitude or not dest.longitude:
+            continue
+        dist = haversine_miles(
+            home.latitude, home.longitude, dest.latitude, dest.longitude
+        )
+        if dist <= radius_miles:
+            nearby.append(
+                AirportInfo(
+                    iata=dest.iata_code,
+                    city=dest.city or dest.iata_code,
+                    country=dest.country or "Unknown",
+                    country_code=dest.country_code or "",
+                    region=dest.region or "Other",
+                    latitude=dest.latitude,
+                    longitude=dest.longitude,
+                )
+            )
+    return nearby

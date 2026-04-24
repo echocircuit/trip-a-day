@@ -12,7 +12,6 @@ Usage:
 
 from __future__ import annotations
 
-import contextlib
 import json
 import subprocess
 import sys
@@ -22,6 +21,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
+
+import os
 
 import streamlit as st
 from sqlalchemy import desc
@@ -35,6 +36,7 @@ from trip_a_day.db import (
     init_db,
     seed_preferences,
 )
+from trip_a_day.notifier import send_test_email
 from trip_a_day.preferences import get_all, set_pref
 from trip_a_day.selector import STRATEGY_LABELS
 
@@ -80,8 +82,24 @@ def _run_now() -> None:
 # ── Dashboard ──────────────────────────────────────────────────────────────────
 
 
+def _is_mock_mode() -> bool:
+    return os.environ.get("FLIGHT_DATA_MODE", "mock").lower().strip() == "mock"
+
+
 def _dashboard() -> None:
     st.title("Dashboard")
+
+    if _is_mock_mode():
+        st.warning(
+            "⚠️ Running in mock mode — flight prices are not real. "
+            "Set `FLIGHT_DATA_MODE=live` in your `.env` to use live data.",
+            icon=None,
+        )
+
+    with SessionFactory() as _s:
+        _notifs_enabled = get_all(_s).get("notifications_enabled", "true") == "true"
+    if not _notifs_enabled:
+        st.info("🔕 Notifications disabled — email will not be sent after runs.")
 
     with SessionFactory() as s:
         last_run: RunLog | None = s.query(RunLog).order_by(desc(RunLog.run_at)).first()
@@ -154,7 +172,8 @@ def _dashboard() -> None:
         )
 
         c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("✈️ Flights", f"${winner.flight_cost_usd:,.0f}")
+        flights_label = "✈️ Flights" + (" ⚠️ mock" if _is_mock_mode() else "")
+        c1.metric(flights_label, f"${winner.flight_cost_usd:,.0f}")
         c2.metric("🏨 Hotel *", f"${winner.hotel_cost_usd:,.0f}")
         c3.metric("🚗 Car *", f"${winner.car_cost_usd:,.0f}")
         c4.metric("🍽️ Food *", f"${winner.food_cost_usd:,.0f}")
@@ -207,6 +226,17 @@ def _preferences() -> None:
 
     with SessionFactory() as s:
         prefs = get_all(s)
+        # Load destinations for favorite-city multiselect
+        _all_dests_for_fav: list[Destination] = (
+            s.query(Destination).order_by(Destination.city).all()
+        )
+        _fav_dest_labels = {
+            d.iata_code: f"{d.city or d.iata_code}, {d.country or ''} ({d.iata_code})"
+            for d in _all_dests_for_fav
+        }
+        _currently_favorited_iatas = [
+            d.iata_code for d in _all_dests_for_fav if d.user_favorited
+        ]
 
     def _int(key: str, default: int) -> int:
         try:
@@ -223,6 +253,19 @@ def _preferences() -> None:
             return val if isinstance(val, list) else []
         except (json.JSONDecodeError, TypeError):
             return []
+
+    # Read-only flight data mode indicator (env var, not a DB preference)
+    mode = os.environ.get("FLIGHT_DATA_MODE", "mock").lower().strip()
+    if mode == "mock":
+        st.info(
+            "**Flight data mode: mock** — Prices come from static fixtures, not Google Flights. "
+            "Set `FLIGHT_DATA_MODE=live` in your `.env` to use live pricing. "
+            "Mock mode is safe for development and testing.",
+        )
+    else:
+        st.success(
+            "**Flight data mode: live** — Prices are fetched from Google Flights in real time.",
+        )
 
     with st.form("preferences_form"):
         st.subheader("Trip Configuration")
@@ -250,6 +293,31 @@ def _preferences() -> None:
             value=_int("advance_days", 7),
         )
 
+        st.markdown("**Multi-Airport Departure**")
+        st.caption(
+            "When search radius > 0, the pipeline also searches from nearby airports "
+            "and adds IRS-rate round-trip driving cost. Set to 0 to disable."
+        )
+        ma1, ma2 = st.columns(2)
+        search_radius_miles = ma1.number_input(
+            "Nearby airport search radius (miles, 0 = disabled)",
+            min_value=0,
+            max_value=500,
+            value=_int("search_radius_miles", 0),
+        )
+        try:
+            _irs_default = float(prefs.get("irs_mileage_rate", "0.70"))
+        except ValueError:
+            _irs_default = 0.70
+        irs_mileage_rate = ma2.number_input(
+            "IRS mileage rate ($/mile)",
+            min_value=0.0,
+            max_value=2.0,
+            value=_irs_default,
+            step=0.01,
+            format="%.2f",
+        )
+
         st.subheader("Travelers")
         ca, cb, cc = st.columns(3)
         num_adults = ca.number_input(
@@ -263,19 +331,15 @@ def _preferences() -> None:
         )
 
         st.subheader("Filters")
-        cx, cy, cz = st.columns(3)
+        cx, cy = st.columns(2)
         direct_only = cx.checkbox(
             "Direct flights only", value=_bool("direct_flights_only")
         )
         car_required = cy.checkbox(
             "Car rental required", value=_bool("car_rental_required")
         )
-        min_stars = cz.number_input(
-            "Min hotel stars",
-            min_value=1,
-            max_value=5,
-            value=_int("min_hotel_stars", 4),
-        )
+        # min_hotel_stars intentionally absent: hotel costs use GSA per diem rates,
+        # not live hotel search — star rating is meaningless here.
 
         st.subheader("Ranking")
         strategy_default = prefs.get("ranking_strategy", "cheapest_then_farthest")
@@ -346,18 +410,15 @@ def _preferences() -> None:
         )
         st.markdown("**Favorite-location radius**")
         st.caption(
-            "Enter one location per line as `lat,lon` (e.g. `48.8566,2.3522` for Paris). "
-            "Only destinations within the radius below will be considered."
+            "Select cities to use as favorites. Only destinations within the radius below "
+            "will be considered when favorites are set. Selected cities are shown as chips."
         )
-        raw_locs = _parse_json_pref(prefs, "favorite_locations")
-        fav_locs_text = st.text_area(
-            "Favorite locations (lat,lon — one per line)",
-            value="\n".join(
-                f"{loc['lat']},{loc['lon']}"
-                for loc in raw_locs
-                if isinstance(loc, dict)
-            ),
-            height=80,
+        fav_city_iatas = st.multiselect(
+            "Favorite cities",
+            options=list(_fav_dest_labels.keys()),
+            default=_currently_favorited_iatas,
+            format_func=lambda k: _fav_dest_labels.get(k, k),
+            placeholder="Search by city or IATA code…",
         )
         fav_radius = st.number_input(
             "Favorite radius (miles, 0 = disabled)",
@@ -381,17 +442,103 @@ def _preferences() -> None:
             value=_bool("exclude_booked", default=False),
         )
 
+        st.subheader("Booking Preferences")
+        st.caption("Choose which booking site links are used in the daily email.")
+        _hotel_sites = ["google_hotels", "booking_com", "expedia", "manual"]
+        _hotel_site_labels = {
+            "google_hotels": "Google Hotels",
+            "booking_com": "Booking.com",
+            "expedia": "Expedia",
+            "manual": "Manual URL",
+        }
+        _car_sites = ["kayak", "expedia_cars", "manual"]
+        _car_site_labels = {
+            "kayak": "Kayak",
+            "expedia_cars": "Expedia Cars",
+            "manual": "Manual URL",
+        }
+        bk1, bk2 = st.columns(2)
+        _hotel_site_default = prefs.get("preferred_hotel_site", "google_hotels")
+        preferred_hotel_site = bk1.selectbox(
+            "Hotel booking site",
+            _hotel_sites,
+            index=_hotel_sites.index(_hotel_site_default)
+            if _hotel_site_default in _hotel_sites
+            else 0,
+            format_func=lambda k: _hotel_site_labels[k],
+        )
+        _car_site_default = prefs.get("preferred_car_site", "kayak")
+        preferred_car_site = bk2.selectbox(
+            "Car rental site",
+            _car_sites,
+            index=_car_sites.index(_car_site_default)
+            if _car_site_default in _car_sites
+            else 0,
+            format_func=lambda k: _car_site_labels[k],
+        )
+        if preferred_hotel_site == "manual":
+            preferred_hotel_manual_url = st.text_input(
+                "Hotel base URL",
+                value=prefs.get("preferred_hotel_site_manual_url", ""),
+                help="This URL will be used as-is — no trip details will be added automatically.",
+            )
+        else:
+            preferred_hotel_manual_url = prefs.get(
+                "preferred_hotel_site_manual_url", ""
+            )
+        if preferred_car_site == "manual":
+            preferred_car_manual_url = st.text_input(
+                "Car rental base URL",
+                value=prefs.get("preferred_car_site_manual_url", ""),
+                help="This URL will be used as-is — no trip details will be added automatically.",
+            )
+        else:
+            preferred_car_manual_url = prefs.get("preferred_car_site_manual_url", "")
+
         st.subheader("Notifications")
+        _from_email = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+        _is_test_sender = (
+            not _from_email.strip() or "onboarding@resend.dev" in _from_email
+        )
+        if _is_test_sender:
+            st.info(
+                "📧 **Email sender: Resend shared test sender** (`onboarding@resend.dev`)  \n"
+                "In test sender mode, emails can only be delivered to your verified Resend "
+                "developer email address. To send to additional recipients, set up a custom "
+                "verified domain and update `RESEND_FROM_EMAIL` in your `.env` file.  \n"
+                "[→ Resend domain setup guide](https://resend.com/docs/dashboard/domains/introduction)"
+            )
+        else:
+            st.success(f"📧 **Email sender:** {_from_email} (custom domain configured)")
+
         raw_emails = prefs.get("notification_emails", "[]")
         try:
-            parsed = json.loads(raw_emails)
-            emails_str = ", ".join(parsed) if isinstance(parsed, list) else ""
+            _parsed_emails = json.loads(raw_emails)
+            emails_str = (
+                ", ".join(_parsed_emails) if isinstance(_parsed_emails, list) else ""
+            )
         except (json.JSONDecodeError, TypeError):
             emails_str = ""
-        notification_emails = st.text_input(
-            "Notification emails (comma-separated)",
-            value=emails_str,
-            help="Leave blank to print the trip to stdout instead of emailing.",
+        if _is_test_sender:
+            st.text_input(
+                "Notification emails (read-only in test sender mode)",
+                value=emails_str,
+                disabled=True,
+                help="Email recipients cannot be changed while using the shared test sender.",
+            )
+            notification_emails = emails_str
+        else:
+            notification_emails = st.text_input(
+                "Notification emails (comma-separated)",
+                value=emails_str,
+                help="Leave blank to print the trip to stdout instead of emailing.",
+            )
+
+        notifications_enabled_val = st.checkbox(
+            "Disable notification emails",
+            value=not _bool("notifications_enabled", default=True),
+            help="When checked, runs complete normally but no email is sent. "
+            "Useful during development to avoid consuming Resend's monthly limit.",
         )
 
         st.subheader("Scheduler")
@@ -412,12 +559,13 @@ def _preferences() -> None:
             set_pref(s, "trip_length_nights", str(int(trip_nights)))
             set_pref(s, "trip_length_flex_nights", str(int(trip_flex)))
             set_pref(s, "advance_days", str(int(advance_days)))
+            set_pref(s, "search_radius_miles", str(int(search_radius_miles)))
+            set_pref(s, "irs_mileage_rate", f"{float(irs_mileage_rate):.2f}")
             set_pref(s, "num_adults", str(int(num_adults)))
             set_pref(s, "num_children", str(int(num_children)))
             set_pref(s, "num_rooms", str(int(num_rooms)))
             set_pref(s, "direct_flights_only", "true" if direct_only else "false")
             set_pref(s, "car_rental_required", "true" if car_required else "false")
-            set_pref(s, "min_hotel_stars", str(int(min_stars)))
             set_pref(s, "ranking_strategy", ranking_strategy)
             set_pref(s, "daily_batch_size", str(int(daily_batch_size)))
             set_pref(
@@ -428,17 +576,11 @@ def _preferences() -> None:
             set_pref(s, "two_pass_candidate_count", str(int(two_pass_count)))
             set_pref(s, "region_allowlist", json.dumps(region_allowlist_val))
             set_pref(s, "region_blocklist", json.dumps(region_blocklist_val))
-            # Parse fav_locs_text: "lat,lon" lines -> [{"lat":..., "lon":...}]
-            parsed_locs = []
-            for line in fav_locs_text.splitlines():
-                parts = line.strip().split(",")
-                if len(parts) == 2:
-                    with contextlib.suppress(ValueError):
-                        parsed_locs.append(
-                            {"lat": float(parts[0]), "lon": float(parts[1])}
-                        )
-            set_pref(s, "favorite_locations", json.dumps(parsed_locs))
             set_pref(s, "favorite_radius_miles", str(int(fav_radius)))
+            # Update user_favorited flag on all destinations to match multiselect
+            selected_iatas = set(fav_city_iatas)
+            for d in s.query(Destination).all():
+                d.user_favorited = d.iata_code in selected_iatas
             set_pref(
                 s,
                 "exclude_previously_selected",
@@ -450,10 +592,36 @@ def _preferences() -> None:
                 str(int(exclude_selected_days)),
             )
             set_pref(s, "exclude_booked", "true" if exclude_booked else "false")
-            set_pref(s, "notification_emails", json.dumps(new_emails))
+            set_pref(s, "preferred_hotel_site", preferred_hotel_site)
+            set_pref(s, "preferred_car_site", preferred_car_site)
+            set_pref(s, "preferred_hotel_site_manual_url", preferred_hotel_manual_url)
+            set_pref(s, "preferred_car_site_manual_url", preferred_car_manual_url)
+            # Only update notification_emails when not in test sender mode
+            _from_saved = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+            if "onboarding@resend.dev" not in _from_saved and _from_saved.strip():
+                set_pref(s, "notification_emails", json.dumps(new_emails))
+            set_pref(
+                s,
+                "notifications_enabled",
+                "false" if notifications_enabled_val else "true",
+            )
             set_pref(s, "scheduled_run_time", run_time_val.strftime("%H:%M"))
             s.commit()
         st.success("Preferences saved.")
+
+    # Test email button — outside the form so it sends without form submission
+    st.subheader("Test Email")
+    st.caption(
+        "Send a test email to your configured recipients to verify Resend is set up correctly."
+    )
+    if st.button("📨 Send Test Email"):
+        with SessionFactory() as _ts:
+            _test_prefs = get_all(_ts)
+        _ok, _msg = send_test_email(_test_prefs)
+        if _ok:
+            st.success(_msg)
+        else:
+            st.error(_msg)
 
 
 # ── Exclusion List ─────────────────────────────────────────────────────────────
@@ -555,11 +723,51 @@ _PAGE_SIZE = 50
 def _trip_history() -> None:
     st.title("Trip History")
 
+    # ── Handle ?action=mark_booked&trip_id=N from email footer link ───────────
+    params = st.query_params
+    if params.get("action") == "mark_booked":
+        raw_id = params.get("trip_id", "")
+        try:
+            email_trip_id = int(raw_id)
+        except (ValueError, TypeError):
+            email_trip_id = None
+        if email_trip_id is not None:
+            with SessionFactory() as s:
+                trip_row = s.get(Trip, email_trip_id)
+                if trip_row and not trip_row.booked:
+                    d = s.get(Destination, trip_row.destination_iata)
+                    label = (
+                        f"{d.city}, {d.country} ({trip_row.destination_iata})"
+                        if d
+                        else trip_row.destination_iata
+                    )
+                    st.success(
+                        f"✅ Ready to mark **{label}** (Trip #{email_trip_id}) as booked."
+                    )
+                    if st.button("Confirm — Mark as Booked", key="email_confirm_book"):
+                        trip_row.booked = True
+                        trip_row.booked_at = datetime.now(UTC)
+                        dest = s.get(Destination, trip_row.destination_iata)
+                        if dest:
+                            dest.user_booked = True
+                        s.commit()
+                        st.query_params.clear()
+                        st.success("Marked as booked!")
+                        st.rerun()
+                elif trip_row and trip_row.booked:
+                    st.info(f"Trip #{email_trip_id} is already marked as booked.")
+                    st.query_params.clear()
+                else:
+                    st.warning(f"Trip #{email_trip_id} not found.")
+                    st.query_params.clear()
+            st.divider()
+
     with SessionFactory() as s:
         total = s.query(Trip).count()
 
     if total == 0:
         st.info("No trip history yet.")
+        _log_past_trip_section()
         return
 
     total_pages = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
@@ -576,33 +784,150 @@ def _trip_history() -> None:
             .limit(_PAGE_SIZE)
             .all()
         )
-        rows = []
+        trip_data: list[tuple[Trip, str, str]] = []
         for t in trips:
             d = s.get(Destination, t.destination_iata)
             city = d.city if d else t.destination_iata
             country = d.country if d else ""
-            rows.append(
-                {
-                    "Date": str(t.run_date),
-                    "Destination": f"{city}, {country}",
-                    "Rank": t.rank if t.rank is not None else "—",
-                    "Selected": "🏆" if t.selected else "",
-                    "Flights": f"${t.flight_cost_usd:,.0f}",
-                    "Hotel": f"${t.hotel_cost_usd:,.0f}",
-                    "Car": f"${t.car_cost_usd:,.0f}",
-                    "Food": f"${t.food_cost_usd:,.0f}",
-                    "Total": f"${t.total_cost_usd:,.0f}",
-                }
-            )
+            trip_data.append((t, city, country))
+
+    rows = []
+    for t, city, country in trip_data:
+        booked_icon = "✅" if t.booked else ("✈️" if t.selected else "")
+        rows.append(
+            {
+                "ID": t.id,
+                "Date": str(t.run_date),
+                "Destination": f"{city}, {country}",
+                "Rank": t.rank if t.rank is not None else "—",
+                "Status": booked_icon,
+                "Flights": f"${t.flight_cost_usd:,.0f}",
+                "Hotel": f"${t.hotel_cost_usd:,.0f}",
+                "Car": f"${t.car_cost_usd:,.0f}",
+                "Food": f"${t.food_cost_usd:,.0f}",
+                "Total": f"${t.total_cost_usd:,.0f}",
+                "Manual": "📝" if t.manually_logged else "",
+            }
+        )
 
     lo = offset + 1
     hi = min(offset + _PAGE_SIZE, total)
     st.caption(
-        f"Showing {lo}-{hi} of {total} trips  -  Page {page_num} of {total_pages}"
+        f"Showing {lo}-{hi} of {total} trips  |  Page {page_num} of {total_pages}"
+        "  ·  ✅ = booked  ✈️ = selected  📝 = manually logged"
     )
     st.dataframe(rows, use_container_width=True, hide_index=True)
 
-    # ── Mark as Booked ────────────────────────────────────────────────────────
+    # ── Action panel: pick a trip by ID ───────────────────────────────────────
+    st.divider()
+    st.subheader("Trip Actions")
+    trip_ids = [t.id for t, _, _ in trip_data]
+    selected_id = st.selectbox(
+        "Select trip",
+        options=trip_ids,
+        format_func=lambda tid: next(
+            (
+                f"#{tid} — {city}, {country} ({t.run_date!s})"
+                for t, city, country in trip_data
+                if t.id == tid
+            ),
+            str(tid),
+        ),
+        index=None,
+        placeholder="Choose a trip to act on…",
+        key="action_trip_select",
+    )
+
+    if selected_id is not None:
+        with SessionFactory() as s:
+            action_trip = s.get(Trip, selected_id)
+            action_dest = (
+                s.get(Destination, action_trip.destination_iata)
+                if action_trip
+                else None
+            )
+            is_booked = action_trip.booked if action_trip else False
+            is_favorited = action_dest.user_favorited if action_dest else False
+            is_excluded = action_dest.excluded if action_dest else False
+            dest_label = (
+                f"{action_dest.city}, {action_dest.country}"
+                if action_dest
+                else (action_trip.destination_iata if action_trip else "?")
+            )
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if is_booked:
+                st.success(f"✅ {dest_label} already booked")
+                if st.button("Unmark as Booked", key="action_unbook"):
+                    with SessionFactory() as s:
+                        t2 = s.get(Trip, selected_id)
+                        if t2:
+                            t2.booked = False
+                            t2.booked_at = None
+                        d2 = s.get(Destination, t2.destination_iata) if t2 else None
+                        if d2:
+                            d2.user_booked = False
+                        s.commit()
+                    st.rerun()
+            else:
+                if st.button("✅ Mark as Booked", key="action_book"):
+                    with SessionFactory() as s:
+                        t2 = s.get(Trip, selected_id)
+                        if t2:
+                            t2.booked = True
+                            t2.booked_at = datetime.now(UTC)
+                        d2 = s.get(Destination, t2.destination_iata) if t2 else None
+                        if d2:
+                            d2.user_booked = True
+                        s.commit()
+                    st.success(f"✅ {dest_label} marked as booked!")
+                    st.rerun()
+
+        with col2:
+            fav_label = (
+                "★ Unfavorite destination" if is_favorited else "☆ Favorite destination"
+            )
+            if st.button(fav_label, key="action_fav"):
+                with SessionFactory() as s:
+                    d2 = (
+                        s.get(Destination, action_dest.iata_code)
+                        if action_dest
+                        else None
+                    )
+                    if d2:
+                        d2.user_favorited = not is_favorited
+                        s.commit()
+                st.rerun()
+
+        with col3:
+            excl_label = (
+                "↩ Restore destination" if is_excluded else "🚫 Exclude destination"
+            )
+            if st.button(excl_label, key="action_excl"):
+                with SessionFactory() as s:
+                    d2 = (
+                        s.get(Destination, action_dest.iata_code)
+                        if action_dest
+                        else None
+                    )
+                    if d2:
+                        if is_excluded:
+                            d2.excluded = False
+                            d2.excluded_at = None
+                            d2.exclusion_note = None
+                        else:
+                            d2.excluded = True
+                            d2.excluded_at = datetime.now(UTC)
+                            d2.exclusion_note = "Excluded from Trip History"
+                        s.commit()
+                st.rerun()
+
+    # ── Log a Past Trip ───────────────────────────────────────────────────────
+    st.divider()
+    _log_past_trip_section()
+
+    # ── Mark Destination as Booked (bulk) ─────────────────────────────────────
     st.divider()
     st.subheader("Mark Destination as Booked")
     st.caption(
@@ -630,7 +955,7 @@ def _trip_history() -> None:
             index=None,
             placeholder="Select a destination…",
         )
-        if st.button("Mark as Booked") and book_iata:
+        if st.button("Mark as Booked", key="bulk_book_btn") and book_iata:
             with SessionFactory() as s:
                 d = s.get(Destination, book_iata)
                 if d:
@@ -648,7 +973,7 @@ def _trip_history() -> None:
                 format_func=lambda k: dest_labels.get(k, k),
                 key="unbook_dest_select",
             )
-            if st.button("Unmark as Booked") and unbook_iata:
+            if st.button("Unmark as Booked", key="bulk_unbook_btn") and unbook_iata:
                 with SessionFactory() as s:
                     d = s.get(Destination, unbook_iata)
                     if d:
@@ -658,6 +983,87 @@ def _trip_history() -> None:
                 st.rerun()
         else:
             st.info("No destinations currently marked as booked.")
+
+
+def _log_past_trip_section() -> None:
+    """Form to manually log a past trip (booked=True, manually_logged=True)."""
+    st.subheader("📝 Log a Past Trip")
+    st.caption("Record a trip you've already taken or booked outside of trip-a-day.")
+
+    with SessionFactory() as s:
+        all_dests: list[Destination] = (
+            s.query(Destination).order_by(Destination.city).all()
+        )
+    dest_options = [d.iata_code for d in all_dests]
+    dest_fmt = {
+        d.iata_code: f"{d.city or d.iata_code}, {d.country or ''} ({d.iata_code})"
+        for d in all_dests
+    }
+
+    with st.form("log_past_trip_form"):
+        log_iata = st.selectbox(
+            "Destination",
+            options=dest_options,
+            format_func=lambda k: dest_fmt.get(k, k),
+            index=None,
+            placeholder="Search by city or IATA…",
+            key="log_dest_select",
+        )
+        col_d1, col_d2 = st.columns(2)
+        with col_d1:
+            log_depart = st.date_input("Departure date", value=None, key="log_depart")
+        with col_d2:
+            log_return = st.date_input("Return date", value=None, key="log_return")
+        log_flights = st.number_input(
+            "Flight cost (USD, optional)",
+            min_value=0.0,
+            value=0.0,
+            step=10.0,
+            key="log_flights",
+        )
+        st.text_area("Notes (optional)", key="log_notes", height=80)
+        submitted = st.form_submit_button("Log Trip")
+
+    if submitted:
+        if not log_iata:
+            st.error("Please select a destination.")
+        elif not log_depart or not log_return:
+            st.error("Please select both departure and return dates.")
+        elif log_return <= log_depart:
+            st.error("Return date must be after departure date.")
+        else:
+            with SessionFactory() as s:
+                nights = (log_return - log_depart).days
+                new_trip = Trip(
+                    run_date=date.today(),
+                    destination_iata=log_iata,
+                    departure_date=log_depart,
+                    return_date=log_return,
+                    flight_cost_usd=log_flights,
+                    hotel_cost_usd=0.0,
+                    car_cost_usd=0.0,
+                    food_cost_usd=0.0,
+                    total_cost_usd=log_flights,
+                    distance_miles=0.0,
+                    rank=None,
+                    selected=False,
+                    notified=False,
+                    car_cost_is_estimate=False,
+                    booked=True,
+                    booked_at=datetime.now(UTC),
+                    manually_logged=True,
+                )
+                s.add(new_trip)
+                dest = s.get(Destination, log_iata)
+                if dest:
+                    dest.user_booked = True
+                s.commit()
+            label = dest_fmt.get(log_iata, log_iata)
+            st.success(
+                f"✅ Logged {nights}-night trip to {label} "
+                f"({log_depart} → {log_return})."
+            )
+            st.rerun()
 
 
 # ── routing ────────────────────────────────────────────────────────────────────

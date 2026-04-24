@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Phase: Phase 6 — Region Filtering + Post-Phase 6 Fixes
-## Status: Complete (merged)
-## Last updated: 2026-04-19 — hotel pricing fixes, mock mode fix, num_rooms preference, filter architecture fix, 101 unit tests passing
+## Current Phase: Phase 7 — Multi-Airport Departure
+## Status: Complete (PR #21 open, pending merge)
+## Last updated: 2026-04-23 — 155 unit tests passing; post-Phase-7 polish complete
 
 ### Phase 1 Checklist
 
@@ -136,10 +136,60 @@
 - `num_rooms` preference replaces the silent `ceil(adults/2)` formula so users can control hotel room count directly
 - Filters must run on the full pool before batch selection; applying them post-selection caused the NA-heavy default batch to be entirely rejected, triggering a spurious fallback
 
+### Phase 7 Checklist — Complete (PR #21 open)
+
+- [x] Add `get_nearby_airports(home_iata, radius_miles, session)` to `fetcher.py` — haversine scan of enabled destinations (2026-04-19)
+- [x] Add `get_airport_city(iata)` to `fetcher.py` — JSON-only lookup for use by notifier (2026-04-19)
+- [x] Add `transport_usd: float = 0.0` to `CostBreakdown` and `build_cost_breakdown` in `costs.py` (2026-04-19)
+- [x] Add `departure_airport: str = ""` to `TripCandidate` in `ranker.py` (2026-04-19)
+- [x] Add `irs_mileage_rate` preference default (`"0.70"`) to `db.py` (2026-04-19)
+- [x] Add `notifications_enabled` preference default (`"true"`) to `db.py` (2026-04-19)
+- [x] Refactor `main.py` two-pass pipeline: loop over `[home_airport] + nearby_airports`; compute transport_usd per airport; global candidate pool; `notifications_enabled` check before email (2026-04-19)
+- [x] Update `notifier.py`: departure airport notice when winner != home airport; `send_test_email()` helper; mock data amber banner (2026-04-19)
+- [x] Update `ui.py`: `search_radius_miles` + `irs_mileage_rate` in Trip Configuration; mock mode banner on Dashboard; Notifications section with sender mode, toggle, test email button (2026-04-19)
+- [x] Add `tests/unit/test_fetcher_nearby.py` (9 tests) (2026-04-19)
+- [x] Add `tests/unit/test_costs_transport.py` (6 tests) (2026-04-19)
+- [x] Add `tests/unit/test_multi_airport.py` (2 tests) (2026-04-19)
+- [x] All 118 unit tests pass; ruff + mypy clean (2026-04-19)
+- [x] PR #21 opened (2026-04-19)
+
+### Decisions Made in Phase 7
+
+- Shared destination batch across all departure airports; only home airport updates `query_count`/`last_queried_at` to avoid inflation
+- Transport cost formula: `haversine(home, dep_airport) × 2 × irs_mileage_rate` (round-trip driving estimate)
+- `get_nearby_airports` skipped entirely in `main.py` when `search_radius_miles == 0` (early-exit; function still handles `radius <= 0` correctly if called directly)
+- `notifications_enabled` checked after pipeline completes; allows disabling email without removing API keys
+- `send_test_email()` added to `notifier.py` so UI can trigger a test without running the full pipeline
+
+### Post-Phase-7 Polish (2026-04-23)
+
+- [x] P0: Verified `send_test_email` and `get_nearby_airports` already importable (no-op)
+- [x] P1: `tests/test_imports.py` — importlib-based public symbol checks for all 9 modules
+- [x] P1: `tests/test_smoke.py` — CostBreakdown computed total, DEFAULT_PREFERENCES keys
+- [x] Spec: Phase 7b removed; Phase 8 rewritten as "Hybrid Destination Input"; Phase 9 added ("1.0 Release Prep")
+- [x] UI: Replaced lat/lon favorite-locations textarea with city-based multiselect; filters.py now reads `user_favorited` DB flag
+- [x] UI: Removed `min_hotel_stars` (meaningless with per-diem rates); added Booking Preferences section (hotel/car site selectors + manual URL option)
+- [x] `src/trip_a_day/links.py`: centralised `build_flight_url`, `build_hotel_url`, `build_car_url`; tests in `tests/test_links.py` (18 tests)
+- [x] Mock data banner in HTML/plain email + Dashboard amber warning already implemented in earlier commits
+- [x] `CostBreakdown.total` changed to computed `@property`; `hotel_is_estimate` field added; `DEFAULT_PREFERENCES` public alias added to `db.py`
+- [x] `Trip` model: `booked`, `booked_at`, `manually_logged` columns with idempotent migration
+- [x] Email footer: `_mark_booked_link_html/plain` helpers; main.py passes `trip_id` to notifier
+- [x] Trip History UI: ?action=mark_booked query param handler; per-row action panel (mark booked, favorite, exclude); "Log a Past Trip" form; Status column (✅/✈️/📝)
+- [x] 155 unit + smoke + links tests passing; ruff + mypy clean
+
+### Decisions Made in Post-Phase-7 Polish
+
+- `CostBreakdown.total` is now a `@property` (sum of components + transport_usd) rather than an explicit field; prevents stale totals
+- `_filter_favorite_radius` now takes `session` parameter and reads `user_favorited` from DB rather than a JSON pref; the pref key is retained in defaults for backwards compat but ignored by the filter
+- Import smoke tests use `importlib.import_module` + `hasattr` to avoid ruff removing "unused" imports
+- `min_hotel_stars` removed from defaults and UI; hotel costs come from GSA per diem — star rating is meaningless
+- `links.py` has no `trip_a_day.*` imports, so no circular dependency risk
+- Mark-as-booked URL uses `http://localhost:8501/` (local-only app; no public URL to configure)
+
 ### Blockers / Open Questions
 
 - None currently.
 
 ### Next Action
 
-Begin Phase 7. Branch: `git checkout main && git pull && git checkout -b feature/phase-7-<description>`.
+Begin Phase 8. Branch: `git checkout main && git pull && git checkout -b feature/phase-8-<description>`.

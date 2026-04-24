@@ -8,9 +8,64 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Spec reference:** `trip_of_the_day_spec.md` is the authoritative specification. Do not modify it. If a situation is not covered by the spec, stop and ask before deciding.
 
+## Documentation Requirements
+
+**Docs are updated in the same commit as the code they describe — never deferred.**
+
+If you are about to commit code-only and any of the files below are stale, fix the docs first and include them in the same commit.
+
+### What to keep current
+
+| File | What to update |
+|---|---|
+| `CLAUDE.md` | Architecture decisions table (add a row for each new design choice), Key file map (add new modules and test files), Key types (reflect field changes), test count in the end-of-phase checklist |
+| `PROGRESS.md` | "Next Action" line after every logical unit of work; phase checklist (mark items done as you go, not in bulk at the end); add a new phase checklist section before starting that phase |
+| `README.md` | Module list in Project structure, Default preferences table, feature flags, any user-facing behavior change |
+
+### Triggers — update docs in the same commit when you:
+
+- Add a new module (`src/trip_a_day/*.py`) → add it to the Key file map in `CLAUDE.md` and Project structure in `README.md`
+- Add or rename a preference or env var → update the Architecture decisions table in `CLAUDE.md` and the Default preferences table in `README.md`
+- Change a public type (`CostBreakdown`, `TripCandidate`, etc.) → update Key types in `CLAUDE.md`
+- Add a new test file → add it to the Key file map in `CLAUDE.md` and update the test count
+- Make a behavioral change visible to the user → update `README.md` "What works now"
+- Complete a logical unit of work → update "Next Action" in `PROGRESS.md`
+
+### Spec (`trip_of_the_day_spec.md`)
+
+Read-only. Do not edit it. The only permitted change is updating a phase completion marker — and only when explicitly instructed to do so.
+
+### End-of-phase doc sweep
+
+The final commit of each phase must be a doc sweep that confirms all three files above are current. Check: phase header, test count, all new modules/preferences/types reflected, "Next Action" pointing to the next phase.
+
 ## Current phase
 
-**Phase 6 — Complete.** Region filtering (allowlist/blocklist), favorite-location radius filter, exclusion rules (previously-selected, booked), booked destination tracking. 101 unit tests passing.
+**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 155 tests passing (118 unit + 18 links + 9 imports + 2 smoke + 8 misc).
+
+**Phase 7b removed (user decision):** Phase 7b (real transit cost via routing API) was dropped because it adds external API dependencies (Rome2rio or Google Maps Distance Matrix) that complicate new-user setup without sufficient value over the IRS mileage estimate already implemented in Phase 7a.
+
+**Phase 7 additions (2026-04-19):**
+- `get_nearby_airports(home_iata, radius_miles, session)` in `fetcher.py`: haversine scan of enabled destinations within `search_radius_miles` of home.
+- `main.py` two-pass pipeline loops over `[home_airport] + nearby_airports`; computes `transport_usd = haversine × 2 × irs_mileage_rate` per nearby airport; accumulates candidates globally; winner is globally cheapest.
+- `CostBreakdown` gains `transport_usd: float = 0.0`; `build_cost_breakdown` accepts it as kwarg.
+- `TripCandidate` gains `departure_airport: str = ""`; notifier shows departure airport notice when winner departs from a non-home airport.
+- `ui.py` exposes `search_radius_miles` and `irs_mileage_rate` in Trip Configuration.
+- `db.py` adds `irs_mileage_rate` default (`"0.70"`) and `notifications_enabled` default (`"true"`).
+- Mock data banner in email and Streamlit UI (amber notice when `FLIGHT_DATA_MODE=mock`).
+- Notifications settings in UI: Resend sender mode indicator, `notifications_enabled` toggle, test email button. `main.py` checks `notifications_enabled` before sending.
+
+**Post-Phase-7 polish (2026-04-23):**
+- `src/trip_a_day/links.py`: centralised URL builders (`build_flight_url`, `build_hotel_url`, `build_car_url`). `fetcher.py` and `main.py` now import from here instead of building URLs inline.
+- `CostBreakdown.total` changed to computed `@property` (sum of components + transport_usd); `hotel_is_estimate: bool = False` field added.
+- `DEFAULT_PREFERENCES` public alias added to `db.py` for use in tests.
+- `min_hotel_stars` preference removed (meaningless with per-diem rates); documented in `CLAUDE.md` and `db.py`.
+- `preferred_hotel_site`, `preferred_car_site`, `preferred_hotel_site_manual_url`, `preferred_car_site_manual_url` preferences added to `db.py`; exposed in UI Booking Preferences section.
+- Favorite locations UI: replaced lat/lon textarea with city multiselect backed by `user_favorited` DB flag; `filters.py` `_filter_favorite_radius` reads DB instead of JSON pref.
+- `Trip` model: `booked`, `booked_at`, `manually_logged` columns added with idempotent migration.
+- Email footer: "✅ Mark as Booked" link via `_mark_booked_link_html/plain` helpers; `main.py` passes `trip_id` to notifier.
+- Trip History UI: URL query param handler for `?action=mark_booked&trip_id=N`; per-row action panel (mark booked, favorite, exclude/restore); "Log a Past Trip" form; Status column (✅/✈️/📝).
+- `tests/test_imports.py`, `tests/test_smoke.py`, `tests/test_links.py` added (29 new tests; 155 total).
 
 **Post-Phase 6 fixes (2026-04-19):**
 - Fixed 9 US airport city names in `data/seed_airports.json` to match GSA per diem table entries (e.g. IAD `"Washington DC"` → `"District of Columbia"`, restoring the $276/night GSA rate instead of the $150 North America fallback).
@@ -22,7 +77,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Launch UI:** `streamlit run ui.py`
 **Launch scheduler:** `python scheduler.py` (daily at time in `scheduled_run_time` pref, default 07:00 local)
 
-**Next: Phase 7.** Begin with `git checkout main && git pull && git checkout -b feature/phase-7-<description>`.
+**Next: Phase 8.** Begin with `git checkout main && git pull && git checkout -b feature/phase-8-<description>`.
 
 ## Development workflow
 
@@ -38,7 +93,8 @@ git checkout -b feature/<short-description>   # e.g. feature/phase-2-scheduling
 ```bash
 ruff check . && ruff format --check .   # must pass clean
 mypy src/                               # must pass clean
-pytest tests/unit/                      # must pass (101 tests, no API calls)
+pytest tests/unit/                      # must pass (no API calls)
+pytest tests/test_imports.py tests/test_smoke.py -v  # all import smoke tests pass
 python main.py                          # full live run — takes ~2 min (sweeps 95 airports)
 ```
 Fix any issues found and commit them. Then push and open a PR:
@@ -80,7 +136,7 @@ main.py
 ```
 
 **Key types:**
-- `CostBreakdown` (defined in `costs.py`) — flight, hotel, car, food, total, car_is_estimate
+- `CostBreakdown` (defined in `costs.py`) — flight, hotel, car, food, transport_usd, car_is_estimate, hotel_is_estimate; `total` is a computed `@property`
 - `TripCandidate` (defined in `ranker.py`) — full trip candidate with cost and metadata
 - Fetcher dataclasses (defined in `fetcher.py`): `FlightOffer`, `HotelOffer`, `FoodEstimate`, `AirportInfo`
 - SQLAlchemy ORM models (defined in `db.py`): `Preference`, `Destination`, `Trip`, `RunLog`, `ApiUsage`, `PriceCache`
@@ -108,6 +164,17 @@ main.py
 | City names in seed_airports.json match GSA per diem table | Exact-match lookup in `_lookup_per_diem` requires the city string to match; mismatches fell through to $150 regional fallback silently |
 | Domestic per diem fallback uses national average | State-code fallback can't fire without state codes in seed data; national average is more accurate than $150 for any domestic city miss |
 | Filters applied to full pool before `select_daily_batch` | Applying filters after selection meant a NA blocklist would reject the entire NA-heavy batch and trigger fallback; filtering first ensures the batch is drawn from the eligible set |
+| Multi-airport: shared destination batch, per-airport flight lookups | Re-running the same batch from each departure airport avoids double-counting destination query stats; only home airport updates `query_count`/`last_queried_at` |
+| Transport cost = `haversine × 2 × irs_mileage_rate` | Round-trip driving estimate; IRS rate is the standard US reimbursement rate and a reasonable proxy for marginal driving cost |
+| `get_nearby_airports` skipped entirely when `search_radius_miles == 0` | Early-exit avoids a DB scan for the common case; function still correctly returns `[]` for `radius <= 0` if called directly |
+| `CostBreakdown.total` is a computed `@property` | Prevents stale totals if individual fields change after construction; callers can't pass a wrong value |
+| `links.py` centralises all booking URL construction | `fetcher.py` and `main.py` both needed flight/hotel/car URLs; one place to update when URL patterns change |
+| `min_hotel_stars` preference removed | Hotel costs come from GSA per diem rates, not live hotel search — star rating filtering is meaningless in this context |
+| Favorite locations read from `user_favorited` DB flag, not JSON pref | JSON list required storing lat/lon manually; DB flag lets users select cities by name and keeps favourites in sync with the destination table |
+| Mark-as-booked URL uses `http://localhost:8501/` | trip-a-day is a local-only app; no public URL to configure. Streamlit reads `?action=mark_booked&trip_id=N` query params on page load |
+| Import smoke tests use `importlib` + `hasattr` | Direct `from module import Symbol` gets stripped by ruff as "unused import"; importlib pattern keeps assertions while avoiding the lint error |
+| `departure_airport` on `TripCandidate` | Lets the notifier and UI display which airport the winner departs from without re-deriving it from cost |
+| `notifications_enabled` preference | Allows disabling email without removing API keys; checked in `main.py` after the pipeline completes |
 
 ## Key file map
 
@@ -122,7 +189,8 @@ main.py
 | `src/trip_a_day/cache.py` | TTL-aware flight price cache: `get_cached_flight()`, `store_flight_cache()` |
 | `src/trip_a_day/costs.py` | `CostBreakdown` dataclass; `build_cost_breakdown()`; `lookup_car_cost()` |
 | `src/trip_a_day/ranker.py` | `TripCandidate` dataclass; `rank_trips()` with pluggable strategy |
-| `src/trip_a_day/notifier.py` | `send_trip_notification()` — Resend HTML email or stdout fallback |
+| `src/trip_a_day/notifier.py` | `send_trip_notification()` — Resend HTML email or stdout fallback; `send_test_email()` |
+| `src/trip_a_day/links.py` | URL builders: `build_flight_url`, `build_hotel_url`, `build_car_url` |
 | `car_rates.json` | Static regional daily car rental rate estimates (USD) |
 | `data/seed_airports.json` | 302 curated destination airports with lat/lon, region, subregion, price tier |
 | `data/per_diem_rates.json` | Merged GSA + State Dept per diem rates (1,377 locations) |
@@ -136,6 +204,12 @@ main.py
 | `tests/unit/test_fetcher_perdiem.py` | Per diem lookup fallback chain tests (7 tests incl. domestic national-average fallback) |
 | `tests/unit/test_fetcher_flights.py` | direct_only filtering tests |
 | `tests/unit/test_filters.py` | Region allowlist/blocklist, favorite-radius, exclusion rule tests (16 tests) |
+| `tests/unit/test_fetcher_nearby.py` | `get_nearby_airports` haversine radius tests (9 tests) |
+| `tests/unit/test_costs_transport.py` | `transport_usd` field on `CostBreakdown` (6 tests) |
+| `tests/unit/test_multi_airport.py` | Multi-airport pipeline smoke tests (2 tests) |
+| `tests/test_links.py` | URL builder tests for all three `links.py` functions (18 tests) |
+| `tests/test_imports.py` | importlib-based public symbol existence checks for all 9 modules (9 tests) |
+| `tests/test_smoke.py` | `CostBreakdown` instantiation + `DEFAULT_PREFERENCES` key coverage (2 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
 
 ## Environment setup
@@ -170,3 +244,24 @@ python main.py
 - Per diem lodging is a government rate (typically 3-star level); actual 4-star costs may be higher. This is noted in the hotel booking note.
 - Google Flights occasionally fails for specific routes (returns no data); those destinations are silently skipped.
 - Mock flight prices are static fixtures; they don't reflect real market prices or trends.
+
+## Branch Convention
+
+Each phase gets its own branch: `feature/phase-5`, `feature/phase-6`, etc.
+Branch is created from `main` at the start of the phase.
+All commits for a phase go on that branch.
+Phase is merged to `main` only when complete and all tests pass.
+Never commit directly to `main`.
+If a session starts and no phase branch exists yet, create it before writing any code.
+
+## Interrupted Session Recovery
+
+If a Claude Code session ends unexpectedly mid-phase:
+1. Start a new session
+2. Run: `git status`, `git branch -a`, `git log --oneline -10`
+3. If on a detached HEAD or wrong branch: do NOT commit anything yet — sort the branch first
+4. Read `CLAUDE.md`, then `PROGRESS.md`
+5. Resume from the "Next Action" line in `PROGRESS.md` exactly
+6. If "Next Action" is ambiguous, read the last commit message for context
+7. Never cherry-pick unless explicitly instructed to do so
+8. If in doubt about branch state, ask before proceeding

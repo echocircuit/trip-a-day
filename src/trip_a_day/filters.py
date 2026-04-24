@@ -7,7 +7,6 @@ falls back to the unfiltered pool and sets filter_fallback=True.
 
 from __future__ import annotations
 
-import contextlib
 import json
 from datetime import date, timedelta
 
@@ -32,7 +31,7 @@ def apply_destination_filters(
 
     filtered = _filter_region_allowlist(filtered, prefs)
     filtered = _filter_region_blocklist(filtered, prefs)
-    filtered = _filter_favorite_radius(filtered, prefs)
+    filtered = _filter_favorite_radius(filtered, session, prefs)
     filtered = _filter_exclude_previously_selected(filtered, session, prefs)
     filtered = _filter_exclude_booked(filtered, prefs)
 
@@ -76,24 +75,24 @@ def _filter_region_blocklist(
 
 
 def _filter_favorite_radius(
-    pool: list[Destination], prefs: dict[str, str]
+    pool: list[Destination],
+    session: Session,
+    prefs: dict[str, str],
 ) -> list[Destination]:
     radius = int(prefs.get("favorite_radius_miles", "0") or "0")
     if radius <= 0:
         return pool
 
-    locations = _parse_json_list(prefs, "favorite_locations")
-    if not locations:
-        return pool
-
-    # Each location is {"lat": float, "lon": float}
-    parsed: list[tuple[float, float]] = []
-    for loc in locations:
-        if isinstance(loc, dict) and "lat" in loc and "lon" in loc:
-            with contextlib.suppress(ValueError, TypeError):
-                parsed.append((float(loc["lat"]), float(loc["lon"])))
-
-    if not parsed:
+    # Use destinations marked as favorites (user_favorited=True) for their coordinates.
+    favorited = (
+        session.query(Destination).filter(Destination.user_favorited.is_(True)).all()
+    )
+    anchors = [
+        (d.latitude, d.longitude)
+        for d in favorited
+        if d.latitude is not None and d.longitude is not None
+    ]
+    if not anchors:
         return pool
 
     def _within_radius(dest: Destination) -> bool:
@@ -101,7 +100,7 @@ def _filter_favorite_radius(
             return False
         return any(
             haversine_miles(lat, lon, dest.latitude, dest.longitude) <= radius
-            for lat, lon in parsed
+            for lat, lon in anchors
         )
 
     return [d for d in pool if _within_radius(d)]
