@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import re
 from datetime import date
 
 import pytest
@@ -14,6 +16,15 @@ _CHECKIN = date(2026, 6, 15)
 _CHECKOUT = date(2026, 6, 22)
 
 
+def _decode_tfs(url: str) -> str:
+    """Extract and base64-decode the tfs= parameter from a Google Flights URL."""
+    m = re.search(r"[?&]tfs=([^&]+)", url)
+    assert m, f"No tfs= parameter found in URL: {url}"
+    b64 = m.group(1)
+    raw = base64.b64decode(b64 + "==")  # pad to be safe
+    return raw.decode("latin-1")
+
+
 class TestBuildFlightUrl:
     def test_returns_nonempty_string(self):
         url = build_flight_url("HSV", "CDG", _DEPART, _RETURN)
@@ -21,65 +32,58 @@ class TestBuildFlightUrl:
 
     def test_contains_google_flights_domain(self):
         url = build_flight_url("HSV", "CDG", _DEPART, _RETURN)
-        assert "google.com/flights" in url
+        assert "google.com/travel/flights" in url
 
-    def test_contains_origin_and_destination(self):
+    def test_uses_tfs_parameter(self):
         url = build_flight_url("HSV", "CDG", _DEPART, _RETURN)
-        assert "HSV" in url
-        assert "CDG" in url
+        assert "tfs=" in url
 
-    def test_contains_dates(self):
+    def test_old_flt_fragment_not_used(self):
         url = build_flight_url("HSV", "CDG", _DEPART, _RETURN)
-        assert "2026-06-15" in url
-        assert "2026-06-22" in url
+        assert "#flt=" not in url
 
-    def test_no_airline_iata_omits_airline_param(self):
+    def test_tfs_contains_origin(self):
+        decoded = _decode_tfs(build_flight_url("HSV", "CDG", _DEPART, _RETURN))
+        assert "HSV" in decoded
+
+    def test_tfs_contains_destination(self):
+        decoded = _decode_tfs(build_flight_url("HSV", "CDG", _DEPART, _RETURN))
+        assert "CDG" in decoded
+
+    def test_tfs_contains_depart_date(self):
+        decoded = _decode_tfs(build_flight_url("HSV", "CDG", _DEPART, _RETURN))
+        assert "2026-06-15" in decoded
+
+    def test_tfs_contains_return_date(self):
+        decoded = _decode_tfs(build_flight_url("HSV", "CDG", _DEPART, _RETURN))
+        assert "2026-06-22" in decoded
+
+    def test_url_includes_hl_en(self):
         url = build_flight_url("HSV", "CDG", _DEPART, _RETURN)
-        assert ";a:" not in url
+        assert "hl=en" in url
 
-    def test_airline_iata_appended_when_provided(self):
-        url = build_flight_url("HSV", "CDG", _DEPART, _RETURN, airline_iata="DL")
-        assert ";a:DL" in url
-
-    def test_hash_is_literal_not_encoded(self):
+    def test_url_includes_curr_usd(self):
         url = build_flight_url("HSV", "CDG", _DEPART, _RETURN)
-        assert "#flt=" in url
-        assert "%23" not in url
+        assert "curr=USD" in url
 
-    def test_asterisk_is_literal_not_encoded(self):
-        url = build_flight_url("HSV", "CDG", _DEPART, _RETURN)
-        assert "*" in url
-        assert "%2A" not in url
+    def test_different_airports_produce_different_urls(self):
+        url1 = build_flight_url("HSV", "CDG", _DEPART, _RETURN)
+        url2 = build_flight_url("HSV", "NRT", _DEPART, _RETURN)
+        assert url1 != url2
 
-    def test_airline_omitted_when_none(self):
-        url = build_flight_url("HSV", "CDG", _DEPART, _RETURN, airline_iata=None)
-        assert ";a:" not in url
+    def test_different_dates_produce_different_urls(self):
+        url1 = build_flight_url("HSV", "CDG", _DEPART, _RETURN)
+        url2 = build_flight_url("HSV", "CDG", date(2026, 7, 1), date(2026, 7, 8))
+        assert url1 != url2
 
-    def test_airline_omitted_when_empty_string(self):
-        url = build_flight_url("HSV", "CDG", _DEPART, _RETURN, airline_iata="")
-        assert ";a:" not in url
+    def test_adults_and_children_default_accepted(self):
+        url = build_flight_url("HSV", "CDG", _DEPART, _RETURN, adults=2, children=2)
+        assert url and isinstance(url, str)
 
-    def test_airline_omitted_when_not_two_chars(self):
-        url = build_flight_url(
-            "HSV",
-            "CDG",
-            _DEPART,
-            _RETURN,
-            airline_iata="American Airlines operated by Skywest",
-        )
-        assert ";a:" not in url
-
-    def test_airline_omitted_when_three_chars(self):
-        url = build_flight_url("HSV", "CDG", _DEPART, _RETURN, airline_iata="DAL")
-        assert ";a:" not in url
-
-    def test_alphanumeric_two_char_airline_accepted(self):
-        url = build_flight_url("HSV", "CDG", _DEPART, _RETURN, airline_iata="B6")
-        assert ";a:B6" in url
-
-    def test_airline_normalized_to_uppercase(self):
-        url = build_flight_url("HSV", "CDG", _DEPART, _RETURN, airline_iata="dl")
-        assert ";a:DL" in url
+    def test_tfs_changes_with_passenger_count(self):
+        url1 = build_flight_url("HSV", "CDG", _DEPART, _RETURN, adults=1, children=0)
+        url2 = build_flight_url("HSV", "CDG", _DEPART, _RETURN, adults=2, children=2)
+        assert url1 != url2
 
 
 class TestBuildHotelUrl:

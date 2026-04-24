@@ -68,7 +68,7 @@ def test_get_flight_offers_returns_offer_or_none(test_session):
         assert result.price_total > 0
         assert result.origin == "ATL"
         assert result.destination == "LHR"
-        assert "google.com/flights" in result.booking_url
+        assert "google.com/travel/flights" in result.booking_url
 
 
 @pytest.mark.integration

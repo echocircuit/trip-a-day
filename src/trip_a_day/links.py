@@ -4,12 +4,18 @@ All URL construction lives here. notifier.py and main.py call these functions;
 they never build booking URLs directly.
 
 URL patterns verified 2026-04-24:
-  google_flights : ✓ origin, destination, and dates pre-filled correctly
+  google_flights : ✓ tfs= protobuf format — origin, destination, and dates
+                     embedded in Base64 protobuf; pre-fills correctly in browser
   google_hotels  : ✓  (Google Travel Hotels search with checkin/checkout params)
   booking_com    : ✓  (Booking.com searchresults with split date params)
   expedia_hotels : ✓  (Expedia Hotel-Search with MM/DD/YYYY dates)
   kayak          : ✓  (Kayak /cars/{IATA}/{date-10h}/{date-10h} pattern)
   expedia_cars   : ✓  (Expedia carsearch with MM/DD/YYYY dates)
+
+Google Flights note: The old #flt= URL fragment format stopped working around
+2020 when Google migrated to Base64-encoded protobuf ?tfs= parameters. The tfs=
+value encodes origin, destination, dates, and passenger counts inside a protobuf
+binary; airport codes and ISO dates are verifiable by base64-decoding the blob.
 """
 
 from __future__ import annotations
@@ -17,20 +23,7 @@ from __future__ import annotations
 from datetime import date
 from urllib.parse import quote_plus
 
-
-def _valid_airline_iata(code: str | None) -> str | None:
-    """Return *code* if it is a valid 2-character airline IATA code, else None.
-
-    Airline IATA codes are exactly 2 alphanumeric characters (e.g. "AA", "B6").
-    Anything longer (e.g. a full airline name from the fast-flights library) would
-    corrupt the Google Flights #flt= fragment and prevent pre-filling.
-    """
-    if not code:
-        return None
-    code = code.strip().upper()
-    if len(code) == 2 and code.isalnum():
-        return code
-    return None
+from fast_flights import FlightData, Passengers, TFSData
 
 
 def build_flight_url(
@@ -38,27 +31,34 @@ def build_flight_url(
     destination: str,
     depart_date: date,
     return_date: date,
-    airline_iata: str | None = None,
+    adults: int = 1,
+    children: int = 0,
 ) -> str:
     """Return a Google Flights deep link for the given round-trip.
 
-    The # and * in the fragment must remain literal — do not URL-encode them.
-    Format: https://www.google.com/flights?hl=en#flt={orig}.{dest}.{dep}*{dest}.{orig}.{ret};c:USD;e:1;sd:1;t:f
-
-    Appends ;a:{code} only when *airline_iata* is a valid 2-char IATA code.
-    A malformed airline code in the fragment causes Google Flights JS to fail
-    parsing the entire #flt= value, showing no pre-filled search.
+    Uses the ?tfs= protobuf format — the only format Google Flights currently
+    supports for pre-filled deep links. The tfs= value is Base64-encoded and
+    embeds origin, destination, dates, and passenger counts.
     """
-    d = depart_date.isoformat()
-    r = return_date.isoformat()
-    params = ";c:USD;e:1;sd:1;t:f"
-    valid_airline = _valid_airline_iata(airline_iata)
-    if valid_airline:
-        params += f";a:{valid_airline}"
-    return (
-        f"https://www.google.com/flights?hl=en"
-        f"#flt={origin}.{destination}.{d}*{destination}.{origin}.{r}{params}"
+    tfs = TFSData.from_interface(
+        flight_data=[
+            FlightData(
+                date=depart_date.isoformat(),
+                from_airport=origin,
+                to_airport=destination,
+            ),
+            FlightData(
+                date=return_date.isoformat(),
+                from_airport=destination,
+                to_airport=origin,
+            ),
+        ],
+        trip="round-trip",
+        passengers=Passengers(adults=adults, children=children),
+        seat="economy",
     )
+    b64 = tfs.as_b64().decode()
+    return f"https://www.google.com/travel/flights?tfs={b64}&hl=en&curr=USD"
 
 
 def build_hotel_url(
