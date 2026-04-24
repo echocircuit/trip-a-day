@@ -562,6 +562,7 @@ def run(triggered_by: str = "manual") -> None:
                 filter_fallback=filter_fallback,
                 is_mock=is_mock,
                 home_airport=home_airport,
+                trip_id=winner_trip_id,
             )
             if notified:
                 winner_row = session.get(Trip, winner_trip_id)

@@ -121,6 +121,9 @@ class Trip(Base):
     selected: Mapped[bool] = mapped_column(Boolean, default=False)
     notified: Mapped[bool] = mapped_column(Boolean, default=False)
     car_cost_is_estimate: Mapped[bool] = mapped_column(Boolean, default=True)
+    booked: Mapped[bool] = mapped_column(Boolean, default=False)
+    booked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    manually_logged: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class RunLog(Base):
@@ -222,6 +225,13 @@ _RUN_LOG_NEW_COLUMNS: list[tuple[str, str]] = [
     ("filter_fallback", "BOOLEAN DEFAULT 0"),
 ]
 
+# trips columns added via ALTER TABLE migration (idempotent).
+_TRIP_NEW_COLUMNS: list[tuple[str, str]] = [
+    ("booked", "BOOLEAN DEFAULT 0"),
+    ("booked_at", "DATETIME"),
+    ("manually_logged", "BOOLEAN DEFAULT 0"),
+]
+
 
 def _migrate_schema() -> None:
     """Add any new columns to existing tables via ALTER TABLE (idempotent)."""
@@ -242,6 +252,10 @@ def _migrate_schema() -> None:
                 conn.execute(
                     text(f"ALTER TABLE run_log ADD COLUMN {col_name} {col_def}")
                 )
+        trip_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(trips)"))}
+        for col_name, col_def in _TRIP_NEW_COLUMNS:
+            if col_name not in trip_cols:
+                conn.execute(text(f"ALTER TABLE trips ADD COLUMN {col_name} {col_def}"))
         conn.commit()
 
 

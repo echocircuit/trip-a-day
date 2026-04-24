@@ -723,11 +723,51 @@ _PAGE_SIZE = 50
 def _trip_history() -> None:
     st.title("Trip History")
 
+    # ── Handle ?action=mark_booked&trip_id=N from email footer link ───────────
+    params = st.query_params
+    if params.get("action") == "mark_booked":
+        raw_id = params.get("trip_id", "")
+        try:
+            email_trip_id = int(raw_id)
+        except (ValueError, TypeError):
+            email_trip_id = None
+        if email_trip_id is not None:
+            with SessionFactory() as s:
+                trip_row = s.get(Trip, email_trip_id)
+                if trip_row and not trip_row.booked:
+                    d = s.get(Destination, trip_row.destination_iata)
+                    label = (
+                        f"{d.city}, {d.country} ({trip_row.destination_iata})"
+                        if d
+                        else trip_row.destination_iata
+                    )
+                    st.success(
+                        f"✅ Ready to mark **{label}** (Trip #{email_trip_id}) as booked."
+                    )
+                    if st.button("Confirm — Mark as Booked", key="email_confirm_book"):
+                        trip_row.booked = True
+                        trip_row.booked_at = datetime.now(UTC)
+                        dest = s.get(Destination, trip_row.destination_iata)
+                        if dest:
+                            dest.user_booked = True
+                        s.commit()
+                        st.query_params.clear()
+                        st.success("Marked as booked!")
+                        st.rerun()
+                elif trip_row and trip_row.booked:
+                    st.info(f"Trip #{email_trip_id} is already marked as booked.")
+                    st.query_params.clear()
+                else:
+                    st.warning(f"Trip #{email_trip_id} not found.")
+                    st.query_params.clear()
+            st.divider()
+
     with SessionFactory() as s:
         total = s.query(Trip).count()
 
     if total == 0:
         st.info("No trip history yet.")
+        _log_past_trip_section()
         return
 
     total_pages = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
@@ -744,33 +784,150 @@ def _trip_history() -> None:
             .limit(_PAGE_SIZE)
             .all()
         )
-        rows = []
+        trip_data: list[tuple[Trip, str, str]] = []
         for t in trips:
             d = s.get(Destination, t.destination_iata)
             city = d.city if d else t.destination_iata
             country = d.country if d else ""
-            rows.append(
-                {
-                    "Date": str(t.run_date),
-                    "Destination": f"{city}, {country}",
-                    "Rank": t.rank if t.rank is not None else "—",
-                    "Selected": "🏆" if t.selected else "",
-                    "Flights": f"${t.flight_cost_usd:,.0f}",
-                    "Hotel": f"${t.hotel_cost_usd:,.0f}",
-                    "Car": f"${t.car_cost_usd:,.0f}",
-                    "Food": f"${t.food_cost_usd:,.0f}",
-                    "Total": f"${t.total_cost_usd:,.0f}",
-                }
-            )
+            trip_data.append((t, city, country))
+
+    rows = []
+    for t, city, country in trip_data:
+        booked_icon = "✅" if t.booked else ("✈️" if t.selected else "")
+        rows.append(
+            {
+                "ID": t.id,
+                "Date": str(t.run_date),
+                "Destination": f"{city}, {country}",
+                "Rank": t.rank if t.rank is not None else "—",
+                "Status": booked_icon,
+                "Flights": f"${t.flight_cost_usd:,.0f}",
+                "Hotel": f"${t.hotel_cost_usd:,.0f}",
+                "Car": f"${t.car_cost_usd:,.0f}",
+                "Food": f"${t.food_cost_usd:,.0f}",
+                "Total": f"${t.total_cost_usd:,.0f}",
+                "Manual": "📝" if t.manually_logged else "",
+            }
+        )
 
     lo = offset + 1
     hi = min(offset + _PAGE_SIZE, total)
     st.caption(
-        f"Showing {lo}-{hi} of {total} trips  -  Page {page_num} of {total_pages}"
+        f"Showing {lo}-{hi} of {total} trips  |  Page {page_num} of {total_pages}"
+        "  ·  ✅ = booked  ✈️ = selected  📝 = manually logged"
     )
     st.dataframe(rows, use_container_width=True, hide_index=True)
 
-    # ── Mark as Booked ────────────────────────────────────────────────────────
+    # ── Action panel: pick a trip by ID ───────────────────────────────────────
+    st.divider()
+    st.subheader("Trip Actions")
+    trip_ids = [t.id for t, _, _ in trip_data]
+    selected_id = st.selectbox(
+        "Select trip",
+        options=trip_ids,
+        format_func=lambda tid: next(
+            (
+                f"#{tid} — {city}, {country} ({t.run_date!s})"
+                for t, city, country in trip_data
+                if t.id == tid
+            ),
+            str(tid),
+        ),
+        index=None,
+        placeholder="Choose a trip to act on…",
+        key="action_trip_select",
+    )
+
+    if selected_id is not None:
+        with SessionFactory() as s:
+            action_trip = s.get(Trip, selected_id)
+            action_dest = (
+                s.get(Destination, action_trip.destination_iata)
+                if action_trip
+                else None
+            )
+            is_booked = action_trip.booked if action_trip else False
+            is_favorited = action_dest.user_favorited if action_dest else False
+            is_excluded = action_dest.excluded if action_dest else False
+            dest_label = (
+                f"{action_dest.city}, {action_dest.country}"
+                if action_dest
+                else (action_trip.destination_iata if action_trip else "?")
+            )
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if is_booked:
+                st.success(f"✅ {dest_label} already booked")
+                if st.button("Unmark as Booked", key="action_unbook"):
+                    with SessionFactory() as s:
+                        t2 = s.get(Trip, selected_id)
+                        if t2:
+                            t2.booked = False
+                            t2.booked_at = None
+                        d2 = s.get(Destination, t2.destination_iata) if t2 else None
+                        if d2:
+                            d2.user_booked = False
+                        s.commit()
+                    st.rerun()
+            else:
+                if st.button("✅ Mark as Booked", key="action_book"):
+                    with SessionFactory() as s:
+                        t2 = s.get(Trip, selected_id)
+                        if t2:
+                            t2.booked = True
+                            t2.booked_at = datetime.now(UTC)
+                        d2 = s.get(Destination, t2.destination_iata) if t2 else None
+                        if d2:
+                            d2.user_booked = True
+                        s.commit()
+                    st.success(f"✅ {dest_label} marked as booked!")
+                    st.rerun()
+
+        with col2:
+            fav_label = (
+                "★ Unfavorite destination" if is_favorited else "☆ Favorite destination"
+            )
+            if st.button(fav_label, key="action_fav"):
+                with SessionFactory() as s:
+                    d2 = (
+                        s.get(Destination, action_dest.iata_code)
+                        if action_dest
+                        else None
+                    )
+                    if d2:
+                        d2.user_favorited = not is_favorited
+                        s.commit()
+                st.rerun()
+
+        with col3:
+            excl_label = (
+                "↩ Restore destination" if is_excluded else "🚫 Exclude destination"
+            )
+            if st.button(excl_label, key="action_excl"):
+                with SessionFactory() as s:
+                    d2 = (
+                        s.get(Destination, action_dest.iata_code)
+                        if action_dest
+                        else None
+                    )
+                    if d2:
+                        if is_excluded:
+                            d2.excluded = False
+                            d2.excluded_at = None
+                            d2.exclusion_note = None
+                        else:
+                            d2.excluded = True
+                            d2.excluded_at = datetime.now(UTC)
+                            d2.exclusion_note = "Excluded from Trip History"
+                        s.commit()
+                st.rerun()
+
+    # ── Log a Past Trip ───────────────────────────────────────────────────────
+    st.divider()
+    _log_past_trip_section()
+
+    # ── Mark Destination as Booked (bulk) ─────────────────────────────────────
     st.divider()
     st.subheader("Mark Destination as Booked")
     st.caption(
@@ -798,7 +955,7 @@ def _trip_history() -> None:
             index=None,
             placeholder="Select a destination…",
         )
-        if st.button("Mark as Booked") and book_iata:
+        if st.button("Mark as Booked", key="bulk_book_btn") and book_iata:
             with SessionFactory() as s:
                 d = s.get(Destination, book_iata)
                 if d:
@@ -816,7 +973,7 @@ def _trip_history() -> None:
                 format_func=lambda k: dest_labels.get(k, k),
                 key="unbook_dest_select",
             )
-            if st.button("Unmark as Booked") and unbook_iata:
+            if st.button("Unmark as Booked", key="bulk_unbook_btn") and unbook_iata:
                 with SessionFactory() as s:
                     d = s.get(Destination, unbook_iata)
                     if d:
@@ -826,6 +983,87 @@ def _trip_history() -> None:
                 st.rerun()
         else:
             st.info("No destinations currently marked as booked.")
+
+
+def _log_past_trip_section() -> None:
+    """Form to manually log a past trip (booked=True, manually_logged=True)."""
+    st.subheader("📝 Log a Past Trip")
+    st.caption("Record a trip you've already taken or booked outside of trip-a-day.")
+
+    with SessionFactory() as s:
+        all_dests: list[Destination] = (
+            s.query(Destination).order_by(Destination.city).all()
+        )
+    dest_options = [d.iata_code for d in all_dests]
+    dest_fmt = {
+        d.iata_code: f"{d.city or d.iata_code}, {d.country or ''} ({d.iata_code})"
+        for d in all_dests
+    }
+
+    with st.form("log_past_trip_form"):
+        log_iata = st.selectbox(
+            "Destination",
+            options=dest_options,
+            format_func=lambda k: dest_fmt.get(k, k),
+            index=None,
+            placeholder="Search by city or IATA…",
+            key="log_dest_select",
+        )
+        col_d1, col_d2 = st.columns(2)
+        with col_d1:
+            log_depart = st.date_input("Departure date", value=None, key="log_depart")
+        with col_d2:
+            log_return = st.date_input("Return date", value=None, key="log_return")
+        log_flights = st.number_input(
+            "Flight cost (USD, optional)",
+            min_value=0.0,
+            value=0.0,
+            step=10.0,
+            key="log_flights",
+        )
+        st.text_area("Notes (optional)", key="log_notes", height=80)
+        submitted = st.form_submit_button("Log Trip")
+
+    if submitted:
+        if not log_iata:
+            st.error("Please select a destination.")
+        elif not log_depart or not log_return:
+            st.error("Please select both departure and return dates.")
+        elif log_return <= log_depart:
+            st.error("Return date must be after departure date.")
+        else:
+            with SessionFactory() as s:
+                nights = (log_return - log_depart).days
+                new_trip = Trip(
+                    run_date=date.today(),
+                    destination_iata=log_iata,
+                    departure_date=log_depart,
+                    return_date=log_return,
+                    flight_cost_usd=log_flights,
+                    hotel_cost_usd=0.0,
+                    car_cost_usd=0.0,
+                    food_cost_usd=0.0,
+                    total_cost_usd=log_flights,
+                    distance_miles=0.0,
+                    rank=None,
+                    selected=False,
+                    notified=False,
+                    car_cost_is_estimate=False,
+                    booked=True,
+                    booked_at=datetime.now(UTC),
+                    manually_logged=True,
+                )
+                s.add(new_trip)
+                dest = s.get(Destination, log_iata)
+                if dest:
+                    dest.user_booked = True
+                s.commit()
+            label = dest_fmt.get(log_iata, log_iata)
+            st.success(
+                f"✅ Logged {nights}-night trip to {label} "
+                f"({log_depart} → {log_return})."
+            )
+            st.rerun()
 
 
 # ── routing ────────────────────────────────────────────────────────────────────
