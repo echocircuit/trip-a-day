@@ -219,6 +219,7 @@ def run(triggered_by: str = "manual") -> None:
         # ── Two-pass search across all departure airports ─────────────────────
         flights_calls_start = get_api_calls_today(session, "google_flights")
         live_calls_made = 0
+        cache_hits = 0
         now_utc = datetime.now(UTC)
         all_candidates: list[TripCandidate] = []
         any_pass1_prices = False
@@ -279,6 +280,7 @@ def run(triggered_by: str = "manual") -> None:
 
                 if hit is not None:
                     pass1_prices[iata] = hit.price_usd
+                    cache_hits += 1
                     logger.info(
                         "  [cache] %s→%s — $%.0f", dep_iata, iata, hit.price_usd
                     )
@@ -509,10 +511,12 @@ def run(triggered_by: str = "manual") -> None:
                     run_at=datetime.now(UTC),
                     status="failed",
                     triggered_by=triggered_by,
-                    destinations_evaluated=0,
+                    destinations_evaluated=len(batch),
                     error_message="Pass 1 returned no prices",
                     duration_seconds=duration,
                     api_calls_flights=live_calls_made,
+                    cache_hits_flights=cache_hits,
+                    destinations_excluded=len(invalid_exclusions),
                 )
             )
             session.commit()
@@ -525,10 +529,12 @@ def run(triggered_by: str = "manual") -> None:
                     run_at=datetime.now(UTC),
                     status="failed",
                     triggered_by=triggered_by,
-                    destinations_evaluated=0,
+                    destinations_evaluated=len(batch),
                     error_message="No valid candidates after Pass 2",
                     duration_seconds=duration,
                     api_calls_flights=flights_calls_this_run,
+                    cache_hits_flights=cache_hits,
+                    destinations_excluded=len(invalid_exclusions),
                 )
             )
             session.commit()
@@ -569,15 +575,25 @@ def run(triggered_by: str = "manual") -> None:
                 len(invalid_exclusions),
                 ", ".join(f"{e['city']} ({e['iata']})" for e in invalid_exclusions),
             )
+        run_summary = (
+            f"Run complete: {len(batch)} destinations evaluated, "
+            f"{flights_calls_this_run} live API calls, "
+            f"{cache_hits} cache hits, "
+            f"{len(invalid_exclusions)} excluded (invalid data)"
+        )
+        logger.info(run_summary)
+
         session.add(
             RunLog(
                 run_at=datetime.now(UTC),
                 status="success",
                 triggered_by=triggered_by,
-                destinations_evaluated=len(all_candidates),
+                destinations_evaluated=len(batch),
                 winner_trip_id=winner_trip_id,
                 duration_seconds=duration,
                 api_calls_flights=flights_calls_this_run,
+                cache_hits_flights=cache_hits,
+                destinations_excluded=len(invalid_exclusions),
                 filter_fallback=filter_fallback,
                 invalid_data_exclusions=exclusions_json,
             )
@@ -605,11 +621,7 @@ def run(triggered_by: str = "manual") -> None:
                     winner_row.notified = True
                 session.commit()
 
-    logger.info(
-        "Run complete in %.1fs. Evaluated %d Pass-2 candidates.",
-        duration,
-        len(all_candidates),
-    )
+    logger.info("Finished in %.1fs.", duration)
 
 
 if __name__ == "__main__":
