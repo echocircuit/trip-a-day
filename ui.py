@@ -36,6 +36,7 @@ from trip_a_day.db import (
     init_db,
     seed_preferences,
 )
+from trip_a_day.fetcher import get_airport_city
 from trip_a_day.notifier import send_test_email
 from trip_a_day.preferences import get_all, set_pref
 from trip_a_day.selector import STRATEGY_LABELS
@@ -97,7 +98,9 @@ def _dashboard() -> None:
         )
 
     with SessionFactory() as _s:
-        _notifs_enabled = get_all(_s).get("notifications_enabled", "true") == "true"
+        _prefs = get_all(_s)
+        _notifs_enabled = _prefs.get("notifications_enabled", "true") == "true"
+        _home_airport = _prefs.get("home_airport", "HSV")
     if not _notifs_enabled:
         st.info("🔕 Notifications disabled — email will not be sent after runs.")
 
@@ -194,6 +197,14 @@ def _dashboard() -> None:
             f"Run date: {winner.run_date} · "
             f"Depart {winner.departure_date} → Return {winner.return_date} ({nights} nights)"
         )
+
+        dep_iata = getattr(winner, "departure_iata", None)
+        if dep_iata:
+            dep_city = get_airport_city(dep_iata)
+            dep_label = dep_iata if dep_city == dep_iata else f"{dep_city} ({dep_iata})"
+            if dep_iata != _home_airport:
+                dep_label += f"  ⚠️ Not your home airport ({_home_airport})"
+            st.caption(f"Departing from: {dep_label}")
 
         c1, c2, c3, c4, c5 = st.columns(5)
         flights_label = "✈️ Flights" + (" ⚠️ mock" if _is_mock_mode() else "")
@@ -818,11 +829,18 @@ def _trip_history() -> None:
     rows = []
     for t, city, country in trip_data:
         booked_icon = "✅" if t.booked else ("✈️" if t.selected else "")
+        dep_iata = getattr(t, "departure_iata", None)
+        if dep_iata:
+            dep_city = get_airport_city(dep_iata)
+            dep_col = dep_iata if dep_city == dep_iata else f"{dep_city} ({dep_iata})"
+        else:
+            dep_col = "—"
         rows.append(
             {
                 "ID": t.id,
                 "Date": str(t.run_date),
                 "Destination": f"{city}, {country}",
+                "Departs": dep_col,
                 "Rank": t.rank if t.rank is not None else "—",
                 "Status": booked_icon,
                 "Flights": f"${t.flight_cost_usd:,.0f}",
@@ -878,6 +896,20 @@ def _trip_history() -> None:
                 if action_dest
                 else (action_trip.destination_iata if action_trip else "?")
             )
+            action_dep_iata = (
+                getattr(action_trip, "departure_iata", None) if action_trip else None
+            )
+
+        if action_dep_iata:
+            dep_city = get_airport_city(action_dep_iata)
+            dep_detail = (
+                action_dep_iata
+                if dep_city == action_dep_iata
+                else f"{dep_city} ({action_dep_iata})"
+            )
+            st.caption(f"Departing from: {dep_detail}")
+        else:
+            st.caption("Departing from: —")
 
         col1, col2, col3 = st.columns(3)
         with col1:
