@@ -12,7 +12,6 @@ Usage:
 
 from __future__ import annotations
 
-import contextlib
 import json
 import subprocess
 import sys
@@ -227,6 +226,17 @@ def _preferences() -> None:
 
     with SessionFactory() as s:
         prefs = get_all(s)
+        # Load destinations for favorite-city multiselect
+        _all_dests_for_fav: list[Destination] = (
+            s.query(Destination).order_by(Destination.city).all()
+        )
+        _fav_dest_labels = {
+            d.iata_code: f"{d.city or d.iata_code}, {d.country or ''} ({d.iata_code})"
+            for d in _all_dests_for_fav
+        }
+        _currently_favorited_iatas = [
+            d.iata_code for d in _all_dests_for_fav if d.user_favorited
+        ]
 
     def _int(key: str, default: int) -> int:
         try:
@@ -404,18 +414,15 @@ def _preferences() -> None:
         )
         st.markdown("**Favorite-location radius**")
         st.caption(
-            "Enter one location per line as `lat,lon` (e.g. `48.8566,2.3522` for Paris). "
-            "Only destinations within the radius below will be considered."
+            "Select cities to use as favorites. Only destinations within the radius below "
+            "will be considered when favorites are set. Selected cities are shown as chips."
         )
-        raw_locs = _parse_json_pref(prefs, "favorite_locations")
-        fav_locs_text = st.text_area(
-            "Favorite locations (lat,lon — one per line)",
-            value="\n".join(
-                f"{loc['lat']},{loc['lon']}"
-                for loc in raw_locs
-                if isinstance(loc, dict)
-            ),
-            height=80,
+        fav_city_iatas = st.multiselect(
+            "Favorite cities",
+            options=list(_fav_dest_labels.keys()),
+            default=_currently_favorited_iatas,
+            format_func=lambda k: _fav_dest_labels.get(k, k),
+            placeholder="Search by city or IATA code…",
         )
         fav_radius = st.number_input(
             "Favorite radius (miles, 0 = disabled)",
@@ -521,17 +528,11 @@ def _preferences() -> None:
             set_pref(s, "two_pass_candidate_count", str(int(two_pass_count)))
             set_pref(s, "region_allowlist", json.dumps(region_allowlist_val))
             set_pref(s, "region_blocklist", json.dumps(region_blocklist_val))
-            # Parse fav_locs_text: "lat,lon" lines -> [{"lat":..., "lon":...}]
-            parsed_locs = []
-            for line in fav_locs_text.splitlines():
-                parts = line.strip().split(",")
-                if len(parts) == 2:
-                    with contextlib.suppress(ValueError):
-                        parsed_locs.append(
-                            {"lat": float(parts[0]), "lon": float(parts[1])}
-                        )
-            set_pref(s, "favorite_locations", json.dumps(parsed_locs))
             set_pref(s, "favorite_radius_miles", str(int(fav_radius)))
+            # Update user_favorited flag on all destinations to match multiselect
+            selected_iatas = set(fav_city_iatas)
+            for d in s.query(Destination).all():
+                d.user_favorited = d.iata_code in selected_iatas
             set_pref(
                 s,
                 "exclude_previously_selected",

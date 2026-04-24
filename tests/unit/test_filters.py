@@ -46,7 +46,6 @@ def _prefs(**kwargs) -> dict[str, str]:
     defaults = {
         "region_allowlist": "[]",
         "region_blocklist": "[]",
-        "favorite_locations": "[]",
         "favorite_radius_miles": "0",
         "exclude_previously_selected": "false",
         "exclude_previously_selected_days": "0",
@@ -116,20 +115,26 @@ def test_blocklist_takes_precedence_over_allowlist(session):
 
 
 def test_favorite_radius_zero_passes_all(session):
+    # Radius 0 → filter disabled regardless of favorited destinations
+    paris = _dest("PAR", lat=48.8566, lon=2.3522)
+    paris.user_favorited = True
+    session.add(paris)
     pool = [_dest("AAA", lat=40.0, lon=-74.0)]
     result, _ = apply_destination_filters(
         pool,
         session,
-        _prefs(
-            favorite_locations=json.dumps([{"lat": 51.5, "lon": -0.1}]),
-            favorite_radius_miles="0",
-        ),
+        _prefs(favorite_radius_miles="0"),
     )
     assert result == pool
 
 
 def test_favorite_radius_keeps_nearby(session):
-    # Paris coords; CDG is ~14 miles from Paris centre
+    # Anchor: Paris (user_favorited=True); CDG ~14 mi, JFK far
+    paris = _dest("PAR", lat=48.8566, lon=2.3522)
+    paris.user_favorited = True
+    session.add(paris)
+    session.flush()
+
     pool = [
         _dest("CDG", lat=49.0097, lon=2.5479),  # Charles de Gaulle — ~14 mi from Paris
         _dest("JFK", lat=40.6413, lon=-73.7781),  # New York — far
@@ -137,10 +142,7 @@ def test_favorite_radius_keeps_nearby(session):
     result, _ = apply_destination_filters(
         pool,
         session,
-        _prefs(
-            favorite_locations=json.dumps([{"lat": 48.8566, "lon": 2.3522}]),
-            favorite_radius_miles="50",
-        ),
+        _prefs(favorite_radius_miles="50"),
     )
     iatas = {d.iata_code for d in result}
     assert "CDG" in iatas
@@ -148,11 +150,12 @@ def test_favorite_radius_keeps_nearby(session):
 
 
 def test_favorite_radius_no_locations_passes_all(session):
+    # No favorited destinations → filter is a no-op even with radius set
     pool = [_dest("AAA"), _dest("BBB")]
     result, _ = apply_destination_filters(
         pool,
         session,
-        _prefs(favorite_locations="[]", favorite_radius_miles="500"),
+        _prefs(favorite_radius_miles="500"),
     )
     assert result == pool
 
