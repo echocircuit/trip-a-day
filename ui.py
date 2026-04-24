@@ -126,9 +126,16 @@ def _dashboard() -> None:
             st.metric("Status", f"{icon} {last_run.status.capitalize()}")
             st.write(f"**When:** {last_run.run_at.strftime('%Y-%m-%d %H:%M')} UTC")
             st.write(f"**Triggered by:** {last_run.triggered_by}")
-            st.write(f"**Candidates evaluated:** {last_run.destinations_evaluated}")
             if last_run.duration_seconds is not None:
                 st.write(f"**Duration:** {last_run.duration_seconds:.1f}s")
+            live_calls = last_run.api_calls_flights or 0
+            cache_hits_val = getattr(last_run, "cache_hits_flights", 0) or 0
+            excluded_val = getattr(last_run, "destinations_excluded", 0) or 0
+            st.write(
+                f"**Run summary:** {last_run.destinations_evaluated} destinations evaluated "
+                f"— {live_calls} live API calls, {cache_hits_val} cache hits"
+                + (f", {excluded_val} excluded" if excluded_val else "")
+            )
             if last_run.error_message:
                 st.error(last_run.error_message)
             if getattr(last_run, "filter_fallback", False):
