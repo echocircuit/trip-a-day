@@ -3,8 +3,8 @@
 All URL construction lives here. notifier.py and main.py call these functions;
 they never build booking URLs directly.
 
-URL patterns verified 2026-04-23:
-  google_flights : ✓  (Google Flights hash-based deep link, standard pattern)
+URL patterns verified 2026-04-24:
+  google_flights : ✓ origin, destination, and dates pre-filled correctly
   google_hotels  : ✓  (Google Travel Hotels search with checkin/checkout params)
   booking_com    : ✓  (Booking.com searchresults with split date params)
   expedia_hotels : ✓  (Expedia Hotel-Search with MM/DD/YYYY dates)
@@ -18,6 +18,21 @@ from datetime import date
 from urllib.parse import quote_plus
 
 
+def _valid_airline_iata(code: str | None) -> str | None:
+    """Return *code* if it is a valid 2-character airline IATA code, else None.
+
+    Airline IATA codes are exactly 2 alphanumeric characters (e.g. "AA", "B6").
+    Anything longer (e.g. a full airline name from the fast-flights library) would
+    corrupt the Google Flights #flt= fragment and prevent pre-filling.
+    """
+    if not code:
+        return None
+    code = code.strip().upper()
+    if len(code) == 2 and code.isalnum():
+        return code
+    return None
+
+
 def build_flight_url(
     origin: str,
     destination: str,
@@ -27,14 +42,19 @@ def build_flight_url(
 ) -> str:
     """Return a Google Flights deep link for the given round-trip.
 
-    Appends airline filter when *airline_iata* is known.
-    Label in email: "🛫 Search this flight on Google Flights →"
+    The # and * in the fragment must remain literal — do not URL-encode them.
+    Format: https://www.google.com/flights?hl=en#flt={orig}.{dest}.{dep}*{dest}.{orig}.{ret};c:USD;e:1;sd:1;t:f
+
+    Appends ;a:{code} only when *airline_iata* is a valid 2-char IATA code.
+    A malformed airline code in the fragment causes Google Flights JS to fail
+    parsing the entire #flt= value, showing no pre-filled search.
     """
     d = depart_date.isoformat()
     r = return_date.isoformat()
     params = ";c:USD;e:1;sd:1;t:f"
-    if airline_iata:
-        params += f";a:{airline_iata}"
+    valid_airline = _valid_airline_iata(airline_iata)
+    if valid_airline:
+        params += f";a:{valid_airline}"
     return (
         f"https://www.google.com/flights?hl=en"
         f"#flt={origin}.{destination}.{d}*{destination}.{origin}.{r}{params}"

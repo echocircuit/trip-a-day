@@ -41,6 +41,46 @@ class TestBuildFlightUrl:
         url = build_flight_url("HSV", "CDG", _DEPART, _RETURN, airline_iata="DL")
         assert ";a:DL" in url
 
+    def test_hash_is_literal_not_encoded(self):
+        url = build_flight_url("HSV", "CDG", _DEPART, _RETURN)
+        assert "#flt=" in url
+        assert "%23" not in url
+
+    def test_asterisk_is_literal_not_encoded(self):
+        url = build_flight_url("HSV", "CDG", _DEPART, _RETURN)
+        assert "*" in url
+        assert "%2A" not in url
+
+    def test_airline_omitted_when_none(self):
+        url = build_flight_url("HSV", "CDG", _DEPART, _RETURN, airline_iata=None)
+        assert ";a:" not in url
+
+    def test_airline_omitted_when_empty_string(self):
+        url = build_flight_url("HSV", "CDG", _DEPART, _RETURN, airline_iata="")
+        assert ";a:" not in url
+
+    def test_airline_omitted_when_not_two_chars(self):
+        url = build_flight_url(
+            "HSV",
+            "CDG",
+            _DEPART,
+            _RETURN,
+            airline_iata="American Airlines operated by Skywest",
+        )
+        assert ";a:" not in url
+
+    def test_airline_omitted_when_three_chars(self):
+        url = build_flight_url("HSV", "CDG", _DEPART, _RETURN, airline_iata="DAL")
+        assert ";a:" not in url
+
+    def test_alphanumeric_two_char_airline_accepted(self):
+        url = build_flight_url("HSV", "CDG", _DEPART, _RETURN, airline_iata="B6")
+        assert ";a:B6" in url
+
+    def test_airline_normalized_to_uppercase(self):
+        url = build_flight_url("HSV", "CDG", _DEPART, _RETURN, airline_iata="dl")
+        assert ";a:DL" in url
+
 
 class TestBuildHotelUrl:
     def test_google_hotels_returns_nonempty(self):
