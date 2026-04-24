@@ -611,7 +611,10 @@ def get_flight_offers(
     direct = [f for f in ff_result.flights if f.stops == 0]
     candidates = direct if direct_only else (direct or ff_result.flights)
     prices = [(_parse_price(f.price), f) for f in candidates]
-    valid = [(p, f) for p, f in prices if p is not None]
+    # Reject price=0 explicitly: Google Flights occasionally returns "$0" for
+    # routes it cannot price (not a free ticket). Accepting 0.0 caused OAK to
+    # win on 2026-04-20 with is_mock=False — live data, $0 flight, $2890 total.
+    valid = [(p, f) for p, f in prices if p is not None and p > 0]
     if not valid:
         return None
 

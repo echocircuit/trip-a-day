@@ -142,6 +142,7 @@ class RunLog(Base):
     api_calls_flights: Mapped[int] = mapped_column(Integer, default=0)
     api_calls_gsa: Mapped[int] = mapped_column(Integer, default=0)
     filter_fallback: Mapped[bool] = mapped_column(Boolean, default=False)
+    invalid_data_exclusions: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class ApiUsage(Base):
@@ -223,6 +224,7 @@ _DESTINATION_NEW_COLUMNS: list[tuple[str, str]] = [
 # run_log columns added via ALTER TABLE migration (idempotent).
 _RUN_LOG_NEW_COLUMNS: list[tuple[str, str]] = [
     ("filter_fallback", "BOOLEAN DEFAULT 0"),
+    ("invalid_data_exclusions", "TEXT"),
 ]
 
 # trips columns added via ALTER TABLE migration (idempotent).

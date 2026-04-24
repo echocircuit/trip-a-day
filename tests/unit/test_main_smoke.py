@@ -137,6 +137,79 @@ def test_run_exits_1_when_no_destinations(in_memory_session):
     assert exc_info.value.code == 1
 
 
+def test_run_excludes_zero_flight_cost_and_continues(in_memory_session):
+    """Destination with $0 flight cost is excluded; pipeline continues to next candidate."""
+    import json
+
+    import main
+
+    depart = date.today() + timedelta(days=7)
+
+    # Two destinations: first has $0 flight, second has a valid flight.
+    bad_dest = _fake_dest("OAK")
+    good_dest = _fake_dest("JFK")
+
+    def _flight_side_effect(*args, **kwargs):
+        # Pass 1: both return a price so top_iatas contains both
+        # Pass 2: OAK returns $0, JFK returns valid
+        dest = kwargs.get("destination") or args[1]
+        price = 0.0 if dest == "OAK" else 400.0
+        return FlightOffer(
+            origin=kwargs.get("origin", "HSV"),
+            destination=dest,
+            departure_date=depart,
+            return_date=depart + timedelta(days=7),
+            price_total=price,
+            booking_url="https://example.com/flight",
+            raw="{}",
+        )
+
+    def _airport_side_effect(iata, session):
+        city = "Oakland" if iata == "OAK" else "New York"
+        return AirportInfo(
+            iata=iata,
+            city=city,
+            country="United States",
+            country_code="US",
+            region="North America",
+            latitude=40.6413,
+            longitude=-73.7781,
+        )
+
+    with (
+        patch("main.init_db"),
+        patch("main.SessionFactory", in_memory_session),
+        patch("main.select_daily_batch", return_value=[bad_dest, good_dest]),
+        patch("main.get_cached_flight", return_value=None),
+        patch("main.store_flight_cache"),
+        patch("main.get_airport_info", side_effect=_airport_side_effect),
+        patch("main.get_flight_offers", side_effect=_flight_side_effect),
+        patch("main.get_hotel_offers", return_value=_fake_hotel(depart)),
+        patch("main.get_food_cost", return_value=_fake_food()),
+        patch("main.send_trip_notification", return_value=True),
+    ):
+        main.run()  # must not raise
+
+    # Verify the winner was JFK (valid price), not OAK ($0 price).
+    with in_memory_session() as s:
+        from trip_a_day.db import RunLog, Trip
+
+        run = s.query(RunLog).order_by(RunLog.id.desc()).first()
+        assert run is not None
+        assert run.status == "success"
+
+        # invalid_data_exclusions should mention OAK
+        assert run.invalid_data_exclusions is not None
+        exclusions = json.loads(run.invalid_data_exclusions)
+        assert any(e["iata"] == "OAK" for e in exclusions)
+
+        # Winner must not be OAK
+        winner = s.get(Trip, run.winner_trip_id)
+        assert winner is not None
+        assert winner.destination_iata != "OAK"
+        assert winner.flight_cost_usd > 0
+
+
 def test_run_exits_1_when_all_flights_missing(in_memory_session):
     """Pipeline exits with code 1 when Pass 1 has prices but Pass 2 yields no complete trips."""
     import main

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -40,6 +41,34 @@ class CostBreakdown:
         return round(
             self.flights + self.hotel + self.car + self.food + self.transport_usd, 2
         )
+
+
+def is_valid_cost_breakdown(cost: CostBreakdown) -> tuple[bool, str]:
+    """Validate a CostBreakdown for basic data quality requirements.
+
+    Returns (True, "") for a valid breakdown or (False, human-readable reason).
+
+    Root cause this guards against: Google Flights occasionally returns a "$0"
+    price string which _parse_price converts to 0.0. The p is not None filter
+    in get_flight_offers passes it through, resulting in a FlightOffer with
+    price_total=0.0 that silently wins the ranking (e.g. OAK on 2026-04-20,
+    is_mock=False, cache entry confirmed as live data).
+    """
+    if cost.flights is None or not math.isfinite(cost.flights) or cost.flights <= 0:
+        return False, f"invalid flight cost ({cost.flights})"
+    if cost.hotel is None or not math.isfinite(cost.hotel) or cost.hotel < 0:
+        return False, f"invalid hotel cost ({cost.hotel})"
+    if cost.car is None or not math.isfinite(cost.car) or cost.car < 0:
+        return False, f"invalid car cost ({cost.car})"
+    if cost.food is None or not math.isfinite(cost.food) or cost.food < 0:
+        return False, f"invalid food cost ({cost.food})"
+    # total is a computed property, but verify it matches within floating-point tolerance
+    expected = round(
+        cost.flights + cost.hotel + cost.car + cost.food + cost.transport_usd, 2
+    )
+    if abs(cost.total - expected) > 0.02:
+        return False, f"total mismatch: expected {expected:.2f}, got {cost.total:.2f}"
+    return True, ""
 
 
 def lookup_car_cost(region: str, days: int) -> float:
