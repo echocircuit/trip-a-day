@@ -250,6 +250,7 @@ python main.py
 - Per diem lodging is a government rate (typically 3-star level); actual 4-star costs may be higher. This is noted in the hotel booking note.
 - Google Flights occasionally fails for specific routes (returns no data); those destinations are silently skipped.
 - Mock flight prices are static fixtures; they don't reflect real market prices or trends.
+- **Live mode playwright 401 (2026-04-24):** `FLIGHT_DATA_MODE=live` runs can fail with `playwright.tech 401` errors from the fast-flights library, resulting in "Pass 1 returned no prices." This is a transient auth issue in fast-flights' playwright dependency — not a bug in trip-a-day code. HTTP requests to google.com return 200, but price extraction fails. Workaround: retry the run; mock mode is unaffected.
 
 ## Branch Convention
 

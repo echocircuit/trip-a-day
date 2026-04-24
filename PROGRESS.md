@@ -190,6 +190,17 @@
 
 - None currently.
 
+### Housekeeping verified (2026-04-24)
+
+- 194/194 tests pass (`pytest -v`): 149 unit + 26 links + 9 imports + 2 smoke + 8 integration
+- Mock pipeline runs cleanly end-to-end; winner stored with `departure_iata=HSV` ✓
+- Flight booking URL pre-fills correctly: `#flt=HSV.PUJ.2026-06-05*PUJ.HSV.2026-06-10` ✓
+- No $0 flight costs appeared in results (guardrail working) ✓
+- Live mode hit playwright.tech 401 from fast-flights library (transient, not our code); documented in CLAUDE.md Known Issues
+- Email delivered to configured address with departure airport and mock data banner ✓
+
 ### Next Action
 
-Begin Phase 8. Branch: `git checkout main && git pull && git checkout -b feature/phase-8-<description>`.
+Begin Phase 8: Hybrid Destination Input. Branch: `git checkout main && git pull && git checkout -b feature/phase-8-hybrid-destination-input`.
+
+Phase 8 goal: Let users add custom destinations to the candidate pool through the UI. Primary deliverable: searchable dropdown in UI backed by the destinations table; selecting a destination updates the DB immediately and feeds into the next daily run alongside the 302 seed airports.
