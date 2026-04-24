@@ -331,19 +331,15 @@ def _preferences() -> None:
         )
 
         st.subheader("Filters")
-        cx, cy, cz = st.columns(3)
+        cx, cy = st.columns(2)
         direct_only = cx.checkbox(
             "Direct flights only", value=_bool("direct_flights_only")
         )
         car_required = cy.checkbox(
             "Car rental required", value=_bool("car_rental_required")
         )
-        min_stars = cz.number_input(
-            "Min hotel stars",
-            min_value=1,
-            max_value=5,
-            value=_int("min_hotel_stars", 4),
-        )
+        # min_hotel_stars intentionally absent: hotel costs use GSA per diem rates,
+        # not live hotel search — star rating is meaningless here.
 
         st.subheader("Ranking")
         strategy_default = prefs.get("ranking_strategy", "cheapest_then_farthest")
@@ -446,6 +442,59 @@ def _preferences() -> None:
             value=_bool("exclude_booked", default=False),
         )
 
+        st.subheader("Booking Preferences")
+        st.caption("Choose which booking site links are used in the daily email.")
+        _hotel_sites = ["google_hotels", "booking_com", "expedia", "manual"]
+        _hotel_site_labels = {
+            "google_hotels": "Google Hotels",
+            "booking_com": "Booking.com",
+            "expedia": "Expedia",
+            "manual": "Manual URL",
+        }
+        _car_sites = ["kayak", "expedia_cars", "manual"]
+        _car_site_labels = {
+            "kayak": "Kayak",
+            "expedia_cars": "Expedia Cars",
+            "manual": "Manual URL",
+        }
+        bk1, bk2 = st.columns(2)
+        _hotel_site_default = prefs.get("preferred_hotel_site", "google_hotels")
+        preferred_hotel_site = bk1.selectbox(
+            "Hotel booking site",
+            _hotel_sites,
+            index=_hotel_sites.index(_hotel_site_default)
+            if _hotel_site_default in _hotel_sites
+            else 0,
+            format_func=lambda k: _hotel_site_labels[k],
+        )
+        _car_site_default = prefs.get("preferred_car_site", "kayak")
+        preferred_car_site = bk2.selectbox(
+            "Car rental site",
+            _car_sites,
+            index=_car_sites.index(_car_site_default)
+            if _car_site_default in _car_sites
+            else 0,
+            format_func=lambda k: _car_site_labels[k],
+        )
+        if preferred_hotel_site == "manual":
+            preferred_hotel_manual_url = st.text_input(
+                "Hotel base URL",
+                value=prefs.get("preferred_hotel_site_manual_url", ""),
+                help="This URL will be used as-is — no trip details will be added automatically.",
+            )
+        else:
+            preferred_hotel_manual_url = prefs.get(
+                "preferred_hotel_site_manual_url", ""
+            )
+        if preferred_car_site == "manual":
+            preferred_car_manual_url = st.text_input(
+                "Car rental base URL",
+                value=prefs.get("preferred_car_site_manual_url", ""),
+                help="This URL will be used as-is — no trip details will be added automatically.",
+            )
+        else:
+            preferred_car_manual_url = prefs.get("preferred_car_site_manual_url", "")
+
         st.subheader("Notifications")
         _from_email = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
         _is_test_sender = (
@@ -517,7 +566,6 @@ def _preferences() -> None:
             set_pref(s, "num_rooms", str(int(num_rooms)))
             set_pref(s, "direct_flights_only", "true" if direct_only else "false")
             set_pref(s, "car_rental_required", "true" if car_required else "false")
-            set_pref(s, "min_hotel_stars", str(int(min_stars)))
             set_pref(s, "ranking_strategy", ranking_strategy)
             set_pref(s, "daily_batch_size", str(int(daily_batch_size)))
             set_pref(
@@ -544,6 +592,10 @@ def _preferences() -> None:
                 str(int(exclude_selected_days)),
             )
             set_pref(s, "exclude_booked", "true" if exclude_booked else "false")
+            set_pref(s, "preferred_hotel_site", preferred_hotel_site)
+            set_pref(s, "preferred_car_site", preferred_car_site)
+            set_pref(s, "preferred_hotel_site_manual_url", preferred_hotel_manual_url)
+            set_pref(s, "preferred_car_site_manual_url", preferred_car_manual_url)
             # Only update notification_emails when not in test sender mode
             _from_saved = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
             if "onboarding@resend.dev" not in _from_saved and _from_saved.strip():

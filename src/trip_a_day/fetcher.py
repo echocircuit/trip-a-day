@@ -653,10 +653,13 @@ def get_hotel_offers(
     checkout: date,
     adults: int,
     session: Session,
-    min_stars: int = 4,
     num_rooms: int = 1,
 ) -> HotelOffer | None:
-    """Return a per diem lodging estimate for the destination. Always returns an estimate."""
+    """Return a per diem lodging estimate for the destination. Always returns an estimate.
+
+    min_stars is intentionally absent: hotel costs use GSA per diem rates, not live
+    hotel search — star rating is meaningless in this context.
+    """
     info = get_airport_info(city_code, session)
     city = info.city if info else city_code
     country = info.country if info else "Unknown"

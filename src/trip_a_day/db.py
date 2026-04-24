@@ -161,7 +161,8 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     "num_children": "2",
     "num_rooms": "1",
     "direct_flights_only": "true",
-    "min_hotel_stars": "4",
+    # min_hotel_stars removed: hotel costs come from GSA per diem rates, not live
+    # hotel search — star rating is meaningless in this context.
     "car_rental_required": "true",
     "notification_emails": "[]",
     "ranking_strategy": "cheapest_then_farthest",
@@ -189,6 +190,11 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     "notifications_enabled": "true",
     # Phase 7 — multi-airport departure
     "irs_mileage_rate": "0.70",
+    # Booking preferences
+    "preferred_hotel_site": "google_hotels",
+    "preferred_car_site": "kayak",
+    "preferred_hotel_site_manual_url": "",
+    "preferred_car_site_manual_url": "",
 }
 
 # Public alias for use in tests and tooling.
