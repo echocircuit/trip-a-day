@@ -137,6 +137,23 @@ def _dashboard() -> None:
                     "matches and the run used the unfiltered pool. "
                     "Consider relaxing your filters in Preferences."
                 )
+            exclusions_json = getattr(last_run, "invalid_data_exclusions", None)
+            if exclusions_json:
+                try:
+                    exclusions = json.loads(exclusions_json)
+                except Exception:
+                    exclusions = []
+                if exclusions:
+                    st.warning(
+                        f"⚠️ {len(exclusions)} destination(s) excluded due to invalid "
+                        "cost data (e.g. $0 flight price from live API)."
+                    )
+                    with st.expander("Show excluded destinations"):
+                        for ex in exclusions:
+                            st.write(
+                                f"- **{ex.get('city', '?')}** ({ex.get('iata', '?')}): "
+                                f"{ex.get('reason', 'unknown reason')}"
+                            )
         else:
             st.info("No runs yet. Click **Run Now** below to get started.")
 

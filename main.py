@@ -11,6 +11,7 @@ results, stores them, and sends (or prints) the daily trip notification.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
@@ -24,7 +25,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from trip_a_day.cache import get_cached_flight, store_flight_cache
-from trip_a_day.costs import build_cost_breakdown
+from trip_a_day.costs import build_cost_breakdown, is_valid_cost_breakdown
 from trip_a_day.db import (
     Destination,
     RunLog,
@@ -221,6 +222,8 @@ def run(triggered_by: str = "manual") -> None:
         now_utc = datetime.now(UTC)
         all_candidates: list[TripCandidate] = []
         any_pass1_prices = False
+        # Tracks destinations skipped due to invalid cost data (e.g. $0 flight).
+        invalid_exclusions: list[dict[str, str]] = []
 
         for dep_iata in departure_iatas:
             # Round-trip IRS-rate driving cost from home to this departure airport
@@ -262,6 +265,17 @@ def run(triggered_by: str = "manual") -> None:
                         num_adults,
                         num_children,
                     )
+
+                # Reject cached $0 prices: re-query live rather than trusting
+                # a stale invalid entry (e.g. OAK 2026-04-20, is_mock=False).
+                if hit is not None and hit.price_usd <= 0:
+                    logger.warning(
+                        "  [cache] %s→%s cached price is $%.0f (invalid) — re-querying",
+                        dep_iata,
+                        iata,
+                        hit.price_usd,
+                    )
+                    hit = None
 
                 if hit is not None:
                     pass1_prices[iata] = hit.price_usd
@@ -417,6 +431,19 @@ def run(triggered_by: str = "manual") -> None:
                         transport_usd=transport_usd,
                     )
 
+                    valid, reason = is_valid_cost_breakdown(cost)
+                    if not valid:
+                        logger.warning(
+                            "Excluding %s (%s): %s — skipping this destination",
+                            city,
+                            iata,
+                            reason,
+                        )
+                        invalid_exclusions.append(
+                            {"iata": iata, "city": city, "reason": reason}
+                        )
+                        continue
+
                     if best is None or cost.total < best.cost.total:
                         car_url = build_car_url(
                             iata,
@@ -535,6 +562,13 @@ def run(triggered_by: str = "manual") -> None:
             old_avg = winner_dest.avg_price_usd or winner.cost.total
             winner_dest.avg_price_usd = (old_avg * (n - 1) + winner.cost.total) / n
 
+        exclusions_json = json.dumps(invalid_exclusions) if invalid_exclusions else None
+        if invalid_exclusions:
+            logger.warning(
+                "%d destination(s) excluded due to invalid cost data: %s",
+                len(invalid_exclusions),
+                ", ".join(f"{e['city']} ({e['iata']})" for e in invalid_exclusions),
+            )
         session.add(
             RunLog(
                 run_at=datetime.now(UTC),
@@ -545,6 +579,7 @@ def run(triggered_by: str = "manual") -> None:
                 duration_seconds=duration,
                 api_calls_flights=flights_calls_this_run,
                 filter_fallback=filter_fallback,
+                invalid_data_exclusions=exclusions_json,
             )
         )
         session.commit()
