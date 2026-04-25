@@ -183,6 +183,7 @@ mypy src/
 │   ├── window_search.py     # 3-probe advance booking window search
 │   ├── costs.py             # Cost assembly (flight + hotel + car + food + transport)
 │   ├── ranker.py            # Trip sorting and selection logic
+│   ├── charts.py            # Price history chart (matplotlib PNG, base64-embedded in email)
 │   └── notifier.py          # Resend email or terminal output
 ├── car_rates.json           # Static regional car rental rate estimates
 ├── data/

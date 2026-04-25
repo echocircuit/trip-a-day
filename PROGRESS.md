@@ -222,6 +222,10 @@
 - [x] Create `tests/test_charts.py` — 8 tests: None for <3 pts, PNG bytes for ≥3 pts, valid PNG magic, edge cases (higher/lower/identical costs), 7-point rolling window path (2026-04-25)
 - [x] 212 tests passing (204 existing + 8 chart tests)
 
+- [x] Update `trip_of_the_day_spec.md`: `charts.py` in Section 6 module list; per-component chart extension in Section 14 Future Considerations (2026-04-25)
+- [x] Update `CLAUDE.md`: test count 195→212, `charts.py` in key file map and arch decisions, `test_charts.py` in key file map (2026-04-25)
+- [x] Update `README.md`: `charts.py` in project structure module list (2026-04-25)
+
 ### Next Action
 
-Update spec, CLAUDE.md, README (commit 4 of 4).
+Open PR for feature/price-history-chart.

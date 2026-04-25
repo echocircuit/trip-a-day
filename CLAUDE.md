@@ -41,7 +41,7 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 ## Current phase
 
-**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 195 tests passing (166 unit + 26 links + 10 imports + 2 smoke) — includes advance booking window rework (see below).
+**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 212 tests passing (166 unit + 26 links + 10 imports + 2 smoke + 8 charts) — includes advance booking window rework and price history chart (see below).
 
 **Phase 7b removed (user decision):** Phase 7b (real transit cost via routing API) was dropped because it adds external API dependencies (Rome2rio or Google Maps Distance Matrix) that complicate new-user setup without sufficient value over the IRS mileage estimate already implemented in Phase 7a.
 
@@ -183,6 +183,11 @@ main.py
 | `advance_days` replaced by `advance_window_min_days` / `advance_window_max_days` | Single fixed lookahead couldn't find the cheapest date in a window; two bounds let `find_cheapest_in_window` probe across the range. `advance_days` kept as a dormant default for backwards-compat with old DB rows. |
 | `find_cheapest_in_window` uses 3 evenly-spaced probes | 3 probes cover the window cheaply (~6 API calls/destination); adaptive triangulation is deferred since 3 probes already catch most price variation across a 7-30 day window |
 | `find_cheapest_in_window` returns `(cost, date, live_calls, cache_hits)` | Caller (main.py) needs to accumulate both counters for RunLog; returning them avoids a shared mutable counter |
+| `charts.py` generates chart as PNG bytes, base64-embedded in email | External image URLs are blocked by most email clients; inline base64 is the only reliable way to include images in HTML email |
+| Chart skipped (returns None) when fewer than 3 data points | A single point or two can't show a meaningful trend; 3 is the minimum for a readable line with any direction |
+| Rolling average: 7-point window or all-time mean | If total history < 7 points, a rolling window would collapse to the same value; flat all-time mean is clearer than a rolling window of 1–6 points |
+| `matplotlib.use("Agg")` called before pyplot import inside function | Lazy import inside the function avoids startup overhead and allows graceful fallback if matplotlib is absent; Agg is the only backend that works without a display |
+| mypy override `ignore_errors = true` for `matplotlib.*` | matplotlib's bundled type stubs have known inaccuracies with datetime arguments in `plot()`; suppressing errors project-wide for that namespace avoids noisy ignores on every call site |
 
 ## Key file map
 
@@ -198,6 +203,7 @@ main.py
 | `src/trip_a_day/costs.py` | `CostBreakdown` dataclass; `build_cost_breakdown()`; `lookup_car_cost()` |
 | `src/trip_a_day/ranker.py` | `TripCandidate` dataclass; `rank_trips()` with pluggable strategy |
 | `src/trip_a_day/notifier.py` | `send_trip_notification()` — Resend HTML email or stdout fallback; `send_test_email()` |
+| `src/trip_a_day/charts.py` | `generate_price_history_chart()` — matplotlib PNG of destination price history; embedded as base64 in email |
 | `src/trip_a_day/links.py` | URL builders: `build_flight_url`, `build_hotel_url`, `build_car_url` |
 | `src/trip_a_day/window_search.py` | `find_cheapest_in_window()` — 3-probe adaptive triangulation across the advance booking window; cache-first, budget-aware |
 | `car_rates.json` | Static regional daily car rental rate estimates (USD) |
@@ -221,6 +227,7 @@ main.py
 | `tests/test_smoke.py` | `CostBreakdown` instantiation + `DEFAULT_PREFERENCES` key coverage (2 tests) |
 | `tests/unit/test_notifier_departure.py` | Departure airport line in HTML and plain text email (12 tests) |
 | `tests/unit/test_window_search.py` | `_probe_dates` and `find_cheapest_in_window` unit tests — budget, cache, and probe-selection (17 tests) |
+| `tests/test_charts.py` | Chart generation edge cases: None for <3 pts, PNG bytes + magic bytes for ≥3, edge costs, 7-point window (8 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
 
 ## Environment setup
