@@ -307,7 +307,7 @@ def _preferences() -> None:
         home_airport = st.text_input(
             "Home Airport (IATA code)", value=prefs.get("home_airport", "HSV")
         )
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         trip_nights = col1.number_input(
             "Trip length (nights)",
             min_value=1,
@@ -321,12 +321,32 @@ def _preferences() -> None:
             value=_int("trip_length_flex_nights", 0),
             help="Search trip_length ± this many nights and pick the cheapest.",
         )
-        advance_days = col3.number_input(
-            "Days ahead to search",
-            min_value=1,
-            max_value=365,
-            value=_int("advance_days", 7),
+
+        st.markdown("**Booking Window**")
+        st.caption(
+            "The pipeline probes departure dates across this window and picks the "
+            "cheapest date found. Earliest must be less than Latest."
         )
+        win1, win2 = st.columns(2)
+        advance_window_min = win1.number_input(
+            "Earliest departure (days out)",
+            min_value=1,
+            max_value=364,
+            value=_int("advance_window_min_days", 7),
+            help="Minimum days from today to departure date.",
+        )
+        advance_window_max = win2.number_input(
+            "Latest departure (days out)",
+            min_value=2,
+            max_value=365,
+            value=_int("advance_window_max_days", 30),
+            help="Maximum days from today to departure date.",
+        )
+        if advance_window_min >= advance_window_max:
+            st.warning(
+                "⚠️ Earliest departure must be less than Latest departure. "
+                "Please adjust the booking window."
+            )
 
         st.markdown("**Multi-Airport Departure**")
         st.caption(
@@ -593,7 +613,8 @@ def _preferences() -> None:
             set_pref(s, "home_airport", home_airport.upper().strip())
             set_pref(s, "trip_length_nights", str(int(trip_nights)))
             set_pref(s, "trip_length_flex_nights", str(int(trip_flex)))
-            set_pref(s, "advance_days", str(int(advance_days)))
+            set_pref(s, "advance_window_min_days", str(int(advance_window_min)))
+            set_pref(s, "advance_window_max_days", str(int(advance_window_max)))
             set_pref(s, "search_radius_miles", str(int(search_radius_miles)))
             set_pref(s, "irs_mileage_rate", f"{float(irs_mileage_rate):.2f}")
             set_pref(s, "num_adults", str(int(num_adults)))

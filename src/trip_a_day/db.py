@@ -163,7 +163,9 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     "home_airport": "HSV",
     "trip_length_nights": "7",
     "trip_length_flex_nights": "0",
-    "advance_days": "7",
+    "advance_days": "7",  # kept for backwards-compat; pipeline now uses min/max below
+    "advance_window_min_days": "7",
+    "advance_window_max_days": "30",
     "num_adults": "2",
     "num_children": "2",
     "num_rooms": "1",

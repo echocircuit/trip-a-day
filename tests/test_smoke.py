@@ -24,6 +24,8 @@ def test_preferences_default_keys_exist():
         "home_airport",
         "trip_length_nights",
         "advance_days",
+        "advance_window_min_days",
+        "advance_window_max_days",
         "num_adults",
         "num_children",
         "direct_flights_only",

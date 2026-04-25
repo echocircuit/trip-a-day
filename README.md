@@ -124,10 +124,9 @@ Keeps running and fires the full pipeline once per calendar day at the time conf
 |---|---|
 | Home airport | `HSV` (Huntsville, AL) |
 | Trip length | 7 nights (±0 flex nights) |
-| Advance booking | Departing 7 days from today |
+| Advance booking | Departing 7–30 days from today (probes 3 dates across window) |
 | Travelers | 2 adults, 2 children, 1 room |
 | Flights | Direct only |
-| Hotels | 4 stars and up |
 | Car rental | Included (estimated cost) |
 | Nearby airport radius | 0 mi (disabled) |
 | IRS mileage rate | $0.70/mile |
@@ -181,6 +180,7 @@ mypy src/
 │   ├── selector.py          # 8 destination selection strategies
 │   ├── filters.py           # Region allowlist/blocklist, favorite-radius, exclusion rules
 │   ├── cache.py             # TTL-aware flight price cache
+│   ├── window_search.py     # 3-probe advance booking window search
 │   ├── costs.py             # Cost assembly (flight + hotel + car + food + transport)
 │   ├── ranker.py            # Trip sorting and selection logic
 │   └── notifier.py          # Resend email or terminal output

@@ -199,8 +199,17 @@
 - Live mode hit playwright.tech 401 from fast-flights library (transient, not our code); documented in CLAUDE.md Known Issues
 - Email delivered to configured address with departure airport and mock data banner ✓
 
+### Advance Booking Window Rework (2026-04-24) — branch: feature/advance-booking-window
+
+- [x] Add `advance_window_min_days` (default 7) and `advance_window_max_days` (default 30) to `db.py` defaults; keep `advance_days` for backwards-compat (2026-04-24)
+- [x] Update `ui.py`: replace single "Days ahead to search" input with two sliders ("Earliest departure" / "Latest departure") and min<max validation warning (2026-04-24)
+- [x] Create `src/trip_a_day/window_search.py` — `find_cheapest_in_window()` with 3-probe adaptive triangulation (2026-04-24)
+- [x] Restructure `main.py` to three-pass pipeline: Pass 1 window search per destination, Pass 2 flex-length for top N, final ranking (2026-04-24)
+- [x] Add `tests/unit/test_window_search.py` — 17 tests for `_probe_dates` and `find_cheapest_in_window` (2026-04-24)
+- [x] Update `tests/test_imports.py` to cover `window_search.find_cheapest_in_window`; 10 import tests now (2026-04-24)
+- [x] Update `tests/test_smoke.py` to cover new preference keys `advance_window_min_days`, `advance_window_max_days` (2026-04-24)
+- [x] Doc sweep: CLAUDE.md (new module, new arch decisions, updated test count 149→166 unit, 9→10 imports), README.md (module list, preference table) (2026-04-24)
+
 ### Next Action
 
-Begin Phase 8: Hybrid Destination Input. Branch: `git checkout main && git pull && git checkout -b feature/phase-8-hybrid-destination-input`.
-
-Phase 8 goal: Let users add custom destinations to the candidate pool through the UI. Primary deliverable: searchable dropdown in UI backed by the destinations table; selecting a destination updates the DB immediately and feeds into the next daily run alongside the 302 seed airports.
+Push feature/advance-booking-window and open PR.

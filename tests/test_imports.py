@@ -100,3 +100,10 @@ def test_cache_imports():
 
 def test_notifier_imports():
     _attrs("trip_a_day.notifier", "send_trip_notification", "send_test_email")
+
+
+def test_window_search_imports():
+    _attrs(
+        "trip_a_day.window_search",
+        "find_cheapest_in_window",
+    )

@@ -41,7 +41,7 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 ## Current phase
 
-**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 186 tests passing (149 unit + 26 links + 9 imports + 2 smoke).
+**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 195 tests passing (166 unit + 26 links + 10 imports + 2 smoke) — includes advance booking window rework (see below).
 
 **Phase 7b removed (user decision):** Phase 7b (real transit cost via routing API) was dropped because it adds external API dependencies (Rome2rio or Google Maps Distance Matrix) that complicate new-user setup without sufficient value over the IRS mileage estimate already implemented in Phase 7a.
 
@@ -180,12 +180,15 @@ main.py
 | `RunLog.destinations_evaluated` = `len(batch)` | Previously stored `len(all_candidates)` (Pass-2 winners, max 5); now stores the Pass-1 batch size (15 by default) so "destinations evaluated" has the user-expected meaning |
 | `RunLog.cache_hits_flights` + `destinations_excluded` | Separate integer columns so the run summary can be shown without parsing the JSON `invalid_data_exclusions` blob |
 | `build_flight_url` uses `?tfs=` protobuf format | The old `#flt=` URL fragment stopped working ~2020 when Google migrated to Base64-encoded protobuf parameters. `TFSData.from_interface()` from fast-flights generates the correct encoding; origin, destination, and ISO dates are embedded in the blob and verifiable by base64-decoding |
+| `advance_days` replaced by `advance_window_min_days` / `advance_window_max_days` | Single fixed lookahead couldn't find the cheapest date in a window; two bounds let `find_cheapest_in_window` probe across the range. `advance_days` kept as a dormant default for backwards-compat with old DB rows. |
+| `find_cheapest_in_window` uses 3 evenly-spaced probes | 3 probes cover the window cheaply (~6 API calls/destination); adaptive triangulation is deferred since 3 probes already catch most price variation across a 7-30 day window |
+| `find_cheapest_in_window` returns `(cost, date, live_calls, cache_hits)` | Caller (main.py) needs to accumulate both counters for RunLog; returning them avoids a shared mutable counter |
 
 ## Key file map
 
 | File | Purpose |
 |---|---|
-| `main.py` | Entry point; two-pass pipeline (filter full pool → select batch → Pass 1 cache sweep → Pass 2 variant search → rank → notify) |
+| `main.py` | Entry point; three-pass pipeline (filter pool → select batch → Pass 1 window search → Pass 2 flex-length variants → rank globally → notify) |
 | `src/trip_a_day/db.py` | SQLAlchemy engine, ORM models, `init_db()`, `seed_preferences()`, `_seed_destinations()` |
 | `src/trip_a_day/preferences.py` | Typed get/set wrappers over the `preferences` table |
 | `src/trip_a_day/fetcher.py` | fast-flights (mock or live) + per diem lookups; returns typed dataclasses |
@@ -196,6 +199,7 @@ main.py
 | `src/trip_a_day/ranker.py` | `TripCandidate` dataclass; `rank_trips()` with pluggable strategy |
 | `src/trip_a_day/notifier.py` | `send_trip_notification()` — Resend HTML email or stdout fallback; `send_test_email()` |
 | `src/trip_a_day/links.py` | URL builders: `build_flight_url`, `build_hotel_url`, `build_car_url` |
+| `src/trip_a_day/window_search.py` | `find_cheapest_in_window()` — 3-probe adaptive triangulation across the advance booking window; cache-first, budget-aware |
 | `car_rates.json` | Static regional daily car rental rate estimates (USD) |
 | `data/seed_airports.json` | 302 curated destination airports with lat/lon, region, subregion, price tier |
 | `data/per_diem_rates.json` | Merged GSA + State Dept per diem rates (1,377 locations) |
@@ -213,9 +217,10 @@ main.py
 | `tests/unit/test_costs_transport.py` | `transport_usd` field on `CostBreakdown` (6 tests) |
 | `tests/unit/test_multi_airport.py` | Multi-airport pipeline smoke tests (2 tests) |
 | `tests/test_links.py` | URL builder tests for all three `links.py` functions (26 tests) |
-| `tests/test_imports.py` | importlib-based public symbol existence checks for all 9 modules (9 tests) |
+| `tests/test_imports.py` | importlib-based public symbol existence checks for all 10 modules (10 tests) |
 | `tests/test_smoke.py` | `CostBreakdown` instantiation + `DEFAULT_PREFERENCES` key coverage (2 tests) |
 | `tests/unit/test_notifier_departure.py` | Departure airport line in HTML and plain text email (12 tests) |
+| `tests/unit/test_window_search.py` | `_probe_dates` and `find_cheapest_in_window` unit tests — budget, cache, and probe-selection (17 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
 
 ## Environment setup
