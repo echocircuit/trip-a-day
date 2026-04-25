@@ -251,3 +251,25 @@ Commits 1–3 made on 2026-04-25. Commit 4 (docs) in progress.
 ### Next Action
 
 Open PR for `feature/bug-fixes-pass1-api-counter` → `main`.
+
+### Bug-Fix Session: Email field + flight deep link (2026-04-25)
+
+Branch: `feature/bug-fixes-email-field-flight-pricing`
+
+Root causes confirmed:
+- **Bug 1 (email field empty):** `ui.py` read `notification_emails` from the DB only. When emails are configured via the `NOTIFICATION_EMAILS` env var (the practical config path per CLAUDE.md), the DB value is `"[]"` and `emails_str` resolves to `""`. Fix: mirror `notifier._parse_recipients` — fall back to `NOTIFICATION_EMAILS` env var when DB value is empty; show "No email configured" placeholder when both are empty.
+- **Bug 2 (deep link shows cheaper flights):** `build_flight_url` in `links.py` did not pass a nonstop filter to `TFSData.from_interface`. When `direct_flights_only=True`, we queried only nonstop flights (e.g. $350) but the deep link opened Google Flights without the nonstop filter, showing cheaper connecting flights ($250). Fix: add `direct_only: bool = False` parameter to `build_flight_url`; pass `max_stops=0` when `True`; thread `direct_only` through from `get_flight_offers`.
+
+Note: Flight selection was already correct (uses `min()` by price, not `flights[0]` / `is_best`). Price representation is total-for-all-passengers (Google Flights returns total when N passengers are queried). Passenger count was already correctly encoded in the deep link.
+
+Fixes implemented:
+- [x] `ui.py`: fall back to `NOTIFICATION_EMAILS` env var when DB value empty; add placeholder text when neither is set (2026-04-25)
+- [x] `links.py`: `build_flight_url` gains `direct_only: bool = False`; passes `max_stops=0` to `TFSData.from_interface` when True (2026-04-25)
+- [x] `fetcher.py`: `get_flight_offers` passes `direct_only=direct_only` to `build_flight_url` (2026-04-25)
+- [x] `tests/unit/test_fetcher_flights.py`: 3 new tests — cheapest nonstop selected not first, connecting excluded before price sort, deep link differs with direct_only (2026-04-25)
+- [x] `tests/test_links.py`: 3 new tests — direct_only URL differs, direct_only=False is default, 2-adult URL differs from 1-adult (2026-04-25)
+- [x] 218 tests passing; ruff + mypy clean (2026-04-25)
+
+### Next Action
+
+Open PR for `feature/bug-fixes-email-field-flight-pricing` → `main`.

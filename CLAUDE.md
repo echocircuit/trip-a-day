@@ -41,7 +41,7 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 ## Current phase
 
-**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 235 tests passing (166 unit + 26 links + 10 imports + 2 smoke + 8 charts + 8 pass1-resilience + 7 api-counter + 8 updated smoke) — includes advance booking window rework, price history chart, and bug-fix session (see below).
+**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 233 tests passing (169 unit + 29 links + 10 imports + 2 smoke + 8 charts + 8 pass1-resilience + 7 api-counter) — includes advance booking window rework, price history chart, and bug-fix sessions (see below).
 
 **Phase 7b removed (user decision):** Phase 7b (real transit cost via routing API) was dropped because it adds external API dependencies (Rome2rio or Google Maps Distance Matrix) that complicate new-user setup without sufficient value over the IRS mileage estimate already implemented in Phase 7a.
 
@@ -192,6 +192,8 @@ main.py
 | `sys.exit(0)` (not 1) when Pass 1 yields no prices | `sys.exit(1)` inside an APScheduler job kills the scheduler process permanently; exit 0 lets the scheduler survive and retry the next day |
 | `_stale_cache_fallback()` in main.py | When all live calls fail, query `PriceCache` for any future-dated entries in the batch and build `TripCandidate` objects with `stale_cache=True`; provides a degraded-but-better-than-nothing result instead of a failure email |
 | `pass1_diagnostics` JSON blob on `RunLog` | Stores a breakdown of Pass 1 results (valid, no_price, budget_exhausted, cache_hits, live_calls, stale_cache_used) for post-hoc debugging; written on both success and failure paths |
+| `notification_emails` UI field falls back to `NOTIFICATION_EMAILS` env var | DB default is `"[]"`; env var is the practical config path. UI must mirror `notifier._parse_recipients`'s fallback so the field shows the live address, not an empty box |
+| `build_flight_url` accepts `direct_only` parameter; passes `max_stops=0` when True | Without the nonstop filter in the deep link, Google Flights showed cheaper connecting flights when `direct_only=True` was in effect during the price query. Encoding `max_stops=0` in the tfs protobuf pre-filters the results page to match what was actually searched |
 | `stale_cache` BOOLEAN on `Trip` | Marks trips built from expired `PriceCache` data so the UI and history table can surface a caveat; NULL/False for all normal trips |
 | Exception in `find_cheapest_in_window` → WARNING + skip, not abort | An unhandled exception in window search (e.g. malformed data) should not abort the entire run; logging at WARNING and skipping that destination allows the remaining batch to proceed |
 
@@ -223,12 +225,12 @@ main.py
 | `tests/unit/test_selector.py` | All 8 destination selection strategies + pool parameter tests (in-memory DB) |
 | `tests/unit/test_cache.py` | TTL logic, cache hit/miss, is_mock flag |
 | `tests/unit/test_fetcher_perdiem.py` | Per diem lookup fallback chain tests (7 tests incl. domestic national-average fallback) |
-| `tests/unit/test_fetcher_flights.py` | direct_only filtering tests |
+| `tests/unit/test_fetcher_flights.py` | direct_only filtering tests; cheapest-by-price selection; deep link encodes direct_only (8 tests) |
 | `tests/unit/test_filters.py` | Region allowlist/blocklist, favorite-radius, exclusion rule tests (16 tests) |
 | `tests/unit/test_fetcher_nearby.py` | `get_nearby_airports` haversine radius tests (9 tests) |
 | `tests/unit/test_costs_transport.py` | `transport_usd` field on `CostBreakdown` (6 tests) |
 | `tests/unit/test_multi_airport.py` | Multi-airport pipeline smoke tests (2 tests) |
-| `tests/test_links.py` | URL builder tests for all three `links.py` functions (26 tests) |
+| `tests/test_links.py` | URL builder tests for all three `links.py` functions (29 tests) |
 | `tests/test_imports.py` | importlib-based public symbol existence checks for all 10 modules (10 tests) |
 | `tests/test_smoke.py` | `CostBreakdown` instantiation + `DEFAULT_PREFERENCES` key coverage (2 tests) |
 | `tests/unit/test_notifier_departure.py` | Departure airport line in HTML and plain text email (12 tests) |
