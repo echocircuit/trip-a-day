@@ -216,6 +216,9 @@
 - [x] Create `src/trip_a_day/charts.py` — `generate_price_history_chart()` with 3-probe min threshold, 7-point rolling avg, orange "Today" highlight (2026-04-25)
 - [x] Add mypy override for `matplotlib.*` in `pyproject.toml` (2026-04-25)
 
+- [x] Update `notifier.py`: `db_session` parameter on `send_trip_notification` and `_build_html`; `_price_history_section_html` helper embeds chart or shows fallback message (2026-04-25)
+- [x] Update `main.py`: pass `db_session=session` to `send_trip_notification` (2026-04-25)
+
 ### Next Action
 
-Embed chart in notifier.py (commit 2 of 4).
+Add tests/test_charts.py (commit 3 of 4).

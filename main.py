@@ -603,6 +603,7 @@ def run(triggered_by: str = "manual") -> None:
                 is_mock=is_mock,
                 home_airport=home_airport,
                 trip_id=winner_trip_id,
+                db_session=session,
             )
             if notified:
                 winner_row = session.get(Trip, winner_trip_id)
