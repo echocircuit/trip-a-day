@@ -135,8 +135,8 @@ def _dashboard() -> None:
             cache_hits_val = getattr(last_run, "cache_hits_flights", 0) or 0
             excluded_val = getattr(last_run, "destinations_excluded", 0) or 0
             st.write(
-                f"**Run summary:** {last_run.destinations_evaluated} destinations evaluated "
-                f"— {live_calls} live API calls, {cache_hits_val} cache hits"
+                f"**Run summary:** {last_run.destinations_evaluated} destinations evaluated"
+                f" — {live_calls} live API calls (this run), {cache_hits_val} cache hits"
                 + (f", {excluded_val} excluded" if excluded_val else "")
             )
             if last_run.error_message:
@@ -169,6 +169,7 @@ def _dashboard() -> None:
 
     with col2:
         st.subheader("API Usage Today")
+        st.caption("Cumulative calls across all runs today")
         if api_rows:
             for row in api_rows:
                 label = row.api_name.replace("_", " ").title()

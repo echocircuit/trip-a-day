@@ -125,6 +125,7 @@ class Trip(Base):
     booked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     manually_logged: Mapped[bool] = mapped_column(Boolean, default=False)
     departure_iata: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    stale_cache: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class RunLog(Base):
@@ -146,6 +147,7 @@ class RunLog(Base):
     destinations_excluded: Mapped[int] = mapped_column(Integer, default=0)
     filter_fallback: Mapped[bool] = mapped_column(Boolean, default=False)
     invalid_data_exclusions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pass1_diagnostics: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class ApiUsage(Base):
@@ -232,6 +234,7 @@ _RUN_LOG_NEW_COLUMNS: list[tuple[str, str]] = [
     ("invalid_data_exclusions", "TEXT"),
     ("cache_hits_flights", "INTEGER DEFAULT 0"),
     ("destinations_excluded", "INTEGER DEFAULT 0"),
+    ("pass1_diagnostics", "TEXT"),
 ]
 
 # trips columns added via ALTER TABLE migration (idempotent).
@@ -240,6 +243,7 @@ _TRIP_NEW_COLUMNS: list[tuple[str, str]] = [
     ("booked_at", "DATETIME"),
     ("manually_logged", "BOOLEAN DEFAULT 0"),
     ("departure_iata", "TEXT"),
+    ("stale_cache", "BOOLEAN DEFAULT 0"),
 ]
 
 
