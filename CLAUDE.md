@@ -41,7 +41,7 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 ## Current phase
 
-**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 212 tests passing (166 unit + 26 links + 10 imports + 2 smoke + 8 charts) — includes advance booking window rework and price history chart (see below).
+**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 235 tests passing (166 unit + 26 links + 10 imports + 2 smoke + 8 charts + 8 pass1-resilience + 7 api-counter + 8 updated smoke) — includes advance booking window rework, price history chart, and bug-fix session (see below).
 
 **Phase 7b removed (user decision):** Phase 7b (real transit cost via routing API) was dropped because it adds external API dependencies (Rome2rio or Google Maps Distance Matrix) that complicate new-user setup without sufficient value over the IRS mileage estimate already implemented in Phase 7a.
 
@@ -137,9 +137,9 @@ main.py
 
 **Key types:**
 - `CostBreakdown` (defined in `costs.py`) — flight, hotel, car, food, transport_usd, car_is_estimate, hotel_is_estimate; `total` is a computed `@property`
-- `TripCandidate` (defined in `ranker.py`) — full trip candidate with cost and metadata
+- `TripCandidate` (defined in `ranker.py`) — full trip candidate with cost and metadata; `stale_cache: bool = False` marks trips built from expired cache data
 - Fetcher dataclasses (defined in `fetcher.py`): `FlightOffer`, `HotelOffer`, `FoodEstimate`, `AirportInfo`
-- SQLAlchemy ORM models (defined in `db.py`): `Preference`, `Destination`, `Trip`, `RunLog`, `ApiUsage`, `PriceCache`
+- SQLAlchemy ORM models (defined in `db.py`): `Preference`, `Destination`, `Trip` (`stale_cache BOOLEAN`), `RunLog` (`pass1_diagnostics TEXT`), `ApiUsage`, `PriceCache`
 
 **Database:** `trip_of_the_day.db` at the project root. Path derived from `db.py` location using `pathlib.Path(__file__).resolve().parents[2]`.
 
@@ -188,6 +188,12 @@ main.py
 | Rolling average: 7-point window or all-time mean | If total history < 7 points, a rolling window would collapse to the same value; flat all-time mean is clearer than a rolling window of 1–6 points |
 | `matplotlib.use("Agg")` called before pyplot import inside function | Lazy import inside the function avoids startup overhead and allows graceful fallback if matplotlib is absent; Agg is the only backend that works without a display |
 | mypy override `ignore_errors = true` for `matplotlib.*` | matplotlib's bundled type stubs have known inaccuracies with datetime arguments in `plot()`; suppressing errors project-wide for that namespace avoids noisy ignores on every call site |
+| `record_api_call()` called BEFORE `get_flights()` in live branch | Ensures every *attempted* call increments `api_usage`, even when `get_flights()` raises. Previously called after success only; exceptions caused api_usage to under-count vs the in-memory `live_calls_made` counter (the "40 vs 7" Dashboard discrepancy on 2026-04-25) |
+| `sys.exit(0)` (not 1) when Pass 1 yields no prices | `sys.exit(1)` inside an APScheduler job kills the scheduler process permanently; exit 0 lets the scheduler survive and retry the next day |
+| `_stale_cache_fallback()` in main.py | When all live calls fail, query `PriceCache` for any future-dated entries in the batch and build `TripCandidate` objects with `stale_cache=True`; provides a degraded-but-better-than-nothing result instead of a failure email |
+| `pass1_diagnostics` JSON blob on `RunLog` | Stores a breakdown of Pass 1 results (valid, no_price, budget_exhausted, cache_hits, live_calls, stale_cache_used) for post-hoc debugging; written on both success and failure paths |
+| `stale_cache` BOOLEAN on `Trip` | Marks trips built from expired `PriceCache` data so the UI and history table can surface a caveat; NULL/False for all normal trips |
+| Exception in `find_cheapest_in_window` → WARNING + skip, not abort | An unhandled exception in window search (e.g. malformed data) should not abort the entire run; logging at WARNING and skipping that destination allows the remaining batch to proceed |
 
 ## Key file map
 
@@ -202,7 +208,7 @@ main.py
 | `src/trip_a_day/cache.py` | TTL-aware flight price cache: `get_cached_flight()`, `store_flight_cache()` |
 | `src/trip_a_day/costs.py` | `CostBreakdown` dataclass; `build_cost_breakdown()`; `lookup_car_cost()` |
 | `src/trip_a_day/ranker.py` | `TripCandidate` dataclass; `rank_trips()` with pluggable strategy |
-| `src/trip_a_day/notifier.py` | `send_trip_notification()` — Resend HTML email or stdout fallback; `send_test_email()` |
+| `src/trip_a_day/notifier.py` | `send_trip_notification()` — Resend HTML email or stdout fallback; `send_test_email()`; `send_no_results_notification()` — ⚠️ alert with diagnostics when Pass 1 returns no prices |
 | `src/trip_a_day/charts.py` | `generate_price_history_chart()` — matplotlib PNG of destination price history; embedded as base64 in email |
 | `src/trip_a_day/links.py` | URL builders: `build_flight_url`, `build_hotel_url`, `build_car_url` |
 | `src/trip_a_day/window_search.py` | `find_cheapest_in_window()` — 3-probe adaptive triangulation across the advance booking window; cache-first, budget-aware |
@@ -228,6 +234,8 @@ main.py
 | `tests/unit/test_notifier_departure.py` | Departure airport line in HTML and plain text email (12 tests) |
 | `tests/unit/test_window_search.py` | `_probe_dates` and `find_cheapest_in_window` unit tests — budget, cache, and probe-selection (17 tests) |
 | `tests/test_charts.py` | Chart generation edge cases: None for <3 pts, PNG bytes + magic bytes for ≥3, edge costs, 7-point window (8 tests) |
+| `tests/test_pass1_resilience.py` | Pass 1 failure modes: graceful exit, stale cache fallback, exception skipping, diagnostics JSON (8 tests) |
+| `tests/test_api_counter.py` | API counter consistency: mock/live modes, exception path counting, window search double-count prevention (7 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
 
 ## Environment setup

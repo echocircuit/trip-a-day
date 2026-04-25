@@ -26,6 +26,7 @@ class TripCandidate:
     raw_flight_data: str
     raw_hotel_data: str
     departure_airport: str = ""
+    stale_cache: bool = False
 
 
 def rank_trips(

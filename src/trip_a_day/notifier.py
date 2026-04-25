@@ -415,3 +415,60 @@ def send_test_email(prefs: dict[str, str]) -> tuple[bool, str]:
     if ok:
         return True, f"Test email sent to {', '.join(recipients)}."
     return False, "Failed to send test email — check logs for details."
+
+
+def send_no_results_notification(
+    prefs: dict[str, str],
+    run_date: object,
+    diagnostics: dict,
+) -> bool:
+    """Send an alert when no trips could be priced for today's run.
+
+    Returns True if delivery succeeded, False otherwise.
+    """
+    subject = "⚠️ Trip of the Day — No results today"
+    run_date_str = str(run_date)
+
+    diag_lines = "\n".join(
+        f"  <li><strong>{k}:</strong> {v}</li>" for k, v in diagnostics.items()
+    )
+    html_body = textwrap.dedent(f"""\
+        <!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        <h2>⚠️ Trip of the Day &mdash; No Results Today ({run_date_str})</h2>
+        <p>The daily run could not price any trips. The scheduler will retry tomorrow.</p>
+        <h3>Diagnostics</h3>
+        <ul>
+        {diag_lines}
+        </ul>
+        <p style="color:#888;font-size:12px;">
+          This is an automated alert from Trip of the Day.
+          Check your API connectivity and logs for details.
+        </p>
+        </body></html>
+    """)
+    plain_body = (
+        f"Trip of the Day — No Results Today ({run_date_str})\n\n"
+        "The daily run could not price any trips. Will retry tomorrow.\n\n"
+        "Diagnostics:\n"
+        + "\n".join(f"  {k}: {v}" for k, v in diagnostics.items())
+        + "\n"
+    )
+
+    api_key = os.environ.get("RESEND_API_KEY", "")
+    from_email = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+
+    if not api_key:
+        _print_fallback(subject, plain_body)
+        return True
+
+    recipients = _parse_recipients(prefs)
+    if not recipients:
+        logger.warning(
+            "No notification_emails configured; printing no-results alert to stdout."
+        )
+        _print_fallback(subject, plain_body)
+        return True
+
+    return _send_via_resend(
+        api_key, from_email, recipients, subject, html_body, plain_body
+    )

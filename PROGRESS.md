@@ -226,6 +226,28 @@
 - [x] Update `CLAUDE.md`: test count 195→212, `charts.py` in key file map and arch decisions, `test_charts.py` in key file map (2026-04-25)
 - [x] Update `README.md`: `charts.py` in project structure module list (2026-04-25)
 
+### Bug-Fix Session: Pass 1 resilience + API counter (2026-04-25)
+
+Branch: `feature/bug-fixes-pass1-api-counter` (worktree: hopeful-burnell-94a7ac)
+
+Root causes confirmed:
+- **Bug 1:** `sys.exit(1)` on empty Pass 1 crashed APScheduler permanently. Silent exception swallowing in `get_flight_offers` (logged at DEBUG, not WARNING) hid the real cause.
+- **Bug 2:** `record_api_call()` was only called after a *successful* `get_flights()` call. Exceptions bypassed it, making `api_usage` under-count while the in-memory counter tracked all attempts.
+
+Fixes implemented:
+- [x] `fetcher.py`: move `record_api_call` before `get_flights()`, upgrade exception log to WARNING
+- [x] `db.py`: add `pass1_diagnostics TEXT` to `RunLog`, `stale_cache BOOLEAN` to `Trip`; `_migrate_schema` entries updated
+- [x] `ranker.py`: `TripCandidate.stale_cache: bool = False`
+- [x] `notifier.py`: `send_no_results_notification()` added
+- [x] `main.py`: graceful Pass 1 degrade (`sys.exit(0)`), stale-cache fallback, connectivity pre-check, try-except around window search, `pass1_diagnostics` written to `RunLog`
+- [x] `ui.py`: clarify "live API calls (this run)" vs cumulative api_usage label
+- [x] `tests/test_pass1_resilience.py`: 8 new tests
+- [x] `tests/test_api_counter.py`: 7 new tests
+- [x] `tests/unit/test_main_smoke.py`: updated `test_run_exits_0_when_no_destinations` assertion (was 1, now 0)
+- [x] All ruff lint + format issues fixed (235 tests passing)
+
+Commits 1–3 made on 2026-04-25. Commit 4 (docs) in progress.
+
 ### Next Action
 
-Open PR for feature/price-history-chart.
+Open PR for `feature/bug-fixes-pass1-api-counter` → `main`.

@@ -153,8 +153,12 @@ def test_run_succeeds_with_one_candidate(in_memory_session):
         main.run()  # must not raise
 
 
-def test_run_exits_1_when_no_destinations(in_memory_session):
-    """Pipeline exits with code 1 (not a crash) when Pass 1 yields no prices."""
+def test_run_exits_0_when_no_destinations(in_memory_session):
+    """Pipeline exits cleanly with code 0 when Pass 1 yields no prices.
+
+    Previously exited with code 1 which crashed APScheduler. Changed to exit
+    0 so the scheduler survives to run the next day.
+    """
     import main
 
     with (
@@ -163,11 +167,14 @@ def test_run_exits_1_when_no_destinations(in_memory_session):
         patch("main.select_daily_batch", return_value=[_fake_dest()]),
         # All window searches return no result
         patch("main.find_cheapest_in_window", return_value=(None, None, 0, 0)),
+        # Stale cache also empty → forces the graceful-exit path
+        patch("main._stale_cache_fallback", return_value=[]),
+        patch("main.send_no_results_notification", return_value=True),
         pytest.raises(SystemExit) as exc_info,
     ):
         main.run()
 
-    assert exc_info.value.code == 1
+    assert exc_info.value.code == 0
 
 
 def test_run_excludes_zero_flight_cost_and_continues(in_memory_session):

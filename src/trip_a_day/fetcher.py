@@ -508,23 +508,43 @@ def get_cheapest_destinations(
             if _flight_data_mode() == "mock":
                 ff_result = _mock_flight_result(origin_iata, dest_iata)
             else:
-                ff_result = get_flights(
-                    flight_data=[
-                        FlightData(
-                            date=departure_date.isoformat(),
-                            from_airport=origin_iata,
-                            to_airport=dest_iata,
-                        ),
-                    ],
-                    trip="round-trip",
-                    seat="economy",
-                    passengers=Passengers(adults=1),
-                    fetch_mode="fallback",
-                )
                 record_api_call(session, "google_flights")
+                try:
+                    ff_result = get_flights(
+                        flight_data=[
+                            FlightData(
+                                date=departure_date.isoformat(),
+                                from_airport=origin_iata,
+                                to_airport=dest_iata,
+                            ),
+                        ],
+                        trip="round-trip",
+                        seat="economy",
+                        passengers=Passengers(adults=1),
+                        fetch_mode="fallback",
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Google Flights query %s→%s failed: %s: %s",
+                        origin_iata,
+                        dest_iata,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    errors += 1
+                    if errors >= 10:
+                        logger.warning(
+                            "Too many Google Flights errors — stopping destination sweep."
+                        )
+                        break
+                    continue
         except Exception as exc:
-            logger.debug(
-                "Google Flights query %s→%s failed: %s", origin_iata, dest_iata, exc
+            logger.warning(
+                "Unexpected error fetching %s→%s: %s: %s",
+                origin_iata,
+                dest_iata,
+                type(exc).__name__,
+                exc,
             )
             errors += 1
             if errors >= 10:
@@ -582,27 +602,45 @@ def get_flight_offers(
         if _flight_data_mode() == "mock":
             ff_result = _mock_flight_result(origin, destination)
         else:
-            ff_result = get_flights(
-                flight_data=[
-                    FlightData(
-                        date=depart_date.isoformat(),
-                        from_airport=origin,
-                        to_airport=destination,
-                    ),
-                    FlightData(
-                        date=return_date.isoformat(),
-                        from_airport=destination,
-                        to_airport=origin,
-                    ),
-                ],
-                trip="round-trip",
-                seat="economy",
-                passengers=Passengers(adults=adults, children=children),
-                fetch_mode="fallback",
-            )
+            # Count the attempt before calling — ensures api_usage tracks all live
+            # attempts regardless of whether get_flights() throws or returns empty.
             record_api_call(session, "google_flights")
+            try:
+                ff_result = get_flights(
+                    flight_data=[
+                        FlightData(
+                            date=depart_date.isoformat(),
+                            from_airport=origin,
+                            to_airport=destination,
+                        ),
+                        FlightData(
+                            date=return_date.isoformat(),
+                            from_airport=destination,
+                            to_airport=origin,
+                        ),
+                    ],
+                    trip="round-trip",
+                    seat="economy",
+                    passengers=Passengers(adults=adults, children=children),
+                    fetch_mode="fallback",
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Google Flights query %s→%s failed: %s: %s",
+                    origin,
+                    destination,
+                    type(exc).__name__,
+                    exc,
+                )
+                return None
     except Exception as exc:
-        logger.debug("Google Flights query %s→%s failed: %s", origin, destination, exc)
+        logger.warning(
+            "Unexpected error in get_flight_offers %s→%s: %s: %s",
+            origin,
+            destination,
+            type(exc).__name__,
+            exc,
+        )
         return None
 
     if not ff_result or not ff_result.flights:

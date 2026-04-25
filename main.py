@@ -35,6 +35,7 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 from trip_a_day.costs import build_cost_breakdown, is_valid_cost_breakdown
 from trip_a_day.db import (
     Destination,
+    PriceCache,
     RunLog,
     SessionFactory,
     Trip,
@@ -52,7 +53,7 @@ from trip_a_day.fetcher import (
 )
 from trip_a_day.filters import apply_destination_filters
 from trip_a_day.links import build_car_url, build_flight_url
-from trip_a_day.notifier import send_trip_notification
+from trip_a_day.notifier import send_no_results_notification, send_trip_notification
 from trip_a_day.preferences import get, get_all, get_bool, get_int, get_or
 from trip_a_day.ranker import TripCandidate, rank_trips
 from trip_a_day.selector import select_daily_batch
@@ -113,11 +114,183 @@ def _store_results(
             notified=False,
             car_cost_is_estimate=candidate.cost.car_is_estimate,
             departure_iata=candidate.departure_airport or None,
+            stale_cache=candidate.stale_cache,
         )
         session.add(db_trip)
         session.flush()
         trip_ids.append(db_trip.id)
     return trip_ids
+
+
+def _connectivity_ok(session, is_mock: bool) -> bool:
+    """Make one test call to Google Flights (HSV→ATL) to verify live API access.
+
+    Skipped entirely in mock mode. Logs a WARNING on failure but never aborts
+    the run — cached prices may still be usable even when live calls are broken.
+    """
+    if is_mock:
+        return True
+    test_date = date.today() + timedelta(days=7)
+    result = get_flight_offers(
+        origin="HSV",
+        destination="ATL",
+        depart_date=test_date,
+        return_date=test_date + timedelta(days=7),
+        adults=1,
+        children=0,
+        session=session,
+        direct_only=False,
+    )
+    if result is None:
+        logger.warning(
+            "Connectivity pre-check: test call HSV→ATL returned no result"
+            " — live Google Flights API may be degraded or blocked."
+        )
+        return False
+    logger.info(
+        "Connectivity pre-check: OK (HSV→ATL ≈ $%.0f on %s).",
+        result.price_total,
+        test_date,
+    )
+    return True
+
+
+def _stale_cache_fallback(
+    session,
+    batch: list,
+    dep_iata: str,
+    transport_usd: float,
+    home_lat: float,
+    home_lon: float,
+    num_adults: int,
+    num_children: int,
+    num_rooms: int,
+    car_rental_required: bool,
+    trip_nights: int,
+    preferred_car_site: str,
+) -> list[TripCandidate]:
+    """Build TripCandidates from stale (possibly TTL-expired) cached prices.
+
+    Used as a last resort when all live API calls fail. Returns an empty list
+    if no usable cached prices exist for any destination in the batch.
+    """
+    today = date.today()
+    candidates: list[TripCandidate] = []
+
+    for dest in batch:
+        iata = dest.iata_code
+        cached = (
+            session.query(PriceCache)
+            .filter(
+                PriceCache.origin_iata == dep_iata,
+                PriceCache.destination_iata == iata,
+                PriceCache.departure_date >= today,
+            )
+            .order_by(PriceCache.queried_at.desc())
+            .first()
+        )
+        if cached is None or cached.price_usd <= 0:
+            continue
+
+        nights = (cached.return_date - cached.departure_date).days
+        if nights <= 0:
+            continue
+
+        airport = get_airport_info(iata, session)
+        if airport:
+            city = airport.city.title()
+            country = airport.country.title()
+            region = airport.region
+            lat, lon = airport.latitude or 0.0, airport.longitude or 0.0
+        else:
+            city, country, region = iata, "Unknown", "Other"
+            lat, lon = 0.0, 0.0
+
+        hotel = get_hotel_offers(
+            city_code=iata,
+            checkin=cached.departure_date,
+            checkout=cached.return_date,
+            adults=num_adults,
+            session=session,
+            num_rooms=num_rooms,
+        )
+        if hotel is None:
+            continue
+
+        food = get_food_cost(
+            city=city,
+            country=country,
+            region=region,
+            days=nights,
+            people=num_adults + num_children,
+            session=session,
+        )
+        cost = build_cost_breakdown(
+            flight_total=cached.price_usd,
+            hotel_total=hotel.price_total,
+            car_region=region,
+            food_total=food.total_cost,
+            days=nights,
+            car_required=car_rental_required,
+            transport_usd=transport_usd,
+        )
+        valid, _ = is_valid_cost_breakdown(cost)
+        if not valid:
+            continue
+
+        distance = (
+            haversine_miles(home_lat, home_lon, lat, lon)
+            if lat != 0.0 or lon != 0.0
+            else 0.0
+        )
+        flight_url = build_flight_url(
+            dep_iata,
+            iata,
+            cached.departure_date,
+            cached.return_date,
+            adults=num_adults,
+            children=num_children,
+        )
+        car_url = build_car_url(
+            iata,
+            city,
+            cached.departure_date,
+            cached.return_date,
+            preferred_car_site,
+        )
+        candidates.append(
+            TripCandidate(
+                destination_iata=iata,
+                city=city,
+                country=country,
+                region=region,
+                departure_date=cached.departure_date,
+                return_date=cached.return_date,
+                cost=cost,
+                distance_miles=distance,
+                flight_booking_url=flight_url,
+                hotel_booking_url=hotel.booking_url,
+                car_booking_url=car_url,
+                raw_flight_data=json.dumps(
+                    {
+                        "source": "stale_cache",
+                        "price_usd": cached.price_usd,
+                        "cached_at": str(cached.queried_at),
+                    }
+                ),
+                raw_hotel_data=hotel.raw,
+                departure_airport=dep_iata,
+                stale_cache=True,
+            )
+        )
+
+    if candidates:
+        logger.warning(
+            "Stale cache fallback: using %d cached price(s) from price_cache"
+            " (TTL may be expired — prices may be outdated).",
+            len(candidates),
+        )
+    return candidates
 
 
 def run(triggered_by: str = "manual") -> None:
@@ -226,6 +399,9 @@ def run(triggered_by: str = "manual") -> None:
 
         departure_iatas = [home_airport] + [a.iata for a in nearby_airports]
 
+        # ── Connectivity pre-check (live mode only) ──────────────────────────
+        _connectivity_ok(session, is_mock)
+
         # ── Three-pass search across all departure airports ───────────────────
         flights_calls_start = get_api_calls_today(session, "google_flights")
         live_calls_made = 0
@@ -234,6 +410,14 @@ def run(triggered_by: str = "manual") -> None:
         all_candidates: list[TripCandidate] = []
         any_pass1_prices = False
         invalid_exclusions: list[dict[str, str]] = []
+        # Counters for Pass 1 diagnostic reporting.
+        pass1_stats: dict[str, int] = {
+            "valid": 0,
+            "no_price": 0,
+            "budget_exhausted": 0,
+            "cache_hits": 0,
+            "live_calls": 0,
+        }
 
         for dep_iata in departure_iatas:
             # Round-trip IRS-rate driving cost from home to this departure airport
@@ -265,31 +449,54 @@ def run(triggered_by: str = "manual") -> None:
                     continue
 
                 live_budget = max_live_calls - live_calls_made
+                if live_budget <= 0 and not is_mock:
+                    pass1_stats["budget_exhausted"] += 1
+                    logger.debug(
+                        "  [P1] %s→%s — live call budget exhausted, skipping",
+                        dep_iata,
+                        iata,
+                    )
+                    continue
 
-                cost, best_date, calls_used, hits_used = find_cheapest_in_window(
-                    origin_iata=dep_iata,
-                    destination=dest,
-                    min_days=advance_window_min,
-                    max_days=advance_window_max,
-                    trip_length_nights=trip_nights,
-                    adults=num_adults,
-                    children=num_children,
-                    num_rooms=num_rooms,
-                    car_rental_required=car_rental_required,
-                    direct_flights_only=direct_flights_only,
-                    cache_ttl_enabled=cache_ttl_enabled,
-                    is_mock=is_mock,
-                    db_session=session,
-                    live_calls_remaining=live_budget,
-                    transport_usd=transport_usd,
-                )
+                try:
+                    cost, best_date, calls_used, hits_used = find_cheapest_in_window(
+                        origin_iata=dep_iata,
+                        destination=dest,
+                        min_days=advance_window_min,
+                        max_days=advance_window_max,
+                        trip_length_nights=trip_nights,
+                        adults=num_adults,
+                        children=num_children,
+                        num_rooms=num_rooms,
+                        car_rental_required=car_rental_required,
+                        direct_flights_only=direct_flights_only,
+                        cache_ttl_enabled=cache_ttl_enabled,
+                        is_mock=is_mock,
+                        db_session=session,
+                        live_calls_remaining=live_budget,
+                        transport_usd=transport_usd,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "  [P1] %s→%s — unhandled exception in window search: %s: %s",
+                        dep_iata,
+                        iata,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    pass1_stats["no_price"] += 1
+                    continue
                 live_calls_made += calls_used
                 cache_hits += hits_used
+                pass1_stats["cache_hits"] += hits_used
+                pass1_stats["live_calls"] += calls_used
 
                 if cost is None or best_date is None:
+                    pass1_stats["no_price"] += 1
                     logger.info("  [P1] %s→%s — no valid price found", dep_iata, iata)
                     continue
 
+                pass1_stats["valid"] += 1
                 pass1_results.append((dest, cost.total, best_date))
                 logger.info(
                     "  [P1] %s→%s — $%.0f (depart %s)",
@@ -492,24 +699,61 @@ def run(triggered_by: str = "manual") -> None:
 
         if not any_pass1_prices:
             logger.error(
-                "Pass 1 returned no prices from any departure airport"
-                " — check connectivity or pool."
+                "Pass 1 complete: 0 valid prices from %d destinations.\n"
+                "  Cache hits: %d\n"
+                "  Live calls attempted: %d\n"
+                "  Returned None (no flights/no valid price): %d\n"
+                "  Budget exhausted before call: %d\n"
+                "Check Google Flights connectivity and the logs above for WARNING-level"
+                " exception details.",
+                len(batch),
+                pass1_stats["cache_hits"],
+                pass1_stats["live_calls"],
+                pass1_stats["no_price"],
+                pass1_stats["budget_exhausted"],
             )
-            session.add(
-                RunLog(
-                    run_at=datetime.now(UTC),
-                    status="failed",
-                    triggered_by=triggered_by,
-                    destinations_evaluated=len(batch),
-                    error_message="Pass 1 returned no prices",
-                    duration_seconds=duration,
-                    api_calls_flights=live_calls_made,
-                    cache_hits_flights=cache_hits,
-                    destinations_excluded=len(invalid_exclusions),
+
+            # Try stale cache as a last resort before giving up.
+            stale_candidates = _stale_cache_fallback(
+                session=session,
+                batch=batch,
+                dep_iata=home_airport,
+                transport_usd=0.0,
+                home_lat=home_lat,
+                home_lon=home_lon,
+                num_adults=num_adults,
+                num_children=num_children,
+                num_rooms=num_rooms,
+                car_rental_required=car_rental_required,
+                trip_nights=trip_nights,
+                preferred_car_site=preferred_car_site,
+            )
+            if stale_candidates:
+                pass1_stats["stale_cache_used"] = 1
+                all_candidates = stale_candidates
+            else:
+                # No stale cache either — send alert and exit cleanly.
+                notifications_enabled_early = (
+                    all_prefs.get("notifications_enabled", "true") == "true"
                 )
-            )
-            session.commit()
-            sys.exit(1)
+                if notifications_enabled_early:
+                    send_no_results_notification(all_prefs, run_date, pass1_stats)
+                session.add(
+                    RunLog(
+                        run_at=datetime.now(UTC),
+                        status="failed",
+                        triggered_by=triggered_by,
+                        destinations_evaluated=len(batch),
+                        error_message="Pass 1 returned no prices",
+                        duration_seconds=duration,
+                        api_calls_flights=flights_calls_this_run,
+                        cache_hits_flights=cache_hits,
+                        destinations_excluded=len(invalid_exclusions),
+                        pass1_diagnostics=json.dumps(pass1_stats),
+                    )
+                )
+                session.commit()
+                sys.exit(0)
 
         if not all_candidates:
             logger.error("No valid trip candidates found. Logging failed run.")
@@ -572,6 +816,12 @@ def run(triggered_by: str = "manual") -> None:
         )
         logger.info(run_summary)
 
+        stale_cache_in_use = pass1_stats.get("stale_cache_used", 0) == 1
+        if stale_cache_in_use:
+            logger.warning(
+                "Run succeeded using STALE cached prices — results may be outdated."
+            )
+
         session.add(
             RunLog(
                 run_at=datetime.now(UTC),
@@ -585,6 +835,7 @@ def run(triggered_by: str = "manual") -> None:
                 destinations_excluded=len(invalid_exclusions),
                 filter_fallback=filter_fallback,
                 invalid_data_exclusions=exclusions_json,
+                pass1_diagnostics=json.dumps(pass1_stats),
             )
         )
         session.commit()
