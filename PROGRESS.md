@@ -219,6 +219,9 @@
 - [x] Update `notifier.py`: `db_session` parameter on `send_trip_notification` and `_build_html`; `_price_history_section_html` helper embeds chart or shows fallback message (2026-04-25)
 - [x] Update `main.py`: pass `db_session=session` to `send_trip_notification` (2026-04-25)
 
+- [x] Create `tests/test_charts.py` — 8 tests: None for <3 pts, PNG bytes for ≥3 pts, valid PNG magic, edge cases (higher/lower/identical costs), 7-point rolling window path (2026-04-25)
+- [x] 212 tests passing (204 existing + 8 chart tests)
+
 ### Next Action
 
-Add tests/test_charts.py (commit 3 of 4).
+Update spec, CLAUDE.md, README (commit 4 of 4).
