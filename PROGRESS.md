@@ -210,6 +210,22 @@
 - [x] Update `tests/test_smoke.py` to cover new preference keys `advance_window_min_days`, `advance_window_max_days` (2026-04-24)
 - [x] Doc sweep: CLAUDE.md (new module, new arch decisions, updated test count 149→166 unit, 9→10 imports), README.md (module list, preference table) (2026-04-24)
 
+### Price History Chart (2026-04-25) — branch: feature/price-history-chart
+
+- [x] Add `matplotlib>=3.8` to `requirements.txt` (2026-04-25)
+- [x] Create `src/trip_a_day/charts.py` — `generate_price_history_chart()` with 3-probe min threshold, 7-point rolling avg, orange "Today" highlight (2026-04-25)
+- [x] Add mypy override for `matplotlib.*` in `pyproject.toml` (2026-04-25)
+
+- [x] Update `notifier.py`: `db_session` parameter on `send_trip_notification` and `_build_html`; `_price_history_section_html` helper embeds chart or shows fallback message (2026-04-25)
+- [x] Update `main.py`: pass `db_session=session` to `send_trip_notification` (2026-04-25)
+
+- [x] Create `tests/test_charts.py` — 8 tests: None for <3 pts, PNG bytes for ≥3 pts, valid PNG magic, edge cases (higher/lower/identical costs), 7-point rolling window path (2026-04-25)
+- [x] 212 tests passing (204 existing + 8 chart tests)
+
+- [x] Update `trip_of_the_day_spec.md`: `charts.py` in Section 6 module list; per-component chart extension in Section 14 Future Considerations (2026-04-25)
+- [x] Update `CLAUDE.md`: test count 195→212, `charts.py` in key file map and arch decisions, `test_charts.py` in key file map (2026-04-25)
+- [x] Update `README.md`: `charts.py` in project structure module list (2026-04-25)
+
 ### Next Action
 
-Push feature/advance-booking-window and open PR.
+Open PR for feature/price-history-chart.

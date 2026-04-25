@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
 import textwrap
+from typing import TYPE_CHECKING
 
 from trip_a_day.fetcher import get_airport_city
 from trip_a_day.ranker import TripCandidate
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +26,7 @@ def send_trip_notification(
     is_mock: bool = False,
     home_airport: str = "",
     trip_id: int | None = None,
+    db_session: Session | None = None,
 ) -> bool:
     """Send the daily trip notification email (or print to stdout if no API key).
 
@@ -34,6 +40,7 @@ def send_trip_notification(
         is_mock=is_mock,
         home_airport=home_airport,
         trip_id=trip_id,
+        db_session=db_session,
     )
     plain_body = _build_plain(
         trip,
@@ -147,6 +154,40 @@ def _nearby_dep_html(trip: TripCandidate, home_airport: str) -> str:
     )
 
 
+def _price_history_section_html(trip: TripCandidate, db_session: Session | None) -> str:
+    """Return the price-history chart block, or a 'not enough data' fallback."""
+    if db_session is not None:
+        try:
+            from trip_a_day.charts import generate_price_history_chart
+
+            chart_bytes = generate_price_history_chart(
+                trip.destination_iata,
+                f"{trip.city}, {trip.country}",
+                trip.cost.total,
+                db_session,
+            )
+        except Exception as exc:
+            logger.warning("Failed to generate price history chart: %s", exc)
+            chart_bytes = None
+    else:
+        chart_bytes = None
+
+    if chart_bytes is not None:
+        b64 = base64.b64encode(chart_bytes).decode("ascii")
+        return (
+            f'  <img src="data:image/png;base64,{b64}"\n'
+            f'       alt="Price history chart for {trip.city}"\n'
+            f'       width="600" style="max-width:100%;border-radius:4px;" />\n'
+            f'  <p class="estimate">Historical total trip cost estimates for this destination.'
+            f" Hotel and food costs are per diem estimates; car costs are regional estimates.</p>\n"
+        )
+
+    return (
+        '  <p style="color:#888;font-size:13px;">&#x1F4CA; Price history will appear here'
+        " once more data has been collected for this destination.</p>\n"
+    )
+
+
 def _build_html(
     trip: TripCandidate,
     *,
@@ -154,6 +195,7 @@ def _build_html(
     is_mock: bool = False,
     home_airport: str = "",
     trip_id: int | None = None,
+    db_session: Session | None = None,
 ) -> str:
     nights = (trip.return_date - trip.departure_date).days
     distance_str = (
@@ -201,6 +243,8 @@ def _build_html(
   </table>
   <p class="estimate">* Hotel and food are government per diem rate estimates (GSA / State Dept); car rental is a regional average. Only flight prices are live quotes from Google Flights.</p>
 
+  <h3>Price History</h3>
+{_price_history_section_html(trip, db_session)}
   <h3>Book Now</h3>
   <a class="btn" href="{trip.flight_booking_url}">&#x2708; Book Flights</a>
   <a class="btn" href="{trip.hotel_booking_url}">&#x1F3E8; Book Hotel</a>

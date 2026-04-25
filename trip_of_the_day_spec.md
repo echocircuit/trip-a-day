@@ -325,6 +325,7 @@ trip_of_the_day/
 ├── costs.py                 # Cost assembly; combines flight + hotel + car + food into CostBreakdown
 ├── ranker.py                # Sorts and selects the best trip from candidates
 ├── notifier.py              # Email composition and delivery via Resend
+├── charts.py                # Price history chart generation (matplotlib PNG, base64-embedded in email)
 ├── db.py                    # SQLAlchemy setup, ORM models, DB initialization
 ├── preferences.py           # Read/write preference helpers
 ├── ui.py                    # Streamlit UI (preferences editor, history, exclusion list)
@@ -807,3 +808,4 @@ These items are explicitly out of scope for all current phases but should not be
 - **Visa and entry requirement data** — surface basic travel advisory info alongside the trip
 - **Weather data integration** — include destination weather forecast in the notification
 - **Trip scoring beyond cost** — incorporate safety index, traveler ratings, climate suitability
+- **Per-component price history chart** — extend `charts.py` to show stacked or side-by-side lines for flights, hotel, food, and car separately (in addition to the existing total-cost line), helping users understand which cost component is driving changes over time
