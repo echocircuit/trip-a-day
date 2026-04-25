@@ -210,6 +210,12 @@
 - [x] Update `tests/test_smoke.py` to cover new preference keys `advance_window_min_days`, `advance_window_max_days` (2026-04-24)
 - [x] Doc sweep: CLAUDE.md (new module, new arch decisions, updated test count 149→166 unit, 9→10 imports), README.md (module list, preference table) (2026-04-24)
 
+### Price History Chart (2026-04-25) — branch: feature/price-history-chart
+
+- [x] Add `matplotlib>=3.8` to `requirements.txt` (2026-04-25)
+- [x] Create `src/trip_a_day/charts.py` — `generate_price_history_chart()` with 3-probe min threshold, 7-point rolling avg, orange "Today" highlight (2026-04-25)
+- [x] Add mypy override for `matplotlib.*` in `pyproject.toml` (2026-04-25)
+
 ### Next Action
 
-Push feature/advance-booking-window and open PR.
+Embed chart in notifier.py (commit 2 of 4).
