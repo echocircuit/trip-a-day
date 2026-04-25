@@ -658,7 +658,13 @@ def get_flight_offers(
 
     price, best_flight = min(valid, key=lambda x: x[0])
     booking_url = build_flight_url(
-        origin, destination, depart_date, return_date, adults=adults, children=children
+        origin,
+        destination,
+        depart_date,
+        return_date,
+        adults=adults,
+        children=children,
+        direct_only=direct_only,
     )
     raw = json.dumps(
         {

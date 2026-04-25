@@ -575,10 +575,19 @@ def _preferences() -> None:
             )
         except (json.JSONDecodeError, TypeError):
             emails_str = ""
+        # Fall back to NOTIFICATION_EMAILS env var, mirroring notifier._parse_recipients
+        if not emails_str:
+            _env_emails = os.environ.get("NOTIFICATION_EMAILS", "")
+            if _env_emails:
+                emails_str = ", ".join(
+                    e.strip() for e in _env_emails.split(",") if e.strip()
+                )
+        _emails_placeholder = "No email configured" if not emails_str else None
         if _is_test_sender:
             st.text_input(
                 "Notification emails (read-only in test sender mode)",
                 value=emails_str,
+                placeholder=_emails_placeholder,
                 disabled=True,
                 help="Email recipients cannot be changed while using the shared test sender.",
             )
@@ -587,6 +596,7 @@ def _preferences() -> None:
             notification_emails = st.text_input(
                 "Notification emails (comma-separated)",
                 value=emails_str,
+                placeholder=_emails_placeholder or "you@example.com",
                 help="Leave blank to print the trip to stdout instead of emailing.",
             )
 
