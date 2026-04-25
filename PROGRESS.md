@@ -208,8 +208,8 @@
 - [x] Add `tests/unit/test_window_search.py` — 17 tests for `_probe_dates` and `find_cheapest_in_window` (2026-04-24)
 - [x] Update `tests/test_imports.py` to cover `window_search.find_cheapest_in_window`; 10 import tests now (2026-04-24)
 - [x] Update `tests/test_smoke.py` to cover new preference keys `advance_window_min_days`, `advance_window_max_days` (2026-04-24)
-- [ ] Doc sweep: CLAUDE.md, README.md
+- [x] Doc sweep: CLAUDE.md (new module, new arch decisions, updated test count 149→166 unit, 9→10 imports), README.md (module list, preference table) (2026-04-24)
 
 ### Next Action
 
-Complete advance booking window rework: doc sweep (CLAUDE.md + README.md), then push and open PR.
+Push feature/advance-booking-window and open PR.
