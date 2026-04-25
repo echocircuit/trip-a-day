@@ -203,7 +203,7 @@
 
 - [x] Add `advance_window_min_days` (default 7) and `advance_window_max_days` (default 30) to `db.py` defaults; keep `advance_days` for backwards-compat (2026-04-24)
 - [x] Update `ui.py`: replace single "Days ahead to search" input with two sliders ("Earliest departure" / "Latest departure") and min<max validation warning (2026-04-24)
-- [ ] Create `src/trip_a_day/window_search.py` — `find_cheapest_in_window()` with 3-probe adaptive triangulation
+- [x] Create `src/trip_a_day/window_search.py` — `find_cheapest_in_window()` with 3-probe adaptive triangulation (2026-04-24)
 - [ ] Restructure `main.py` to three-pass pipeline: Pass 1 window search per destination, Pass 2 flex-length for top N, final ranking
 - [ ] Add `tests/unit/test_window_search.py` import and smoke coverage
 - [ ] Update `tests/test_imports.py` and `tests/test_smoke.py` for new module + prefs
@@ -211,4 +211,4 @@
 
 ### Next Action
 
-Continue advance booking window rework: implement `window_search.py` next.
+Continue advance booking window rework: restructure `main.py` three-pass pipeline next.
