@@ -211,8 +211,9 @@
 
 ### Next Action
 
-Continue advance booking window rework: next steps are (in order):
+Advance booking window rework — paused after Commit 3. Remaining work (in order):
 1. Add `tests/unit/test_window_search.py` for `_probe_dates` and `find_cheapest_in_window` unit tests
 2. Update `tests/test_imports.py` to cover `window_search.find_cheapest_in_window`
 3. Update `tests/test_smoke.py` to cover new preference keys (`advance_window_min_days`, `advance_window_max_days`)
 4. Doc sweep: CLAUDE.md (new module, new prefs, updated architecture decisions), README.md (preference table update)
+5. Push branch and open PR
