@@ -16,6 +16,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from trip_a_day.costs import CostBreakdown
 from trip_a_day.db import Base
 from trip_a_day.fetcher import AirportInfo, FlightOffer, FoodEstimate, HotelOffer
 
@@ -47,6 +48,9 @@ def _airport(iata: str, lat: float = 34.0, lon: float = -86.0) -> AirportInfo:
 def _dest(iata: str = "JFK") -> SimpleNamespace:
     return SimpleNamespace(
         iata_code=iata,
+        city="New York",
+        country="United States",
+        region="North America",
         excluded=False,
         last_queried_at=None,
         query_count=0,
@@ -90,22 +94,55 @@ def _food() -> FoodEstimate:
     )
 
 
+def _cost(flight: float = 400.0, transport: float = 0.0) -> CostBreakdown:
+    return CostBreakdown(
+        flights=flight,
+        hotel=700.0,
+        car=100.0,
+        food=200.0,
+        car_is_estimate=True,
+        transport_usd=transport,
+    )
+
+
 def test_multi_airport_selects_cheapest_globally(in_memory_session):
     """Pipeline picks the globally cheapest trip even when it departs from a nearby airport.
 
     Setup:
     - Home airport HSV, nearby airport BHM (~73 mi away).
-    - HSV→JFK flight costs $800; BHM→JFK flight costs $300.
-    - Transport to BHM = 73 mi x 2 x $0.70 = ~$102.
-    - BHM total (flight $300 + transport $102 + hotel/food/car) < HSV total (flight $800).
-    - Winner must be the BHM departure.
+    - HSV Pass 1 cost: $1,800 total (flight $800 + hotel $700 + car $100 + food $200).
+    - BHM Pass 1 cost: $1,402 total (flight $300 + transport $102 + hotel $700 + car $100 + food $200).
+    - Winner must be the BHM departure (cheaper globally).
     """
+    from datetime import UTC, datetime
+
     import main
+
+    from trip_a_day.db import Preference
+
+    # Pre-seed search_radius_miles > 0 so the nearby-airport search fires.
+    with in_memory_session() as s:
+        s.merge(
+            Preference(
+                key="search_radius_miles",
+                value="100",
+                updated_at=datetime.now(UTC),
+            )
+        )
+        s.commit()
 
     depart = date.today() + timedelta(days=7)
     nearby_bhm = _airport("BHM", lat=33.5629, lon=-86.7535)
 
-    # Flights: HSV→JFK is expensive; BHM→JFK is cheap
+    # Pass 1: window search returns different costs per departure airport
+    def _window_side_effect(*args, **kwargs):
+        origin = kwargs.get("origin_iata") or args[0]
+        transport = 102.0 if origin == "BHM" else 0.0
+        flight_cost = 300.0 if origin == "BHM" else 800.0
+        c = _cost(flight=flight_cost, transport=transport)
+        return (c, depart, 1, 0)
+
+    # Pass 2: get_flight_offers returns different prices per origin
     def fake_get_flights(
         origin,
         destination,
@@ -116,18 +153,14 @@ def test_multi_airport_selects_cheapest_globally(in_memory_session):
         session,
         direct_only=True,
     ):
-        if origin == "HSV":
-            return _flight("HSV", destination, 800.0, depart_date)
-        if origin == "BHM":
-            return _flight("BHM", destination, 300.0, depart_date)
-        return None
+        price = 300.0 if origin == "BHM" else 800.0
+        return _flight(origin, destination, price, depart_date)
 
     with (
         patch("main.init_db"),
         patch("main.SessionFactory", in_memory_session),
         patch("main.select_daily_batch", return_value=[_dest("JFK")]),
-        patch("main.get_cached_flight", return_value=None),
-        patch("main.store_flight_cache"),
+        patch("main.find_cheapest_in_window", side_effect=_window_side_effect),
         patch(
             "main.get_airport_info",
             side_effect=lambda iata, session: _airport(
@@ -148,9 +181,16 @@ def test_multi_airport_selects_cheapest_globally(in_memory_session):
     ):
         main.run()
 
-    # Verify the winning candidate came from BHM by checking the notification was called
-    # (smoke test — if it gets here without sys.exit, the pipeline completed successfully
-    # and chose BHM based on lower total cost including transport)
+    # Verify the winning candidate came from BHM (cheaper globally)
+    with in_memory_session() as s:
+        from trip_a_day.db import RunLog, Trip
+
+        run = s.query(RunLog).order_by(RunLog.id.desc()).first()
+        assert run is not None
+        assert run.status == "success"
+        winner = s.get(Trip, run.winner_trip_id)
+        assert winner is not None
+        assert winner.departure_iata == "BHM"
 
 
 def test_radius_zero_uses_only_home_airport(in_memory_session):
@@ -163,8 +203,7 @@ def test_radius_zero_uses_only_home_airport(in_memory_session):
         patch("main.init_db"),
         patch("main.SessionFactory", in_memory_session),
         patch("main.select_daily_batch", return_value=[_dest("JFK")]),
-        patch("main.get_cached_flight", return_value=None),
-        patch("main.store_flight_cache"),
+        patch("main.find_cheapest_in_window", return_value=(_cost(), depart, 1, 0)),
         patch("main.get_airport_info", return_value=_airport("HSV")),
         patch("main.get_nearby_airports") as mock_nearby,
         patch(

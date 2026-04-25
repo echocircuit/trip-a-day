@@ -64,10 +64,10 @@ def find_cheapest_in_window(
     db_session: Session,
     live_calls_remaining: int,
     transport_usd: float = 0.0,
-) -> tuple[CostBreakdown | None, date | None, int]:
+) -> tuple[CostBreakdown | None, date | None, int, int]:
     """Probe departure dates across the booking window and return the cheapest valid trip.
 
-    Returns (best_cost_breakdown, best_departure_date, live_calls_used).
+    Returns (best_cost_breakdown, best_departure_date, live_calls_used, cache_hits_used).
     best_cost_breakdown is None if no valid result was found.
     """
     today = date.today()
@@ -82,6 +82,7 @@ def find_cheapest_in_window(
     best_cost: CostBreakdown | None = None
     best_date: date | None = None
     live_calls_used = 0
+    cache_hits_used = 0
 
     for depart_date in probes:
         return_date = depart_date + timedelta(days=trip_length_nights)
@@ -111,6 +112,7 @@ def find_cheapest_in_window(
 
         if cached is not None:
             flight_price = cached.price_usd
+            cache_hits_used += 1
             logger.debug(
                 "  [window/cache] %s→%s %s — $%.0f",
                 origin_iata,
@@ -219,4 +221,4 @@ def find_cheapest_in_window(
             best_cost = cost
             best_date = depart_date
 
-    return best_cost, best_date, live_calls_used
+    return best_cost, best_date, live_calls_used, cache_hits_used

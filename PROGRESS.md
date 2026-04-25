@@ -204,11 +204,15 @@
 - [x] Add `advance_window_min_days` (default 7) and `advance_window_max_days` (default 30) to `db.py` defaults; keep `advance_days` for backwards-compat (2026-04-24)
 - [x] Update `ui.py`: replace single "Days ahead to search" input with two sliders ("Earliest departure" / "Latest departure") and min<max validation warning (2026-04-24)
 - [x] Create `src/trip_a_day/window_search.py` — `find_cheapest_in_window()` with 3-probe adaptive triangulation (2026-04-24)
-- [ ] Restructure `main.py` to three-pass pipeline: Pass 1 window search per destination, Pass 2 flex-length for top N, final ranking
+- [x] Restructure `main.py` to three-pass pipeline: Pass 1 window search per destination, Pass 2 flex-length for top N, final ranking (2026-04-24)
 - [ ] Add `tests/unit/test_window_search.py` import and smoke coverage
 - [ ] Update `tests/test_imports.py` and `tests/test_smoke.py` for new module + prefs
 - [ ] Doc sweep: CLAUDE.md, PROGRESS.md, README.md
 
 ### Next Action
 
-Continue advance booking window rework: restructure `main.py` three-pass pipeline next.
+Continue advance booking window rework: next steps are (in order):
+1. Add `tests/unit/test_window_search.py` for `_probe_dates` and `find_cheapest_in_window` unit tests
+2. Update `tests/test_imports.py` to cover `window_search.find_cheapest_in_window`
+3. Update `tests/test_smoke.py` to cover new preference keys (`advance_window_min_days`, `advance_window_max_days`)
+4. Doc sweep: CLAUDE.md (new module, new prefs, updated architecture decisions), README.md (preference table update)
