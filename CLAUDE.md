@@ -41,7 +41,9 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 ## Current phase
 
-**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 253 tests passing (169 unit + 29 links + 10 imports + 2 smoke + 12 charts + 8 pass1-resilience + 7 api-counter + 16 email-limits) — includes advance booking window rework, price history chart (dual-series), bug-fix sessions, and email usage tracking feature (see below).
+**Phase 8 — Complete.** Hybrid Destination Input: searchable pool table with enable/disable toggles, add-custom-destination form with live per-diem fuzzy-match preview, CSV bulk import with preview (matched/unmatched/error counts). 275 tests passing (190 unit + 29 links + 11 imports + 2 smoke + 12 charts + 8 pass1-resilience + 7 api-counter + 16 email-limits).
+
+**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports — includes advance booking window rework, price history chart (dual-series), bug-fix sessions, and email usage tracking feature (see below).
 
 **Phase 7b removed (user decision):** Phase 7b (real transit cost via routing API) was dropped because it adds external API dependencies (Rome2rio or Google Maps Distance Matrix) that complicate new-user setup without sufficient value over the IRS mileage estimate already implemented in Phase 7a.
 
@@ -77,7 +79,7 @@ The final commit of each phase must be a doc sweep that confirms all three files
 **Launch UI:** `streamlit run ui.py`
 **Launch scheduler:** `python scheduler.py` (daily at time in `scheduled_run_time` pref, default 07:00 local)
 
-**Next: Phase 8.** Begin with `git checkout main && git pull && git checkout -b feature/phase-8-<description>`.
+**Next: Phase 9.** Begin with `git checkout main && git pull && git checkout -b feature/phase-9-polish`.
 
 ## Development workflow
 
@@ -140,7 +142,8 @@ main.py
 - `CostBreakdown` (defined in `costs.py`) — flight, hotel, car, food, transport_usd, car_is_estimate, hotel_is_estimate; `total` is a computed `@property`
 - `TripCandidate` (defined in `ranker.py`) — full trip candidate with cost and metadata; `stale_cache: bool = False` marks trips built from expired cache data
 - Fetcher dataclasses (defined in `fetcher.py`): `FlightOffer`, `HotelOffer`, `FoodEstimate`, `AirportInfo`
-- SQLAlchemy ORM models (defined in `db.py`): `Preference`, `Destination`, `Trip` (`stale_cache BOOLEAN`), `RunLog` (`pass1_diagnostics TEXT`, `email_blocked BOOLEAN`, `email_blocked_reason TEXT`), `ApiUsage`, `PriceCache`, `EmailUsage` (monthly email counter)
+- SQLAlchemy ORM models (defined in `db.py`): `Preference`, `Destination` (`is_custom BOOLEAN` marks user-added rows), `Trip` (`stale_cache BOOLEAN`), `RunLog` (`pass1_diagnostics TEXT`, `email_blocked BOOLEAN`, `email_blocked_reason TEXT`), `ApiUsage`, `PriceCache`, `EmailUsage` (monthly email counter)
+- `PerDiemMatch`, `CsvRow`, `CsvImportPreview` (defined in `destination_input.py`) — Phase 8 helper dataclasses for fuzzy matching and CSV import preview
 
 **Database:** `trip_of_the_day.db` at the project root. Path derived from `db.py` location using `pathlib.Path(__file__).resolve().parents[2]`.
 
@@ -208,6 +211,11 @@ main.py
 | `_record_run_log_blocked` queries most recent `RunLog` by `id DESC` | The RunLog row is committed before `send_trip_notification` is called; querying by id DESC within the same session (identity map) returns the same Python object; no separate run_log_id parameter needed |
 | `record_email_sent` called only on `email.get("id")` success | Ensures the counter only increments when Resend confirms delivery; API errors (rate limit, network) do not inflate the count |
 | `email_monthly_limit` and `email_warning_threshold_pct` stored as preferences | User can override the Resend free-tier defaults (3,000/month, 90% threshold) without code changes; UI exposes both inputs in Notifications section |
+| `is_custom: bool = False` on `Destination` | Distinguishes user-added rows from seed data; `_seed_destinations()` skips metadata refresh for custom rows so user edits (city name, region) are never overwritten by a seed update |
+| `fuzzy_match_per_diem` uses `difflib.SequenceMatcher` (stdlib) | No extra dependency; SequenceMatcher ratio is adequate for city-name matching; cutoff=0.6 keeps false-positive rate low while tolerating common typos |
+| CSV import skips existing IATA codes | Re-importing a CSV that overlaps with seed or prior custom data is a no-op for existing rows; prevents duplicate inserts without raising an error |
+| Per-diem preview rendered outside the form | Streamlit forms only update on submit; showing the match result outside the form gives live feedback as the user types the city name |
+| Destinations page in its own sidebar section (not in Preferences) | The pool manager, add-custom form, and CSV import are operationally distinct from the scalar preference inputs; separating them avoids a very long Preferences page |
 
 ## Key file map
 
@@ -226,6 +234,7 @@ main.py
 | `src/trip_a_day/charts.py` | `generate_price_history_chart(destination_iata, destination_name, today_cost, today_run_date, db_session)` — dual-series matplotlib PNG (blue: destination history; green dashed: recent daily picks); embedded as base64 in email and rendered in Streamlit UI |
 | `src/trip_a_day/links.py` | URL builders: `build_flight_url`, `build_hotel_url`, `build_car_url` |
 | `src/trip_a_day/window_search.py` | `find_cheapest_in_window()` — 3-probe adaptive triangulation across the advance booking window; cache-first, budget-aware |
+| `src/trip_a_day/destination_input.py` | Phase 8: `fuzzy_match_per_diem()` (difflib), `parse_destination_csv()`, `PerDiemMatch`, `CsvRow`, `CsvImportPreview` dataclasses |
 | `car_rates.json` | Static regional daily car rental rate estimates (USD) |
 | `data/seed_airports.json` | 302 curated destination airports with lat/lon, region, subregion, price tier |
 | `data/per_diem_rates.json` | Merged GSA + State Dept per diem rates (1,377 locations) |
@@ -243,7 +252,8 @@ main.py
 | `tests/unit/test_costs_transport.py` | `transport_usd` field on `CostBreakdown` (6 tests) |
 | `tests/unit/test_multi_airport.py` | Multi-airport pipeline smoke tests (2 tests) |
 | `tests/test_links.py` | URL builder tests for all three `links.py` functions (29 tests) |
-| `tests/test_imports.py` | importlib-based public symbol existence checks for all 10 modules (10 tests) |
+| `tests/test_imports.py` | importlib-based public symbol existence checks for all 11 modules (11 tests) |
+| `tests/unit/test_destination_input.py` | `fuzzy_match_per_diem` + `parse_destination_csv` + dataclass property tests (21 tests) |
 | `tests/test_smoke.py` | `CostBreakdown` instantiation + `DEFAULT_PREFERENCES` key coverage (2 tests) |
 | `tests/unit/test_notifier_departure.py` | Departure airport line in HTML and plain text email (12 tests) |
 | `tests/unit/test_window_search.py` | `_probe_dates` and `find_cheapest_in_window` unit tests — budget, cache, and probe-selection (17 tests) |

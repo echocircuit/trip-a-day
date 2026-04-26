@@ -4,15 +4,16 @@ Determines the cheapest trip that can be booked each day. Runs once daily, finds
 
 ---
 
-## Current phase: Phase 7 — Multi-airport departure
+## Current phase: Phase 8 — Hybrid Destination Input
 
 **What works now:**
 
 - `python main.py` — one-off run, finds and emails (or prints) today's cheapest trip
 - `python scheduler.py` — keeps running and fires the pipeline automatically once per day at a configurable time (default 7:00 AM local)
-- `streamlit run ui.py` — browser UI for managing preferences, exclusions, and viewing trip history
+- `streamlit run ui.py` — browser UI for managing preferences, exclusions, viewing trip history, and managing the destination pool
 - Multi-airport search: set a radius in Preferences and the pipeline searches nearby airports too, adding IRS-rate driving cost, and picks the globally cheapest departure
 - Monthly email limit: Resend sends are tracked per calendar month; approaching the limit adds a warning banner to outgoing emails; reaching it pauses sends until next month (Dashboard and Preferences show live usage)
+- **Destinations page:** search and toggle any of the 302 seed airports on/off; add custom airports with live per-diem match preview; bulk-import from CSV (preview table shows matched/unmatched/error counts before committing)
 
 ---
 
@@ -94,12 +95,13 @@ Finds today's cheapest trip and prints or emails it. The local SQLite database (
 streamlit run ui.py
 ```
 
-Opens at `http://localhost:8501`. Four pages:
+Opens at `http://localhost:8501`. Five pages:
 
 | Page | What it does |
 |---|---|
 | **Dashboard** | Last run status, API usage, Trip of the Day card with booking links, Run Now button |
 | **Preferences** | Edit all settings (home airport, trip length, travelers, notifications, scheduler time) |
+| **Destinations** | Search and enable/disable the 302 seed airports; add custom airports; bulk CSV import |
 | **Exclusion List** | Add destinations to skip, restore them, or clear all exclusions |
 | **Trip History** | Paginated table of all past evaluated trip candidates |
 
@@ -187,7 +189,8 @@ mypy src/
 │   ├── costs.py             # Cost assembly (flight + hotel + car + food + transport)
 │   ├── ranker.py            # Trip sorting and selection logic
 │   ├── charts.py            # Price history chart (matplotlib PNG, base64-embedded in email)
-│   └── notifier.py          # Resend email or terminal output
+│   ├── notifier.py          # Resend email or terminal output
+│   └── destination_input.py # Phase 8: per-diem fuzzy matching, CSV parse/preview
 ├── car_rates.json           # Static regional car rental rate estimates
 ├── data/
 │   ├── seed_airports.json   # 302 curated destination airports with lat/lon and region
