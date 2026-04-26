@@ -299,9 +299,9 @@ Fixes implemented:
 - [x] Pre-send limit check with hard cutoff and RunLog recording (2026-04-26)
 - [x] Warning banner in email when usage >= threshold (2026-04-26)
 - [x] Email usage indicator in Dashboard and Notifications UI (2026-04-26)
-- [ ] `tests/test_notifier_limits.py` — full coverage
+- [x] `tests/test_notifier_limits.py` — full coverage (16 tests, 253 total) (2026-04-26)
 - [ ] Spec and doc update
 
 ### Next Action
 
-Complete email usage tracking feature. Next: tests/test_notifier_limits.py.
+Complete email usage tracking feature. Next: update spec and docs.
