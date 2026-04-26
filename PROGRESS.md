@@ -273,3 +273,20 @@ Fixes implemented:
 ### Next Action
 
 Open PR for `feature/bug-fixes-email-field-flight-pricing` → `main`.
+
+### Chart Enhancement: Second Series + Streamlit UI (2026-04-25) — branch: feature/chart-second-series-ui
+
+- [x] `generate_price_history_chart` gains `today_run_date: date` parameter; removes internal `date.today()` so callers control the reference date (2026-04-25)
+- [x] Series 2 — green dashed line: past 7 days of `selected=True` daily winners from the trips table; each point annotated with short city name (2026-04-25)
+- [x] Degradation rules: Series 2 omitted when < 2 points; Series 1 omitted when < 3 points; both absent → return None (2026-04-25)
+- [x] Rolling avg line style changed to dotted (`:`) to separate it visually from the new dashed (`--`) Series 2 (2026-04-25)
+- [x] `notifier.py`: passes `date.today()` as `today_run_date`; adds two-series footnote below chart in HTML email (2026-04-25)
+- [x] `tests/test_charts.py`: all 8 existing tests updated for new signature; 4 new tests (Series 2 degradation + dual-series rendering); 12 total (2026-04-25)
+- [x] `ui.py`: `get_cached_chart()` wrapper with `@st.cache_data(ttl=300)` (2026-04-25)
+- [x] Dashboard "Trip of the Day" card: chart shown below cost metrics, above booking buttons (2026-04-25)
+- [x] Trip History action panel: chart shown for selected trip using that trip's `run_date` (2026-04-25)
+- [x] 237 tests passing; ruff + format clean (2026-04-25)
+
+### Next Action
+
+Open PR for `feature/chart-second-series-ui` → `main`.
