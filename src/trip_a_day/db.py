@@ -74,6 +74,9 @@ class Destination(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     user_favorited: Mapped[bool] = mapped_column(Boolean, default=False)
     user_booked: Mapped[bool] = mapped_column(Boolean, default=False)
+    # True for destinations added by the user (not from seed_airports.json).
+    # _seed_destinations() skips metadata refresh for custom destinations.
+    is_custom: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class PriceCache(Base):
@@ -241,6 +244,8 @@ _DESTINATION_NEW_COLUMNS: list[tuple[str, str]] = [
     ("user_favorited", "BOOLEAN DEFAULT 0"),
     # Phase 6
     ("user_booked", "BOOLEAN DEFAULT 0"),
+    # Phase 8
+    ("is_custom", "BOOLEAN DEFAULT 0"),
 ]
 
 # run_log columns added via ALTER TABLE migration (idempotent).
@@ -338,10 +343,14 @@ def _seed_destinations() -> None:
                         enabled=True,
                         user_favorited=False,
                         user_booked=False,
+                        is_custom=False,
                         query_count=0,
                         times_selected=0,
                     )
                 )
+            elif existing.is_custom:
+                # Never overwrite user-added destinations with seed data.
+                pass
             else:
                 # Refresh metadata without touching user-controlled fields.
                 existing.city = ap.get("city") or existing.city

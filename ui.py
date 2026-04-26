@@ -3,6 +3,7 @@
 Pages:
   Dashboard     — last run status, API usage, Trip of the Day card, Run Now button
   Preferences   — editable form for all user preferences
+  Destinations  — manage destination pool (enable/disable, add custom, CSV import)
   Exclusion List — view / add / restore excluded destinations
   Trip History  — paginated table of all evaluated trip candidates
 
@@ -37,6 +38,11 @@ from trip_a_day.db import (
     init_db,
     seed_preferences,
 )
+from trip_a_day.destination_input import (
+    CsvImportPreview,
+    fuzzy_match_per_diem,
+    parse_destination_csv,
+)
 from trip_a_day.fetcher import get_airport_city
 from trip_a_day.notifier import send_test_email
 from trip_a_day.preferences import get_all, set_pref
@@ -55,7 +61,7 @@ st.set_page_config(page_title="trip-a-day", page_icon="✈️", layout="wide")
 st.sidebar.title("✈️ trip-a-day")
 _PAGE = st.sidebar.radio(
     "Navigate",
-    ["Dashboard", "Preferences", "Exclusion List", "Trip History"],
+    ["Dashboard", "Preferences", "Destinations", "Exclusion List", "Trip History"],
     label_visibility="collapsed",
 )
 
@@ -805,6 +811,315 @@ def _preferences() -> None:
             st.error(_msg)
 
 
+# ── Destinations ──────────────────────────────────────────────────────────────
+
+
+def _destinations() -> None:
+    st.title("Destinations")
+    st.caption(
+        "Manage the pool of airports trip-a-day considers each day. "
+        "Enable or disable individual destinations, add custom airports, or bulk-import from CSV."
+    )
+
+    # ── Section 1: Destination Pool ────────────────────────────────────────────
+    st.subheader("Destination Pool")
+
+    with SessionFactory() as s:
+        all_dests: list[Destination] = (
+            s.query(Destination).order_by(Destination.city).all()
+        )
+        dest_count = len(all_dests)
+        enabled_count = sum(1 for d in all_dests if d.enabled)
+
+    st.caption(
+        f"{enabled_count} of {dest_count} destinations enabled. "
+        "Toggle the **Enabled** checkbox on any row to include/exclude it from daily runs."
+    )
+
+    # Search / filter controls
+    col_search, col_region, col_show = st.columns([3, 2, 2])
+    with col_search:
+        search_q = st.text_input(
+            "Search city / IATA", placeholder="e.g. Paris or CDG", key="dest_search"
+        )
+    with col_region:
+        with SessionFactory() as s:
+            regions = sorted(
+                {d.region for d in s.query(Destination).all() if d.region},
+                key=str,
+            )
+        region_filter = st.selectbox(
+            "Region", ["All regions", *regions], key="dest_region"
+        )
+    with col_show:
+        show_filter = st.selectbox(
+            "Show",
+            ["All", "Enabled only", "Disabled only", "Custom only"],
+            key="dest_show",
+        )
+
+    with SessionFactory() as s:
+        query = s.query(Destination).order_by(Destination.city)
+        if search_q:
+            like = f"%{search_q}%"
+            from sqlalchemy import or_
+
+            query = query.filter(
+                or_(
+                    Destination.city.ilike(like),
+                    Destination.iata_code.ilike(like),
+                    Destination.country.ilike(like),
+                )
+            )
+        if region_filter != "All regions":
+            query = query.filter(Destination.region == region_filter)
+        if show_filter == "Enabled only":
+            query = query.filter(Destination.enabled.is_(True))
+        elif show_filter == "Disabled only":
+            query = query.filter(Destination.enabled.is_(False))
+        elif show_filter == "Custom only":
+            query = query.filter(Destination.is_custom.is_(True))
+        filtered: list[Destination] = query.all()
+
+        # Extract scalar values before session closes.
+        table_rows = [
+            {
+                "IATA": d.iata_code,
+                "City": d.city or "",
+                "Country": d.country or "",
+                "Region": d.region or "",
+                "Custom": bool(d.is_custom),
+                "Enabled": bool(d.enabled),
+            }
+            for d in filtered
+        ]
+
+    if not table_rows:
+        st.info("No destinations match the current filter.")
+    else:
+        import pandas as pd
+
+        df = pd.DataFrame(table_rows)
+        edited = st.data_editor(
+            df,
+            column_config={
+                "IATA": st.column_config.TextColumn(
+                    "IATA", disabled=True, width="small"
+                ),
+                "City": st.column_config.TextColumn("City", disabled=True),
+                "Country": st.column_config.TextColumn("Country", disabled=True),
+                "Region": st.column_config.TextColumn("Region", disabled=True),
+                "Custom": st.column_config.CheckboxColumn(
+                    "Custom", disabled=True, width="small"
+                ),
+                "Enabled": st.column_config.CheckboxColumn("Enabled", width="small"),
+            },
+            hide_index=True,
+            use_container_width=True,
+            key="dest_pool_editor",
+        )
+
+        changed = df[df["Enabled"] != edited["Enabled"]]
+        if not changed.empty:
+            with SessionFactory() as s:
+                for _, row in changed.iterrows():
+                    dest = s.get(Destination, row["IATA"])
+                    if dest is not None:
+                        dest.enabled = bool(edited.loc[row.name, "Enabled"])
+                s.commit()
+            n = len(changed)
+            st.success(f"Updated {n} destination(s).")
+            st.rerun()
+
+    # ── Section 2: Add Custom Destination ─────────────────────────────────────
+    st.divider()
+    st.subheader("Add Custom Destination")
+    st.caption(
+        "Add an airport that is not in the built-in list. "
+        "Provide the IATA code and city name; the app will look up per-diem rates automatically."
+    )
+
+    with st.form("add_custom_dest_form"):
+        fc1, fc2, fc3 = st.columns(3)
+        with fc1:
+            new_iata = (
+                st.text_input("IATA code *", max_chars=4, placeholder="e.g. NRT")
+                .strip()
+                .upper()
+            )
+        with fc2:
+            new_city = st.text_input("City *", placeholder="e.g. Tokyo").strip()
+        with fc3:
+            new_country = st.text_input("Country", placeholder="e.g. Japan").strip()
+
+        fc4, fc5 = st.columns(2)
+        with fc4:
+            new_region = st.text_input(
+                "Region", placeholder="e.g. Asia Pacific"
+            ).strip()
+        with fc5:
+            new_enabled = st.checkbox("Enable immediately", value=True)
+
+        add_submitted = st.form_submit_button("Add Destination", type="primary")
+
+    # Per diem preview — shown outside the form so it updates as the user types.
+    if new_city:
+        match = fuzzy_match_per_diem(new_city)
+        if match:
+            st.success(
+                f"Per diem match: **{match.city}** ({match.state_or_country}) — "
+                f"lodging ${match.lodging_usd:.0f}/night, M&IE ${match.mie_usd:.0f}/day "
+                f"(similarity {match.score:.0%})"
+            )
+        else:
+            st.warning(
+                f"⚠️ No per diem match found for **{new_city}**. "
+                "This destination will use the regional fallback rate when evaluated."
+            )
+
+    if add_submitted:
+        errors: list[str] = []
+        if not new_iata:
+            errors.append("IATA code is required.")
+        elif len(new_iata) < 2 or len(new_iata) > 4:
+            errors.append("IATA code must be 2-4 characters.")
+        if not new_city:
+            errors.append("City name is required.")
+
+        if errors:
+            for err in errors:
+                st.error(err)
+        else:
+            with SessionFactory() as s:
+                existing = s.get(Destination, new_iata)
+                if existing is not None:
+                    st.error(
+                        f"IATA code **{new_iata}** already exists "
+                        f"({'custom' if existing.is_custom else 'seed'} destination: "
+                        f"{existing.city}, {existing.country}). "
+                        "To change its settings, use the pool table above."
+                    )
+                else:
+                    s.add(
+                        Destination(
+                            iata_code=new_iata,
+                            city=new_city,
+                            country=new_country or None,
+                            region=new_region or None,
+                            enabled=new_enabled,
+                            is_custom=True,
+                            excluded=False,
+                            user_favorited=False,
+                            user_booked=False,
+                            query_count=0,
+                            times_selected=0,
+                        )
+                    )
+                    s.commit()
+                    st.success(
+                        f"✅ Added **{new_iata}** ({new_city}) to the destination pool."
+                    )
+                    st.rerun()
+
+    # ── Section 3: CSV Bulk Import ─────────────────────────────────────────────
+    st.divider()
+    st.subheader("CSV Bulk Import")
+    st.caption(
+        "Upload a CSV file to add multiple destinations at once. "
+        "Required column: **iata**. Optional: city, country, region."
+    )
+
+    with st.expander("CSV format example"):
+        st.code(
+            "iata,city,country,region\n"
+            "NRT,Tokyo,Japan,Asia Pacific\n"
+            "GRU,São Paulo,Brazil,South America\n"
+            "CPT,Cape Town,South Africa,Africa",
+            language="csv",
+        )
+
+    uploaded_file = st.file_uploader("Upload CSV", type=["csv"], key="dest_csv_upload")
+
+    if uploaded_file is not None:
+        content = uploaded_file.read().decode("utf-8", errors="replace")
+        preview: CsvImportPreview = parse_destination_csv(content)
+
+        if preview.parse_error:
+            st.error(f"Could not parse CSV: {preview.parse_error}")
+        else:
+            st.markdown(
+                f"**Preview:** {preview.valid_count} valid rows "
+                f"({preview.matched_count} with per-diem match, "
+                f"{preview.unmatched_count} without), "
+                f"{preview.error_count} error rows."
+            )
+
+            import pandas as pd
+
+            preview_data = []
+            for row in preview.rows:
+                status = ""
+                if row.error:
+                    status = f"❌ {row.error}"
+                elif row.has_per_diem:
+                    pd_match = row.per_diem_match
+                    status = f"✅ Per diem: {pd_match.city} (${pd_match.lodging_usd:.0f}/night)"  # type: ignore[union-attr]
+                else:
+                    status = "⚠️ No per diem match (will use fallback)"
+                preview_data.append(
+                    {
+                        "IATA": row.iata,
+                        "City": row.city,
+                        "Country": row.country,
+                        "Region": row.region,
+                        "Status": status,
+                    }
+                )
+            st.dataframe(
+                pd.DataFrame(preview_data), hide_index=True, use_container_width=True
+            )
+
+            valid_rows = [r for r in preview.rows if r.is_valid]
+            if valid_rows:
+                if st.button(
+                    f"Import {len(valid_rows)} destination(s)",
+                    type="primary",
+                    key="csv_import_confirm",
+                ):
+                    added = 0
+                    skipped = 0
+                    with SessionFactory() as s:
+                        for row in valid_rows:
+                            existing = s.get(Destination, row.iata)
+                            if existing is not None:
+                                skipped += 1
+                                continue
+                            s.add(
+                                Destination(
+                                    iata_code=row.iata,
+                                    city=row.city or None,
+                                    country=row.country or None,
+                                    region=row.region or None,
+                                    enabled=True,
+                                    is_custom=True,
+                                    excluded=False,
+                                    user_favorited=False,
+                                    user_booked=False,
+                                    query_count=0,
+                                    times_selected=0,
+                                )
+                            )
+                            added += 1
+                        s.commit()
+                    msg = f"✅ Imported {added} destination(s)."
+                    if skipped:
+                        msg += f" Skipped {skipped} already-existing IATA code(s)."
+                    st.success(msg)
+                    st.rerun()
+            else:
+                st.info("No valid rows to import.")
+
+
 # ── Exclusion List ─────────────────────────────────────────────────────────────
 
 
@@ -1296,6 +1611,8 @@ if _PAGE == "Dashboard":
     _dashboard()
 elif _PAGE == "Preferences":
     _preferences()
+elif _PAGE == "Destinations":
+    _destinations()
 elif _PAGE == "Exclusion List":
     _exclusion_list()
 elif _PAGE == "Trip History":
