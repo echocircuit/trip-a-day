@@ -107,7 +107,8 @@ gh pr create --title "<title>" --body "<summary>"
 
 ```bash
 pytest tests/unit/                           # fast unit tests (no API calls)
-pytest tests/integration/ -m integration     # live Google Flights tests (no key required)
+pytest                                       # all fast tests (212 — integration excluded by default)
+pytest tests/integration/ -m integration     # live Google Flights tests (no key required; slow)
 pytest tests/unit/test_costs.py::test_foo    # single test
 pytest --cov=src/trip_a_day                  # full suite with coverage
 ruff check .                                 # lint
