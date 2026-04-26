@@ -156,6 +156,8 @@ def _nearby_dep_html(trip: TripCandidate, home_airport: str) -> str:
 
 def _price_history_section_html(trip: TripCandidate, db_session: Session | None) -> str:
     """Return the price-history chart block, or a 'not enough data' fallback."""
+    import datetime as _dt
+
     if db_session is not None:
         try:
             from trip_a_day.charts import generate_price_history_chart
@@ -164,6 +166,7 @@ def _price_history_section_html(trip: TripCandidate, db_session: Session | None)
                 trip.destination_iata,
                 f"{trip.city}, {trip.country}",
                 trip.cost.total,
+                _dt.date.today(),
                 db_session,
             )
         except Exception as exc:
@@ -180,6 +183,8 @@ def _price_history_section_html(trip: TripCandidate, db_session: Session | None)
             f'       width="600" style="max-width:100%;border-radius:4px;" />\n'
             f'  <p class="estimate">Historical total trip cost estimates for this destination.'
             f" Hotel and food costs are per diem estimates; car costs are regional estimates.</p>\n"
+            f'  <p class="estimate">Blue: price history for this destination.'
+            f" Green: recent daily picks (may be different destinations).</p>\n"
         )
 
     return (
