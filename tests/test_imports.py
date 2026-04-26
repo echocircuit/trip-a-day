@@ -107,3 +107,14 @@ def test_window_search_imports():
         "trip_a_day.window_search",
         "find_cheapest_in_window",
     )
+
+
+def test_destination_input_imports():
+    _attrs(
+        "trip_a_day.destination_input",
+        "PerDiemMatch",
+        "CsvRow",
+        "CsvImportPreview",
+        "fuzzy_match_per_diem",
+        "parse_destination_csv",
+    )

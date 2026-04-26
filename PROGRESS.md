@@ -302,6 +302,26 @@ Fixes implemented:
 - [x] `tests/test_notifier_limits.py` — full coverage (16 tests, 253 total) (2026-04-26)
 - [x] Spec and doc update — trip_of_the_day_spec.md, CLAUDE.md, README.md (2026-04-26)
 
+### Phase 8 Checklist — Complete (2026-04-26)
+
+- [x] Create feature branch `feature/phase-8-hybrid-destination-input` from main (2026-04-26)
+- [x] Add `is_custom: bool = False` to `Destination` model + migration entry (2026-04-26)
+- [x] Update `_seed_destinations()` to skip metadata refresh for `is_custom=True` rows (2026-04-26)
+- [x] Create `src/trip_a_day/destination_input.py`: `fuzzy_match_per_diem` (difflib), `parse_destination_csv`, `PerDiemMatch`, `CsvRow`, `CsvImportPreview` dataclasses (2026-04-26)
+- [x] Add **Destinations** page to `ui.py`: searchable pool table + enable/disable toggle via `st.data_editor`, Add Custom Destination form with live per-diem preview, CSV bulk import with preview table + confirm (2026-04-26)
+- [x] Add `test_destination_input_imports` to `tests/test_imports.py` (2026-04-26)
+- [x] Create `tests/unit/test_destination_input.py` (21 tests: fuzzy matching + CSV parsing) (2026-04-26)
+- [x] 275 tests pass; ruff + mypy clean (2026-04-26)
+- [x] Doc sweep: CLAUDE.md (test count 253→275, new module + test file, new arch decisions), PROGRESS.md (Phase 8 checklist), README.md (current phase, Destinations page in UI table, module list) (2026-04-26)
+
+### Decisions Made in Phase 8
+
+- `is_custom` flag on `Destination` protects user-added rows from being overwritten by seed updates
+- `fuzzy_match_per_diem` uses Python stdlib `difflib.SequenceMatcher` — no added dependency
+- Per-diem preview rendered outside the `st.form` block so it updates live as the user types
+- CSV import skips (not errors) existing IATA codes — idempotent re-import of overlapping files
+- Destinations page separated from Preferences (different operational purpose, keeps Preferences page readable)
+
 ### Next Action
 
-Email usage tracking feature complete (PR ready). Next: merge and begin next feature.
+Phase 8 complete. Next: merge Phase 8 PR, then begin Phase 9 (Polish, Hardening, and 1.0 Release Prep).
