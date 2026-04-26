@@ -20,7 +20,7 @@ repos:
     hooks:
       - id: unit-tests
         name: unit tests
-        entry: .venv/bin/pytest tests/unit/ -x -q
+        entry: bash scripts/run_unit_tests.sh
         language: system
         pass_filenames: false
         always_run: true
