@@ -28,6 +28,30 @@ def get_monthly_email_usage(db_session: Session) -> tuple[int, int]:
     return sent, limit
 
 
+def _check_email_limit(db_session: Session) -> tuple[bool, str]:
+    """Return (can_send, reason_if_blocked)."""
+    sent, limit = get_monthly_email_usage(db_session)
+    if sent >= limit:
+        reason = (
+            f"Monthly email limit reached ({sent}/{limit}). "
+            "No emails will be sent until next month."
+        )
+        return False, reason
+    return True, ""
+
+
+def _record_run_log_blocked(db_session: Session, reason: str) -> None:
+    """Mark the most recent RunLog entry as email_blocked."""
+    from sqlalchemy import desc
+
+    from trip_a_day.db import RunLog
+
+    row = db_session.query(RunLog).order_by(desc(RunLog.id)).first()
+    if row is not None:
+        row.email_blocked = True
+        row.email_blocked_reason = reason
+
+
 def send_trip_notification(
     trip: TripCandidate,
     prefs: dict[str, str],
@@ -71,6 +95,13 @@ def send_trip_notification(
         logger.warning("No notification_emails configured; printing to stdout.")
         _print_fallback(subject, plain_body)
         return True
+
+    if db_session is not None:
+        can_send, block_reason = _check_email_limit(db_session)
+        if not can_send:
+            logger.warning("Email blocked: %s", block_reason)
+            _record_run_log_blocked(db_session, block_reason)
+            return False
 
     return _send_via_resend(
         api_key, from_email, recipients, subject, html_body, plain_body, db_session
@@ -430,6 +461,11 @@ def send_test_email(
         f"Flight data mode: {os.environ.get('FLIGHT_DATA_MODE', 'mock')}\n"
     )
 
+    if db_session is not None:
+        can_send, block_reason = _check_email_limit(db_session)
+        if not can_send:
+            return False, f"Email blocked: {block_reason}"
+
     ok = _send_via_resend(
         api_key, from_email, recipients, subject, html_body, plain_body, db_session
     )
@@ -490,6 +526,12 @@ def send_no_results_notification(
         )
         _print_fallback(subject, plain_body)
         return True
+
+    if db_session is not None:
+        can_send, block_reason = _check_email_limit(db_session)
+        if not can_send:
+            logger.warning("No-results email blocked: %s", block_reason)
+            return False
 
     return _send_via_resend(
         api_key, from_email, recipients, subject, html_body, plain_body, db_session
