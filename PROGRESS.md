@@ -288,6 +288,20 @@ Fixes implemented:
 - [x] Updated `CLAUDE.md` Commands section to reflect new `pytest` behavior.
 - [x] 237 tests pass; ruff + mypy clean.
 
+### Email Usage Tracking (2026-04-26) — branch: feature/email-usage-tracking
+
+- [x] Add `EmailUsage` ORM model (monthly email counter) to `db.py` (2026-04-26)
+- [x] Add `get_emails_sent_this_month` and `record_email_sent` helpers to `db.py` (2026-04-26)
+- [x] Add `email_monthly_limit` (3000) and `email_warning_threshold_pct` (90) preferences (2026-04-26)
+- [x] Add `email_blocked` and `email_blocked_reason` columns to `RunLog` ORM + migration (2026-04-26)
+- [x] Add `get_monthly_email_usage(db_session)` to `notifier.py` (2026-04-26)
+- [x] Thread `db_session` through `_send_via_resend`; call `record_email_sent` on success (2026-04-26)
+- [ ] Pre-send limit check with hard cutoff and RunLog recording
+- [ ] Warning banner in email when usage >= threshold
+- [ ] Email usage indicator in Dashboard and Notifications UI
+- [ ] `tests/test_notifier_limits.py` — full coverage
+- [ ] Spec and doc update
+
 ### Next Action
 
-Begin Phase 8. Run `git checkout main && git pull && git checkout -b feature/phase-8-<description>`.
+Complete email usage tracking feature. Next: pre-send limit check in notifier.py.

@@ -9,6 +9,7 @@ import os
 import textwrap
 from typing import TYPE_CHECKING
 
+from trip_a_day.db import get_emails_sent_this_month, record_email_sent
 from trip_a_day.fetcher import get_airport_city
 from trip_a_day.ranker import TripCandidate
 
@@ -16,6 +17,15 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+
+
+def get_monthly_email_usage(db_session: Session) -> tuple[int, int]:
+    """Return (emails_sent_this_month, monthly_limit) from DB."""
+    from trip_a_day.preferences import get_or
+
+    sent = get_emails_sent_this_month(db_session)
+    limit = int(get_or(db_session, "email_monthly_limit", "3000"))
+    return sent, limit
 
 
 def send_trip_notification(
@@ -63,7 +73,7 @@ def send_trip_notification(
         return True
 
     return _send_via_resend(
-        api_key, from_email, recipients, subject, html_body, plain_body
+        api_key, from_email, recipients, subject, html_body, plain_body, db_session
     )
 
 
@@ -351,6 +361,7 @@ def _send_via_resend(
     subject: str,
     html_body: str,
     plain_body: str,
+    db_session: Session | None = None,
 ) -> bool:
     try:
         import resend  # type: ignore[import]
@@ -366,6 +377,8 @@ def _send_via_resend(
         email = resend.Emails.send(params)
         if email and email.get("id"):
             logger.info("Email sent to %s (id: %s).", recipients, email["id"])
+            if db_session is not None:
+                record_email_sent(db_session)
             return True
         else:
             logger.error("Resend returned unexpected response: %s", email)
@@ -375,7 +388,10 @@ def _send_via_resend(
         return False
 
 
-def send_test_email(prefs: dict[str, str]) -> tuple[bool, str]:
+def send_test_email(
+    prefs: dict[str, str],
+    db_session: Session | None = None,
+) -> tuple[bool, str]:
     """Send a test email to configured recipients.
 
     Returns (success, message) where message describes the outcome.
@@ -415,7 +431,7 @@ def send_test_email(prefs: dict[str, str]) -> tuple[bool, str]:
     )
 
     ok = _send_via_resend(
-        api_key, from_email, recipients, subject, html_body, plain_body
+        api_key, from_email, recipients, subject, html_body, plain_body, db_session
     )
     if ok:
         return True, f"Test email sent to {', '.join(recipients)}."
@@ -426,6 +442,7 @@ def send_no_results_notification(
     prefs: dict[str, str],
     run_date: object,
     diagnostics: dict,
+    db_session: Session | None = None,
 ) -> bool:
     """Send an alert when no trips could be priced for today's run.
 
@@ -475,5 +492,5 @@ def send_no_results_notification(
         return True
 
     return _send_via_resend(
-        api_key, from_email, recipients, subject, html_body, plain_body
+        api_key, from_email, recipients, subject, html_body, plain_body, db_session
     )
