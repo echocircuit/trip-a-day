@@ -38,7 +38,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from fast_flights import FlightData, Passengers, get_flights  # type: ignore[import]
+from fli.models import (  # type: ignore[import]
+    Airport,
+    FlightSearchFilters,
+    FlightSegment,
+    MaxStops,
+    PassengerInfo,
+    SeatType,
+    SortBy,
+)
+from fli.search import SearchFlights  # type: ignore[import]
 from sqlalchemy.orm import Session
 
 from trip_a_day.db import get_api_calls_today, record_api_call
@@ -372,9 +381,9 @@ def _load_mock_flights() -> dict:
 
 
 def _synthetic_flight_result(origin: str, destination: str) -> Any:
-    """Return a SimpleNamespace mimicking a fast-flights result for an unknown route pair.
+    """Return a SimpleNamespace mimicking a flight result for an unknown route pair.
 
-    Generates a plausible one-stop price based on haversine distance so the
+    Generates a plausible price based on haversine distance so the
     rest of the pipeline always has data to work with in mock mode.
     Logs a debug message so callers know the fallback fired.
     """
@@ -413,7 +422,7 @@ def _synthetic_flight_result(origin: str, destination: str) -> Any:
 
 
 def _mock_flight_result(origin: str, destination: str) -> Any:
-    """Return a mock fast-flights result from the fixture or a synthetic fallback."""
+    """Return a mock flight result from the fixture or a synthetic fallback."""
     data = _load_mock_flights()
     key = f"{origin}-{destination}"
     entry = data.get(key)
@@ -447,6 +456,81 @@ def _parse_price(price_str: str) -> float | None:
         return float(price_str.replace("$", "").replace(",", "").strip())
     except (ValueError, AttributeError):
         return None
+
+
+def _airport(iata_code: str) -> Airport:
+    """Return the fli Airport enum member for *iata_code*.
+
+    Raises ValueError if the code is absent from the fli Airport enum (7,835 airports).
+    Known absent codes from the 302-airport seed: REP, PNH, FRU.
+    Callers should catch ValueError and skip the destination gracefully.
+    """
+    try:
+        return Airport[iata_code]
+    except KeyError as exc:
+        raise ValueError(
+            f"Airport {iata_code!r} is not supported by fli (not in Airport enum)"
+        ) from exc
+
+
+def get_flights(
+    origin: str,
+    destination: str,
+    depart_date: date,
+    return_date: date,
+    adults: int,
+    children: int,
+) -> Any:
+    """Query Google Flights via fli for a round-trip economy search.
+
+    Returns a SimpleNamespace with a .flights attribute (list of SimpleNamespace
+    objects with .stops, .price (string "$NNN"), and .name fields) so callers can
+    use the same filtering logic regardless of data source.
+
+    Price in each result is the TOTAL for all passengers combined (not per-person).
+    Raises ValueError if either airport is absent from the fli Airport enum.
+    """
+    orig_airport = _airport(origin)
+    dest_airport = _airport(destination)
+
+    filters = FlightSearchFilters(
+        passenger_info=PassengerInfo(adults=adults, children=children),
+        flight_segments=[
+            FlightSegment(
+                departure_airport=[[orig_airport, 0]],
+                arrival_airport=[[dest_airport, 0]],
+                travel_date=depart_date.isoformat(),
+            ),
+            FlightSegment(
+                departure_airport=[[dest_airport, 0]],
+                arrival_airport=[[orig_airport, 0]],
+                travel_date=return_date.isoformat(),
+            ),
+        ],
+        seat_type=SeatType.ECONOMY,
+        stops=MaxStops.ANY,
+        sort_by=SortBy.CHEAPEST,
+    )
+
+    fli_results = SearchFlights().search(filters)
+    if not fli_results:
+        return SimpleNamespace(flights=[])
+
+    flights = []
+    for r in fli_results:
+        airline_name = r.legs[0].airline.value if r.legs else "Unknown"
+        flights.append(
+            SimpleNamespace(
+                name=airline_name,
+                price=f"${r.price:.0f}",
+                stops=r.stops,
+                departure_time="",
+                arrival_time="",
+                duration=str(r.duration),
+                is_best=False,
+            )
+        )
+    return SimpleNamespace(flights=flights)
 
 
 def _check_soft_limit(session: Session) -> bool:
@@ -515,9 +599,14 @@ def get_cheapest_destinations(
     When *direct_only* is True, destinations reachable only via connecting flights
     are excluded. When False, connecting flights are accepted as a fallback.
     """
+    from datetime import timedelta
+
     airports = _load_seed_airports()
     results: list[FlightDestination] = []
     errors = 0
+    # Placeholder return date for preliminary screening (exact price confirmed by
+    # get_flight_offers); fli requires both outbound and return segments.
+    placeholder_return = departure_date + timedelta(days=7)
 
     for airport in airports:
         dest_iata = airport["iata"]
@@ -533,21 +622,25 @@ def get_cheapest_destinations(
                 record_api_call(session, "google_flights")
                 try:
                     ff_result = get_flights(
-                        flight_data=[
-                            FlightData(
-                                date=departure_date.isoformat(),
-                                from_airport=origin_iata,
-                                to_airport=dest_iata,
-                            ),
-                        ],
-                        trip="round-trip",
-                        seat="economy",
-                        passengers=Passengers(adults=1),
-                        fetch_mode="fallback",
+                        origin_iata,
+                        dest_iata,
+                        departure_date,
+                        placeholder_return,
+                        1,
+                        0,
                     )
+                except ValueError as exc:
+                    # Airport not in fli enum -- skip gracefully
+                    logger.debug(
+                        "Skipping %s->%s: %s",
+                        origin_iata,
+                        dest_iata,
+                        exc,
+                    )
+                    continue
                 except Exception as exc:
                     logger.warning(
-                        "Google Flights query %s→%s failed: %s: %s",
+                        "Google Flights query %s->%s failed: %s: %s",
                         origin_iata,
                         dest_iata,
                         type(exc).__name__,
@@ -556,13 +649,13 @@ def get_cheapest_destinations(
                     errors += 1
                     if errors >= 10:
                         logger.warning(
-                            "Too many Google Flights errors — stopping destination sweep."
+                            "Too many Google Flights errors -- stopping destination sweep."
                         )
                         break
                     continue
         except Exception as exc:
             logger.warning(
-                "Unexpected error fetching %s→%s: %s: %s",
+                "Unexpected error fetching %s->%s: %s: %s",
                 origin_iata,
                 dest_iata,
                 type(exc).__name__,
@@ -571,7 +664,7 @@ def get_cheapest_destinations(
             errors += 1
             if errors >= 10:
                 logger.warning(
-                    "Too many Google Flights errors — stopping destination sweep."
+                    "Too many Google Flights errors -- stopping destination sweep."
                 )
                 break
             continue
@@ -629,26 +722,20 @@ def get_flight_offers(
             record_api_call(session, "google_flights")
             try:
                 ff_result = get_flights(
-                    flight_data=[
-                        FlightData(
-                            date=depart_date.isoformat(),
-                            from_airport=origin,
-                            to_airport=destination,
-                        ),
-                        FlightData(
-                            date=return_date.isoformat(),
-                            from_airport=destination,
-                            to_airport=origin,
-                        ),
-                    ],
-                    trip="round-trip",
-                    seat="economy",
-                    passengers=Passengers(adults=adults, children=children),
-                    fetch_mode="fallback",
+                    origin, destination, depart_date, return_date, adults, children
                 )
+            except ValueError as exc:
+                # Airport not in fli enum — skip gracefully (REP, PNH, FRU not supported)
+                logger.warning(
+                    "Google Flights query %s->%s skipped: %s",
+                    origin,
+                    destination,
+                    exc,
+                )
+                return None
             except Exception as exc:
                 logger.warning(
-                    "Google Flights query %s→%s failed: %s: %s",
+                    "Google Flights query %s->%s failed: %s: %s",
                     origin,
                     destination,
                     type(exc).__name__,
@@ -657,7 +744,7 @@ def get_flight_offers(
                 return None
     except Exception as exc:
         logger.warning(
-            "Unexpected error in get_flight_offers %s→%s: %s: %s",
+            "Unexpected error in get_flight_offers %s->%s: %s: %s",
             origin,
             destination,
             type(exc).__name__,
