@@ -1,7 +1,29 @@
-"""External data fetching: fast-flights (Google Flights) and per diem rate lookups.
+"""External data fetching: fli (Google Flights) and per diem rate lookups.
 
 All public functions return typed dataclasses — never raw response dicts.
 Flight calls track usage in api_usage. Per diem and seed lookups are local and free.
+
+# Flight library history
+# fast-flights (PyPI: fast-flights, v2.2): used Phase 1-5, deprecated April 2026.
+#   Root cause of failure: Google 401 "no token provided" — their internal auth endpoint
+#   changed and fast-flights' playwright/impersonation dependency can no longer obtain
+#   a valid token.
+#   Diagnosis: AssertionError: 401 Result: {"error":"no token provided"} on every live
+#   call. All destinations were failing (not route-specific). Confirmed 2026-04-26:
+#     from fast_flights import FlightData, Passengers, get_flights
+#     get_flights([FlightData(date="2026-06-15", from_airport="HSV", to_airport="LHR"),
+#                  FlightData(date="2026-06-22", from_airport="LHR", to_airport="HSV")],
+#                 trip="round-trip", seat="economy", passengers=Passengers(adults=2, children=2),
+#                 fetch_mode="fallback")
+#     => "Impersonate 'chrome_126' does not exist, using 'random'"
+#     => AssertionError: 401 Result: {"error":"no token provided"}
+#
+# fli (PyPI: flights, v0.8.4+): replacement, April 2026.
+#   Uses primp to mimic Chrome's TLS handshake for direct internal API access.
+#   Price field is total for all passengers (not per-person).
+#   Duration field is int (minutes, round-trip total).
+#   7,835 airports in Airport enum; 3 of 302 seed airports absent: REP, PNH, FRU.
+#   These are excluded gracefully via ValueError from _airport() -> None from get_flight_offers.
 """
 
 from __future__ import annotations
