@@ -148,6 +148,8 @@ class RunLog(Base):
     filter_fallback: Mapped[bool] = mapped_column(Boolean, default=False)
     invalid_data_exclusions: Mapped[str | None] = mapped_column(Text, nullable=True)
     pass1_diagnostics: Mapped[str | None] = mapped_column(Text, nullable=True)
+    email_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    email_blocked_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class ApiUsage(Base):
@@ -159,6 +161,17 @@ class ApiUsage(Base):
     calls_made: Mapped[int] = mapped_column(Integer, default=0)
     daily_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     monthly_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class EmailUsage(Base):
+    """Monthly email send counter. One row per calendar month (YYYY-MM)."""
+
+    __tablename__ = "email_usage"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    month: Mapped[str] = mapped_column(String(7), nullable=False, unique=True)
+    emails_sent: Mapped[int] = mapped_column(Integer, default=0)
+    last_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 _PREFERENCE_DEFAULTS: dict[str, str] = {
@@ -199,6 +212,8 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     "exclude_booked": "false",
     # Phase 7 (pre-work)
     "notifications_enabled": "true",
+    "email_monthly_limit": "3000",
+    "email_warning_threshold_pct": "90",
     # Phase 7 — multi-airport departure
     "irs_mileage_rate": "0.70",
     # Booking preferences
@@ -235,6 +250,8 @@ _RUN_LOG_NEW_COLUMNS: list[tuple[str, str]] = [
     ("cache_hits_flights", "INTEGER DEFAULT 0"),
     ("destinations_excluded", "INTEGER DEFAULT 0"),
     ("pass1_diagnostics", "TEXT"),
+    ("email_blocked", "BOOLEAN DEFAULT 0"),
+    ("email_blocked_reason", "TEXT"),
 ]
 
 # trips columns added via ALTER TABLE migration (idempotent).
@@ -383,3 +400,22 @@ def get_api_calls_today(session: Session, api_name: str) -> int:
         .first()
     )
     return row.calls_made if row else 0
+
+
+def get_emails_sent_this_month(session: Session) -> int:
+    """Return emails sent so far this calendar month (0 if none recorded)."""
+    current_month = date.today().strftime("%Y-%m")
+    row = session.query(EmailUsage).filter_by(month=current_month).first()
+    return row.emails_sent if row else 0
+
+
+def record_email_sent(session: Session) -> None:
+    """Increment the monthly email counter for the current calendar month."""
+    current_month = date.today().strftime("%Y-%m")
+    row = session.query(EmailUsage).filter_by(month=current_month).first()
+    if row is None:
+        row = EmailUsage(month=current_month, emails_sent=0)
+        session.add(row)
+        session.flush()
+    row.emails_sent += 1
+    row.last_sent_at = datetime.now(UTC)

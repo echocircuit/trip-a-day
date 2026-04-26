@@ -33,6 +33,7 @@ from trip_a_day.db import (
     RunLog,
     SessionFactory,
     Trip,
+    get_emails_sent_this_month,
     init_db,
     seed_preferences,
 )
@@ -144,6 +145,8 @@ def _dashboard() -> None:
         dest: Destination | None = (
             s.get(Destination, winner.destination_iata) if winner else None
         )
+        _email_sent_this_month = get_emails_sent_this_month(s)
+        _email_limit_dash = int(_prefs.get("email_monthly_limit", "3000"))
 
     col1, col2 = st.columns(2)
 
@@ -210,6 +213,27 @@ def _dashboard() -> None:
                     st.write(f"🟢 **{label}:** {used} calls today")
         else:
             st.write("No API calls recorded today.")
+
+        st.caption("Monthly email usage")
+        _email_pct = (
+            _email_sent_this_month / _email_limit_dash if _email_limit_dash > 0 else 0.0
+        )
+        _warn_threshold = int(_prefs.get("email_warning_threshold_pct", "90")) / 100
+        if _email_pct >= 1.0:
+            st.error(
+                f"📧 Limit reached — emails paused until next month"
+                f" ({_email_sent_this_month:,}/{_email_limit_dash:,})"
+            )
+        elif _email_pct >= _warn_threshold:
+            st.warning(
+                f"📧 {_email_sent_this_month:,}/{_email_limit_dash:,} emails this month"
+                f" — approaching limit ({_email_pct:.0%})"
+            )
+        else:
+            st.write(
+                f"📧 **Email:** {_email_sent_this_month:,}/{_email_limit_dash:,}"
+                f" emails this month"
+            )
 
     st.divider()
     st.subheader("Trip of the Day")
@@ -648,6 +672,21 @@ def _preferences() -> None:
             "Useful during development to avoid consuming Resend's monthly limit.",
         )
 
+        email_monthly_limit_val = st.number_input(
+            "Monthly email limit",
+            min_value=1,
+            max_value=100_000,
+            value=int(prefs.get("email_monthly_limit", "3000")),
+            help="Resend free tier allows 3,000 emails/month. Emails stop sending once this limit is reached.",
+        )
+        email_warning_threshold_val = st.number_input(
+            "Warning threshold (%)",
+            min_value=1,
+            max_value=100,
+            value=int(prefs.get("email_warning_threshold_pct", "90")),
+            help="A warning banner is added to outgoing emails when this percentage of the monthly limit is reached.",
+        )
+
         st.subheader("Scheduler")
         raw_time = prefs.get("scheduled_run_time", "07:00")
         try:
@@ -713,9 +752,43 @@ def _preferences() -> None:
                 "notifications_enabled",
                 "false" if notifications_enabled_val else "true",
             )
+            set_pref(s, "email_monthly_limit", str(int(email_monthly_limit_val)))
+            set_pref(
+                s, "email_warning_threshold_pct", str(int(email_warning_threshold_val))
+            )
             set_pref(s, "scheduled_run_time", run_time_val.strftime("%H:%M"))
             s.commit()
         st.success("Preferences saved.")
+
+    # Email usage indicator — outside the form (read-only, always current)
+    st.subheader("Email Usage This Month")
+    with SessionFactory() as _eu_s:
+        _eu_sent = get_emails_sent_this_month(_eu_s)
+        _eu_prefs = get_all(_eu_s)
+    _eu_limit = int(_eu_prefs.get("email_monthly_limit", "3000"))
+    _eu_warn_pct = int(_eu_prefs.get("email_warning_threshold_pct", "90")) / 100
+    _eu_frac = min(_eu_sent / _eu_limit, 1.0) if _eu_limit > 0 else 0.0
+    _eu_pct_int = int(_eu_frac * 100)
+    if _eu_frac >= 1.0:
+        st.error(
+            f"📧 **{_eu_sent:,} / {_eu_limit:,} emails sent** — limit reached."
+            " Emails will not be sent until next month."
+        )
+    elif _eu_frac >= _eu_warn_pct:
+        st.warning(
+            f"📧 **{_eu_sent:,} / {_eu_limit:,} emails sent** ({_eu_pct_int}% used)"
+        )
+    else:
+        st.write(
+            f"📧 **{_eu_sent:,} / {_eu_limit:,} emails sent** ({_eu_pct_int}% used)"
+        )
+    st.progress(_eu_frac)
+    st.caption(
+        f"At {int(_eu_warn_pct * 100)}% ({int(_eu_limit * _eu_warn_pct):,} emails),"
+        " a warning banner is added to outgoing emails.  \n"
+        f"At 100% ({_eu_limit:,} emails), emails stop sending until next month.  \n"
+        "Counter resets on the 1st of each month."
+    )
 
     # Test email button — outside the form so it sends without form submission
     st.subheader("Test Email")
@@ -725,7 +798,7 @@ def _preferences() -> None:
     if st.button("📨 Send Test Email"):
         with SessionFactory() as _ts:
             _test_prefs = get_all(_ts)
-        _ok, _msg = send_test_email(_test_prefs)
+            _ok, _msg = send_test_email(_test_prefs, db_session=_ts)
         if _ok:
             st.success(_msg)
         else:
