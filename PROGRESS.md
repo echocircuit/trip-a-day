@@ -248,10 +248,6 @@ Fixes implemented:
 
 Commits 1–3 made on 2026-04-25. Commit 4 (docs) in progress.
 
-### Next Action
-
-Open PR for `feature/bug-fixes-pass1-api-counter` → `main`.
-
 ### Bug-Fix Session: Email field + flight deep link (2026-04-25)
 
 Branch: `feature/bug-fixes-email-field-flight-pricing`
@@ -270,10 +266,6 @@ Fixes implemented:
 - [x] `tests/test_links.py`: 3 new tests — direct_only URL differs, direct_only=False is default, 2-adult URL differs from 1-adult (2026-04-25)
 - [x] 218 tests passing; ruff + mypy clean (2026-04-25)
 
-### Next Action
-
-Open PR for `feature/bug-fixes-email-field-flight-pricing` → `main`.
-
 ### Chart Enhancement: Second Series + Streamlit UI (2026-04-25) — branch: feature/chart-second-series-ui
 
 - [x] `generate_price_history_chart` gains `today_run_date: date` parameter; removes internal `date.today()` so callers control the reference date (2026-04-25)
@@ -287,6 +279,15 @@ Open PR for `feature/bug-fixes-email-field-flight-pricing` → `main`.
 - [x] Trip History action panel: chart shown for selected trip using that trip's `run_date` (2026-04-25)
 - [x] 237 tests passing; ruff + format clean (2026-04-25)
 
+### Pre-push Hook + Test Suite Fixes (2026-04-26) — branch: fix/pre-push-hook-slow-tests
+
+- [x] Root cause 1: `.pre-commit-config.yaml` entry `entry: .venv/bin/pytest` used a relative path; fails in git worktrees where `.venv` only exists in the main repo root.
+- [x] Root cause 2: `pyproject.toml` `addopts` ran all `testpaths = ["tests"]` tests by default, including integration tests that make real Google Flights network calls (60 s+ per run, potentially infinite hang via Playwright 401).
+- [x] Fix 1: Created `scripts/run_unit_tests.sh` — resolves `.venv` via `git rev-parse --git-common-dir` (always points to main repo's `.git`); updated `.pre-commit-config.yaml` entry to `bash scripts/run_unit_tests.sh`.
+- [x] Fix 2: Added `--ignore=tests/integration` to `addopts` in `pyproject.toml`. Default `pytest` now runs 237 fast tests in ~1.4 s; `pytest tests/integration/ -m integration` still works (explicit paths override `--ignore`).
+- [x] Updated `CLAUDE.md` Commands section to reflect new `pytest` behavior.
+- [x] 237 tests pass; ruff + mypy clean.
+
 ### Next Action
 
-Open PR for `feature/chart-second-series-ui` → `main`.
+Begin Phase 8. Run `git checkout main && git pull && git checkout -b feature/phase-8-<description>`.
