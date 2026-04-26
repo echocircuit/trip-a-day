@@ -41,7 +41,7 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 ## Current phase
 
-**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 237 tests passing (169 unit + 29 links + 10 imports + 2 smoke + 12 charts + 8 pass1-resilience + 7 api-counter) — includes advance booking window rework, price history chart (dual-series), and bug-fix sessions (see below).
+**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 253 tests passing (169 unit + 29 links + 10 imports + 2 smoke + 12 charts + 8 pass1-resilience + 7 api-counter + 16 email-limits) — includes advance booking window rework, price history chart (dual-series), bug-fix sessions, and email usage tracking feature (see below).
 
 **Phase 7b removed (user decision):** Phase 7b (real transit cost via routing API) was dropped because it adds external API dependencies (Rome2rio or Google Maps Distance Matrix) that complicate new-user setup without sufficient value over the IRS mileage estimate already implemented in Phase 7a.
 
@@ -140,7 +140,7 @@ main.py
 - `CostBreakdown` (defined in `costs.py`) — flight, hotel, car, food, transport_usd, car_is_estimate, hotel_is_estimate; `total` is a computed `@property`
 - `TripCandidate` (defined in `ranker.py`) — full trip candidate with cost and metadata; `stale_cache: bool = False` marks trips built from expired cache data
 - Fetcher dataclasses (defined in `fetcher.py`): `FlightOffer`, `HotelOffer`, `FoodEstimate`, `AirportInfo`
-- SQLAlchemy ORM models (defined in `db.py`): `Preference`, `Destination`, `Trip` (`stale_cache BOOLEAN`), `RunLog` (`pass1_diagnostics TEXT`), `ApiUsage`, `PriceCache`
+- SQLAlchemy ORM models (defined in `db.py`): `Preference`, `Destination`, `Trip` (`stale_cache BOOLEAN`), `RunLog` (`pass1_diagnostics TEXT`, `email_blocked BOOLEAN`, `email_blocked_reason TEXT`), `ApiUsage`, `PriceCache`, `EmailUsage` (monthly email counter)
 
 **Database:** `trip_of_the_day.db` at the project root. Path derived from `db.py` location using `pathlib.Path(__file__).resolve().parents[2]`.
 
@@ -203,6 +203,11 @@ main.py
 | `build_flight_url` accepts `direct_only` parameter; passes `max_stops=0` when True | Without the nonstop filter in the deep link, Google Flights showed cheaper connecting flights when `direct_only=True` was in effect during the price query. Encoding `max_stops=0` in the tfs protobuf pre-filters the results page to match what was actually searched |
 | `stale_cache` BOOLEAN on `Trip` | Marks trips built from expired `PriceCache` data so the UI and history table can surface a caveat; NULL/False for all normal trips |
 | Exception in `find_cheapest_in_window` → WARNING + skip, not abort | An unhandled exception in window search (e.g. malformed data) should not abort the entire run; logging at WARNING and skipping that destination allows the remaining batch to proceed |
+| `EmailUsage` table keyed by `YYYY-MM` string | Each new month gets a fresh row automatically; no cleanup needed; `get_emails_sent_this_month` returns 0 if no row exists yet (no send has occurred) |
+| Monthly limit check runs before `resend.Emails.send()` in all three `send_*` functions | Prevents silent over-limit sends regardless of which code path triggers the email; test emails and no-results alerts both respect the limit |
+| `_record_run_log_blocked` queries most recent `RunLog` by `id DESC` | The RunLog row is committed before `send_trip_notification` is called; querying by id DESC within the same session (identity map) returns the same Python object; no separate run_log_id parameter needed |
+| `record_email_sent` called only on `email.get("id")` success | Ensures the counter only increments when Resend confirms delivery; API errors (rate limit, network) do not inflate the count |
+| `email_monthly_limit` and `email_warning_threshold_pct` stored as preferences | User can override the Resend free-tier defaults (3,000/month, 90% threshold) without code changes; UI exposes both inputs in Notifications section |
 
 ## Key file map
 
@@ -245,6 +250,7 @@ main.py
 | `tests/test_charts.py` | Chart generation edge cases: None for <3 pts, PNG bytes + magic bytes for ≥3, edge costs, 7-point window; Series 2 degradation and dual-series rendering (12 tests) |
 | `tests/test_pass1_resilience.py` | Pass 1 failure modes: graceful exit, stale cache fallback, exception skipping, diagnostics JSON (8 tests) |
 | `tests/test_api_counter.py` | API counter consistency: mock/live modes, exception path counting, window search double-count prevention (7 tests) |
+| `tests/test_notifier_limits.py` | Monthly email limit enforcement: get/record helpers, _check_email_limit, warning banner, RunLog blocking (16 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
 
 ## Environment setup

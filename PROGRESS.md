@@ -300,8 +300,8 @@ Fixes implemented:
 - [x] Warning banner in email when usage >= threshold (2026-04-26)
 - [x] Email usage indicator in Dashboard and Notifications UI (2026-04-26)
 - [x] `tests/test_notifier_limits.py` — full coverage (16 tests, 253 total) (2026-04-26)
-- [ ] Spec and doc update
+- [x] Spec and doc update — trip_of_the_day_spec.md, CLAUDE.md, README.md (2026-04-26)
 
 ### Next Action
 
-Complete email usage tracking feature. Next: update spec and docs.
+Email usage tracking feature complete (PR ready). Next: merge and begin next feature.

@@ -12,6 +12,7 @@ Determines the cheapest trip that can be booked each day. Runs once daily, finds
 - `python scheduler.py` — keeps running and fires the pipeline automatically once per day at a configurable time (default 7:00 AM local)
 - `streamlit run ui.py` — browser UI for managing preferences, exclusions, and viewing trip history
 - Multi-airport search: set a radius in Preferences and the pipeline searches nearby airports too, adding IRS-rate driving cost, and picks the globally cheapest departure
+- Monthly email limit: Resend sends are tracked per calendar month; approaching the limit adds a warning banner to outgoing emails; reaching it pauses sends until next month (Dashboard and Preferences show live usage)
 
 ---
 
@@ -132,6 +133,8 @@ Keeps running and fires the full pipeline once per calendar day at the time conf
 | IRS mileage rate | $0.70/mile |
 | Daily run time | 7:00 AM local |
 | Notifications | Enabled |
+| Monthly email limit | 3,000 (Resend free tier) |
+| Email warning threshold | 90% |
 
 All preferences are editable in the UI under **Preferences**.
 

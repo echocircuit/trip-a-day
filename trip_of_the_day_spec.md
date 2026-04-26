@@ -229,6 +229,8 @@ Stores all user-configurable settings as key-value pairs. This allows new prefer
 | `min_hotel_stars` | `4` | Minimum hotel star rating |
 | `car_rental_required` | `true` | Include rental car in trip estimate |
 | `notification_emails` | `"[]"` | JSON array of recipient email addresses for daily notification |
+| `email_monthly_limit` | `3000` | Maximum outgoing emails per calendar month (Resend free tier = 3,000) |
+| `email_warning_threshold_pct` | `90` | Percentage of monthly limit at which a warning banner is added to outgoing emails |
 | `ranking_strategy` | `cheapest_then_farthest` | Primary sort strategy |
 | `search_radius_miles` | `0` | Radius around home for alternate airports (0 = home only) |
 | `region_filter` | `null` | JSON list of allowed regions, null = worldwide |
@@ -305,6 +307,19 @@ Tracks cumulative API usage for rate limit monitoring. One row per API per calen
 | `calls_made` | INTEGER | Total calls made on this date |
 | `daily_limit` | INTEGER | Known daily limit for this API (configurable) |
 | `monthly_limit` | INTEGER | Known monthly limit for this API (configurable) |
+
+### 5.6 `email_usage`
+
+Tracks monthly outgoing email volume for Resend free-tier limit enforcement. One row per calendar month (YYYY-MM key); row is inserted on first send of a new month and incremented thereafter.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PRIMARY KEY |  |
+| `month` | TEXT UNIQUE | Calendar month in `YYYY-MM` format |
+| `emails_sent` | INTEGER | Emails successfully sent this month |
+| `last_sent_at` | DATETIME | Timestamp of the most recent successful send |
+
+The counter resets automatically because each new month gets a fresh row. No manual cleanup required.
 
 **Rate limit behavior:**
 - Before each API call, `fetcher.py` checks the current daily and monthly counts against known limits
@@ -473,6 +488,20 @@ A candidate is excluded from ranking if:
 - Distance from home airport
 - Three booking links: flights, hotel, rental car search
 - Footer: "Not interested? [Exclude this destination]" (links to UI exclusion page)
+
+### Monthly Email Limit Enforcement
+
+Before every `resend.Emails.send()` call, `notifier.py` checks the `email_usage` table against the `email_monthly_limit` preference:
+
+- **Below limit:** Send proceeds normally.
+- **At or above limit:** Send is skipped. A WARNING is logged. The most recent `run_log` row is updated with `email_blocked = true` and `email_blocked_reason`. The function returns `False` so the caller knows the send was suppressed.
+- **When `notifications_enabled = false`:** The limit check is skipped entirely (no emails are attempted).
+
+After every successful send, `record_email_sent()` increments `email_usage.emails_sent` for the current month. On failure, the counter is not incremented.
+
+**Warning banner:** When `emails_sent >= floor(monthly_limit × email_warning_threshold_pct / 100)`, an amber warning banner is appended to the HTML email body (below booking links, above footer) explaining the current usage and that the counter resets on the 1st of the next month.
+
+**Monthly reset:** Automatic — each new calendar month gets a fresh `email_usage` row. No manual action required.
 
 ### Fallback
 
