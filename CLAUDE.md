@@ -41,7 +41,7 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 ## Current phase
 
-**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 233 tests passing (169 unit + 29 links + 10 imports + 2 smoke + 8 charts + 8 pass1-resilience + 7 api-counter) — includes advance booking window rework, price history chart, and bug-fix sessions (see below).
+**Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports. 237 tests passing (169 unit + 29 links + 10 imports + 2 smoke + 12 charts + 8 pass1-resilience + 7 api-counter) — includes advance booking window rework, price history chart (dual-series), and bug-fix sessions (see below).
 
 **Phase 7b removed (user decision):** Phase 7b (real transit cost via routing API) was dropped because it adds external API dependencies (Rome2rio or Google Maps Distance Matrix) that complicate new-user setup without sufficient value over the IRS mileage estimate already implemented in Phase 7a.
 
@@ -188,6 +188,12 @@ main.py
 | Rolling average: 7-point window or all-time mean | If total history < 7 points, a rolling window would collapse to the same value; flat all-time mean is clearer than a rolling window of 1–6 points |
 | `matplotlib.use("Agg")` called before pyplot import inside function | Lazy import inside the function avoids startup overhead and allows graceful fallback if matplotlib is absent; Agg is the only backend that works without a display |
 | mypy override `ignore_errors = true` for `matplotlib.*` | matplotlib's bundled type stubs have known inaccuracies with datetime arguments in `plot()`; suppressing errors project-wide for that namespace avoids noisy ignores on every call site |
+| `generate_price_history_chart` takes `today_run_date: date` not `date.today()` | Callers (notifier uses today; UI Trip History uses the trip's historical run_date) need to control the reference date; internal `date.today()` also made unit tests non-deterministic |
+| Series 2 query uses `selected=True` only (no `rank=1`) | `selected=True` is set only for the daily winner; `rank` can be NULL for manually logged trips; using `selected` alone handles both cases without test setup complexity |
+| Series 2 omitted (not an error) when < 2 points | First few days of running won't have 7 days of picks; degrading gracefully avoids a blank chart for new installs |
+| `get_cached_chart` wrapper in `ui.py` uses `@st.cache_data(ttl=300)` | DB query + matplotlib render are both expensive on every widget interaction; 5-minute TTL balances freshness with performance; all args are primitives (hashable) |
+| Trip History chart uses the selected trip's `run_date` as `today_run_date` | Lets the user look back at any past pick and see what the Series 2 context looked like at that time, not today's context |
+| Chart primitives extracted inside session context manager | Avoids `DetachedInstanceError` risk; all needed values are scalar columns, but explicit extraction makes the lifetime clear |
 | `record_api_call()` called BEFORE `get_flights()` in live branch | Ensures every *attempted* call increments `api_usage`, even when `get_flights()` raises. Previously called after success only; exceptions caused api_usage to under-count vs the in-memory `live_calls_made` counter (the "40 vs 7" Dashboard discrepancy on 2026-04-25) |
 | `sys.exit(0)` (not 1) when Pass 1 yields no prices | `sys.exit(1)` inside an APScheduler job kills the scheduler process permanently; exit 0 lets the scheduler survive and retry the next day |
 | `_stale_cache_fallback()` in main.py | When all live calls fail, query `PriceCache` for any future-dated entries in the batch and build `TripCandidate` objects with `stale_cache=True`; provides a degraded-but-better-than-nothing result instead of a failure email |
@@ -211,7 +217,7 @@ main.py
 | `src/trip_a_day/costs.py` | `CostBreakdown` dataclass; `build_cost_breakdown()`; `lookup_car_cost()` |
 | `src/trip_a_day/ranker.py` | `TripCandidate` dataclass; `rank_trips()` with pluggable strategy |
 | `src/trip_a_day/notifier.py` | `send_trip_notification()` — Resend HTML email or stdout fallback; `send_test_email()`; `send_no_results_notification()` — ⚠️ alert with diagnostics when Pass 1 returns no prices |
-| `src/trip_a_day/charts.py` | `generate_price_history_chart()` — matplotlib PNG of destination price history; embedded as base64 in email |
+| `src/trip_a_day/charts.py` | `generate_price_history_chart(destination_iata, destination_name, today_cost, today_run_date, db_session)` — dual-series matplotlib PNG (blue: destination history; green dashed: recent daily picks); embedded as base64 in email and rendered in Streamlit UI |
 | `src/trip_a_day/links.py` | URL builders: `build_flight_url`, `build_hotel_url`, `build_car_url` |
 | `src/trip_a_day/window_search.py` | `find_cheapest_in_window()` — 3-probe adaptive triangulation across the advance booking window; cache-first, budget-aware |
 | `car_rates.json` | Static regional daily car rental rate estimates (USD) |
@@ -235,7 +241,7 @@ main.py
 | `tests/test_smoke.py` | `CostBreakdown` instantiation + `DEFAULT_PREFERENCES` key coverage (2 tests) |
 | `tests/unit/test_notifier_departure.py` | Departure airport line in HTML and plain text email (12 tests) |
 | `tests/unit/test_window_search.py` | `_probe_dates` and `find_cheapest_in_window` unit tests — budget, cache, and probe-selection (17 tests) |
-| `tests/test_charts.py` | Chart generation edge cases: None for <3 pts, PNG bytes + magic bytes for ≥3, edge costs, 7-point window (8 tests) |
+| `tests/test_charts.py` | Chart generation edge cases: None for <3 pts, PNG bytes + magic bytes for ≥3, edge costs, 7-point window; Series 2 degradation and dual-series rendering (12 tests) |
 | `tests/test_pass1_resilience.py` | Pass 1 failure modes: graceful exit, stale cache fallback, exception skipping, diagnostics JSON (8 tests) |
 | `tests/test_api_counter.py` | API counter consistency: mock/live modes, exception path counting, window search double-count prevention (7 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
