@@ -59,6 +59,32 @@ _PAGE = st.sidebar.radio(
 )
 
 
+# ── chart cache ───────────────────────────────────────────────────────────────
+
+
+@st.cache_data(ttl=300)
+def get_cached_chart(
+    destination_iata: str,
+    destination_name: str,
+    today_cost: float,
+    run_date_str: str,
+) -> bytes | None:
+    """Thin cached wrapper around generate_price_history_chart.
+
+    run_date_str is a string so it is hashable for st.cache_data.
+    """
+    from trip_a_day.charts import generate_price_history_chart
+
+    with SessionFactory() as session:
+        return generate_price_history_chart(
+            destination_iata=destination_iata,
+            destination_name=destination_name,
+            today_cost=today_cost,
+            today_run_date=date.fromisoformat(run_date_str),
+            db_session=session,
+        )
+
+
 # ── shared helpers ─────────────────────────────────────────────────────────────
 
 
@@ -219,6 +245,21 @@ def _dashboard() -> None:
             "* Hotel and food are government per diem estimates (GSA / State Dept); "
             "car rental is a regional average. Only flight prices are live quotes."
         )
+
+        chart_bytes = get_cached_chart(
+            destination_iata=winner.destination_iata,
+            destination_name=f"{city}, {country}",
+            today_cost=winner.total_cost_usd,
+            run_date_str=str(winner.run_date),
+        )
+        if chart_bytes:
+            st.image(
+                chart_bytes,
+                caption="Price history and recent daily picks",
+                use_container_width=True,
+            )
+        else:
+            st.caption("📊 Not enough history yet to show price trends.")
 
         bc1, bc2, bc3 = st.columns(3)
         if winner.flight_booking_url:
@@ -931,6 +972,10 @@ def _trip_history() -> None:
             action_dep_iata = (
                 getattr(action_trip, "departure_iata", None) if action_trip else None
             )
+            # Extract primitives for chart (must be inside session context)
+            chart_iata = action_trip.destination_iata if action_trip else None
+            chart_run_date_str = str(action_trip.run_date) if action_trip else None
+            chart_cost = action_trip.total_cost_usd if action_trip else None
 
         if action_dep_iata:
             dep_city = get_airport_city(action_dep_iata)
@@ -1010,6 +1055,24 @@ def _trip_history() -> None:
                             d2.exclusion_note = "Excluded from Trip History"
                         s.commit()
                 st.rerun()
+
+        # ── Price history chart for selected trip ─────────────────────────────
+        if chart_iata and chart_run_date_str is not None and chart_cost is not None:
+            st.subheader("Price History")
+            history_chart = get_cached_chart(
+                destination_iata=chart_iata,
+                destination_name=dest_label,
+                today_cost=chart_cost,
+                run_date_str=chart_run_date_str,
+            )
+            if history_chart:
+                st.image(
+                    history_chart,
+                    caption="Price history and recent daily picks",
+                    use_container_width=True,
+                )
+            else:
+                st.caption("📊 Not enough history yet to show price trends.")
 
     # ── Log a Past Trip ───────────────────────────────────────────────────────
     st.divider()
