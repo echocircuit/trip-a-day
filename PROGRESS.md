@@ -297,11 +297,11 @@ Fixes implemented:
 - [x] Add `get_monthly_email_usage(db_session)` to `notifier.py` (2026-04-26)
 - [x] Thread `db_session` through `_send_via_resend`; call `record_email_sent` on success (2026-04-26)
 - [x] Pre-send limit check with hard cutoff and RunLog recording (2026-04-26)
-- [ ] Warning banner in email when usage >= threshold
+- [x] Warning banner in email when usage >= threshold (2026-04-26)
 - [ ] Email usage indicator in Dashboard and Notifications UI
 - [ ] `tests/test_notifier_limits.py` — full coverage
 - [ ] Spec and doc update
 
 ### Next Action
 
-Complete email usage tracking feature. Next: warning banner in email HTML.
+Complete email usage tracking feature. Next: UI indicators in Dashboard and Notifications.
