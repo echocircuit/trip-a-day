@@ -302,6 +302,28 @@ Fixes implemented:
 - [x] `tests/test_notifier_limits.py` — full coverage (16 tests, 253 total) (2026-04-26)
 - [x] Spec and doc update — trip_of_the_day_spec.md, CLAUDE.md, README.md (2026-04-26)
 
+### Flight Library Migration: fast-flights → fli (2026-04-26) — branch: feature/fix-flight-library-fli
+
+Root cause confirmed:
+- `fast-flights` `get_flights()` began returning `401 {"error":"no token provided"}` from Google's internal endpoint. The library's `primp`/Playwright-based HTTP stack could no longer authenticate. All live flight searches failed; `FLIGHT_DATA_MODE=live` runs produced "Pass 1 returned no prices."
+
+Migration:
+- [x] Diagnose fast-flights 401 failure — root cause documented in fetcher.py comment (2026-04-26)
+- [x] Install `flights>=0.8.4` (PyPI: `fli`) — uses `curl_cffi` with Chrome impersonation; no Playwright (2026-04-26)
+- [x] Replace `from fast_flights import FlightData, Passengers, get_flights` with fli imports in `fetcher.py`; add `_airport()` helper and module-level `get_flights()` wrapper (2026-04-26)
+- [x] Retain `fast-flights==2.2` in `requirements.txt` solely for `links.py` `TFSData` URL building (pure protobuf, no API calls, not broken) (2026-04-26)
+- [x] Verify mock mode unchanged — `FLIGHT_DATA_MODE=mock` path uses `SimpleNamespace` fixtures, fli never called (2026-04-26)
+- [x] Update `tests/unit/test_fetcher_flights.py`: add `TestAirportHelper` (4 tests) and `TestUnsupportedAirportGracefulSkip` (2 tests) (2026-04-26)
+- [x] Update `CLAUDE.md`: architecture decisions, API notes, known issues (2026-04-26)
+- [x] Live run verified: 15 destinations, 45 API calls, winner Austin $5,202 — no 401 errors (2026-04-26)
+- [x] 267 tests passing; ruff + mypy clean (2026-04-26)
+
+Decisions:
+- fli Airport enum supports 7,835 airports; 3 seed airports absent (REP, PNH, FRU — Cambodia and Kyrgyzstan); these gracefully return None from `get_flight_offers`
+- `get_flights` kept as the module-level function name so all test patches targeting `trip_a_day.fetcher.get_flights` continue to work unchanged
+- fli returns total price for all passengers (verified: 1 adult=$764, 2 adults=$1,607, 4 adults=$3,213 for JFK→LHR)
+- Some international routes return 0 results (CDG) or timeout at ~30s (MEX); both are gracefully handled as None → excluded from candidates
+
 ### Phase 8 Checklist — Complete (2026-04-26)
 
 - [x] Create feature branch `feature/phase-8-hybrid-destination-input` from main (2026-04-26)

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-`trip-a-day` (package: `trip_a_day`) is a Python CLI application that runs once daily, identifies the cheapest feasible weeklong trip bookable from a home airport, and delivers an HTML summary email. It fetches flight prices via `fast-flights` (Google Flights, no key required), lodging and meal estimates from cached GSA/State Dept per diem rates, and uses a static regional lookup for car rental costs. Results are stored in a local SQLite database.
+`trip-a-day` (package: `trip_a_day`) is a Python CLI application that runs once daily, identifies the cheapest feasible weeklong trip bookable from a home airport, and delivers an HTML summary email. It fetches flight prices via `fli` (PyPI: `flights`, Google Flights, no key required), lodging and meal estimates from cached GSA/State Dept per diem rates, and uses a static regional lookup for car rental costs. Results are stored in a local SQLite database.
 
 **Spec reference:** `trip_of_the_day_spec.md` is the authoritative specification. Do not modify it. If a situation is not covered by the spec, stop and ask before deciding.
 
@@ -130,7 +130,7 @@ python scripts/update_rates.py               # refresh per diem data (run each O
 main.py
   → filters.py   (apply region allowlist/blocklist, favorite-radius, exclusion rules to full pool)
   → selector.py  (select daily batch from eligible pool, 8 strategies)
-  → fetcher.py   (fast-flights [mock/live] + per diem rates → typed dataclasses)
+  → fetcher.py   (fli [mock/live] + per diem rates → typed dataclasses)
   → cache.py     (TTL-aware price cache, check before live call)
   → costs.py     (CostBreakdown assembly)
   → ranker.py    (TripCandidate sorting)
@@ -153,7 +153,7 @@ main.py
 |---|---|
 | Modules in `src/trip_a_day/` not project root | Preserves established src-layout; `python -m trip_a_day` works cleanly |
 | SQLAlchemy 2.x mapped_column style | Modern API; type-safe; consistent with Python 3.11+ |
-| fast-flights for all flight data | No API key, no account; reverse-engineers Google Flights protobuf endpoint |
+| fli (PyPI: flights) for all flight data | No API key, no account; direct internal API access via primp (Chrome TLS mimicry). Replaced fast-flights April 2026 after Google 401 auth breakage. |
 | Destination discovery via seed_airports.json | 302 curated airports (expanded in Phase 5) with real lat/lon, region, subregion, price tier |
 | Per diem rates for lodging + food estimates | GSA (domestic) + State Dept (international); cached in data/; refresh each October |
 | `_DATA_DIR = Path(__file__).resolve().parents[2] / "data"` | parents[2] from src/trip_a_day/ navigates to project root |
@@ -183,7 +183,7 @@ main.py
 | M&IE sanity check bounds = dataset ±20% | Per diem dataset range is $1-$287 (2026); ±20% buffer ($0.80-$344.40) catches corruption without false-positives on legitimate extremes like Calgary ($169). Warning only — destination is not excluded. |
 | `RunLog.destinations_evaluated` = `len(batch)` | Previously stored `len(all_candidates)` (Pass-2 winners, max 5); now stores the Pass-1 batch size (15 by default) so "destinations evaluated" has the user-expected meaning |
 | `RunLog.cache_hits_flights` + `destinations_excluded` | Separate integer columns so the run summary can be shown without parsing the JSON `invalid_data_exclusions` blob |
-| `build_flight_url` uses `?tfs=` protobuf format | The old `#flt=` URL fragment stopped working ~2020 when Google migrated to Base64-encoded protobuf parameters. `TFSData.from_interface()` from fast-flights generates the correct encoding; origin, destination, and ISO dates are embedded in the blob and verifiable by base64-decoding |
+| `build_flight_url` uses `?tfs=` protobuf format | The old `#flt=` URL fragment stopped working ~2020 when Google migrated to Base64-encoded protobuf parameters. `TFSData.from_interface()` from fast-flights generates the correct encoding (pure local protobuf serialisation — not the broken get_flights() API call). fast-flights==2.2 is retained in requirements.txt solely for this URL building; fli is used for all actual flight search. |
 | `advance_days` replaced by `advance_window_min_days` / `advance_window_max_days` | Single fixed lookahead couldn't find the cheapest date in a window; two bounds let `find_cheapest_in_window` probe across the range. `advance_days` kept as a dormant default for backwards-compat with old DB rows. |
 | `find_cheapest_in_window` uses 3 evenly-spaced probes | 3 probes cover the window cheaply (~6 API calls/destination); adaptive triangulation is deferred since 3 probes already catch most price variation across a 7-30 day window |
 | `find_cheapest_in_window` returns `(cost, date, live_calls, cache_hits)` | Caller (main.py) needs to accumulate both counters for RunLog; returning them avoids a shared mutable counter |
@@ -224,7 +224,7 @@ main.py
 | `main.py` | Entry point; three-pass pipeline (filter pool → select batch → Pass 1 window search → Pass 2 flex-length variants → rank globally → notify) |
 | `src/trip_a_day/db.py` | SQLAlchemy engine, ORM models, `init_db()`, `seed_preferences()`, `_seed_destinations()` |
 | `src/trip_a_day/preferences.py` | Typed get/set wrappers over the `preferences` table |
-| `src/trip_a_day/fetcher.py` | fast-flights (mock or live) + per diem lookups; returns typed dataclasses |
+| `src/trip_a_day/fetcher.py` | fli/flights (mock or live) + per diem lookups; returns typed dataclasses |
 | `src/trip_a_day/selector.py` | 8 destination selection strategies; `select_daily_batch()` public interface |
 | `src/trip_a_day/filters.py` | Phase 6 destination filters: region allowlist/blocklist, favorite-radius, exclusion rules |
 | `src/trip_a_day/cache.py` | TTL-aware flight price cache: `get_cached_flight()`, `store_flight_cache()` |
@@ -286,7 +286,8 @@ python main.py
 ## API notes
 
 - **FLIGHT_DATA_MODE:** Set to `mock` (default) or `live` in `.env`. Mock reads `tests/fixtures/mock_flights.json`; live calls Google Flights. Tests that patch `get_flights` should set `FLIGHT_DATA_MODE=live` via monkeypatch.
-- **fast-flights:** No API key required. Queries Google Flights via internal protobuf endpoint. Soft limit: 300 calls/day (self-enforced, tracked in `api_usage`). `max_live_calls_per_run` (default 40) caps per-run live calls.
+- **fli (PyPI: flights):** No API key required. Queries Google Flights via direct internal API with primp Chrome TLS mimicry. Used for flight *search* only (`get_flights()` in `fetcher.py`). Soft limit: 300 calls/day (self-enforced, tracked in `api_usage`). `max_live_calls_per_run` (default 40) caps per-run live calls. 3 of 302 seed airports absent from fli's Airport enum (REP, PNH, FRU); these are skipped gracefully via `_airport()` ValueError -> None from `get_flight_offers()`.
+- **fast-flights (PyPI: fast-flights, pinned 2.2):** Retained *only* for `TFSData` in `links.py` (pure local protobuf URL encoding — no API calls). The `get_flights()` search path is broken since April 2026 (Google 401); only `TFSData.from_interface()` and `.as_b64()` are used from this package.
 - **GSA per diem:** `GSA_API_KEY` required only to run `scripts/update_rates.py`. The committed `data/per_diem_rates.json` covers 1,377 locations and is good until October 2026.
 - **Resend:** `RESEND_API_KEY` optional. If missing, `notifier.py` falls back to formatted stdout output. Set `NOTIFICATION_EMAILS` in `.env` (comma-separated) — this is the practical config path since the DB default is an empty list.
 
@@ -295,7 +296,7 @@ python main.py
 - Per diem lodging is a government rate (typically 3-star level); actual 4-star costs may be higher. This is noted in the hotel booking note.
 - Google Flights occasionally fails for specific routes (returns no data); those destinations are silently skipped.
 - Mock flight prices are static fixtures; they don't reflect real market prices or trends.
-- **Live mode playwright 401 (2026-04-24):** `FLIGHT_DATA_MODE=live` runs can fail with `playwright.tech 401` errors from the fast-flights library, resulting in "Pass 1 returned no prices." This is a transient auth issue in fast-flights' playwright dependency — not a bug in trip-a-day code. HTTP requests to google.com return 200, but price extraction fails. Workaround: retry the run; mock mode is unaffected.
+- **fast-flights deprecated (2026-04-26):** `fast-flights==2.2` was fully replaced by `fli` (PyPI: `flights>=0.8.4`). fast-flights was returning 401 `{"error":"no token provided"}` on every live call — Google changed their internal auth endpoint. fli uses primp for Chrome TLS mimicry and works correctly as of the migration date.
 
 ## Branch Convention
 
