@@ -1,4 +1,4 @@
-"""Unit tests for direct_only flight filtering in fetcher.py.
+"""Unit tests for fli-based flight fetching in fetcher.py.
 
 get_flights is mocked so these tests run without any API calls.
 """
@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from trip_a_day.fetcher import get_flight_offers
+from trip_a_day.fetcher import _airport, get_flight_offers
 
 
 def _make_flight(stops: int, price: str) -> SimpleNamespace:
@@ -139,3 +139,52 @@ class TestDirectOnlyFiltering:
         assert offer_direct is not None
         assert offer_any is not None
         assert offer_direct.booking_url != offer_any.booking_url
+
+
+class TestAirportHelper:
+    def test_known_iata_returns_enum(self):
+        """_airport('HSV') returns the Airport enum member for Huntsville."""
+        from fli.models import Airport
+
+        result = _airport("HSV")
+        assert result is Airport.HSV
+
+    def test_known_iata_lhr(self):
+        from fli.models import Airport
+
+        assert _airport("LHR") is Airport.LHR
+
+    def test_unknown_iata_raises_value_error(self):
+        """_airport raises ValueError for IATA codes absent from the fli enum."""
+        with pytest.raises(ValueError, match="ZZZ"):
+            _airport("ZZZ")
+
+    def test_seed_absent_codes_raise(self):
+        """REP, PNH, FRU are the three seed airports absent from fli; all raise."""
+        for code in ("REP", "PNH", "FRU"):
+            with pytest.raises(ValueError):
+                _airport(code)
+
+
+class TestUnsupportedAirportGracefulSkip:
+    def test_unsupported_destination_returns_none(self, mock_session):
+        """get_flight_offers returns None (not raises) for airports outside fli enum."""
+        with patch(
+            "trip_a_day.fetcher.get_flights",
+            side_effect=ValueError("Airport 'ZZZ' is not supported by fli"),
+        ):
+            offer = get_flight_offers(
+                "HSV", "ZZZ", DEPART, RETURN, 2, 0, mock_session, direct_only=True
+            )
+        assert offer is None
+
+    def test_unsupported_origin_returns_none(self, mock_session):
+        """ValueError from _airport() in origin position also returns None."""
+        with patch(
+            "trip_a_day.fetcher.get_flights",
+            side_effect=ValueError("Airport 'FRU' is not supported by fli"),
+        ):
+            offer = get_flight_offers(
+                "FRU", "LHR", DEPART, RETURN, 2, 0, mock_session, direct_only=True
+            )
+        assert offer is None
