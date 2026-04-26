@@ -33,12 +33,17 @@ def build_flight_url(
     return_date: date,
     adults: int = 1,
     children: int = 0,
+    direct_only: bool = False,
 ) -> str:
     """Return a Google Flights deep link for the given round-trip.
 
     Uses the ?tfs= protobuf format — the only format Google Flights currently
     supports for pre-filled deep links. The tfs= value is Base64-encoded and
-    embeds origin, destination, dates, and passenger counts.
+    embeds origin, destination, dates, passenger counts, and stop constraints.
+
+    When direct_only=True, max_stops=0 is encoded so the link opens Google
+    Flights pre-filtered to nonstop flights, matching the search criteria used
+    to find the price.
     """
     tfs = TFSData.from_interface(
         flight_data=[
@@ -56,6 +61,7 @@ def build_flight_url(
         trip="round-trip",
         passengers=Passengers(adults=adults, children=children),
         seat="economy",
+        max_stops=0 if direct_only else None,
     )
     b64 = tfs.as_b64().decode()
     return f"https://www.google.com/travel/flights?tfs={b64}&hl=en&curr=USD"

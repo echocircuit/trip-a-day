@@ -93,3 +93,49 @@ class TestDirectOnlyFiltering:
         ):
             offer = get_flight_offers("HSV", "LHR", DEPART, RETURN, 2, 0, mock_session)
         assert offer is None
+
+    def test_cheapest_nonstop_selected_not_first(self, mock_session):
+        """When multiple nonstop flights exist, select by price not list position."""
+        expensive = _make_flight(stops=0, price="$600")
+        cheaper = _make_flight(stops=0, price="$400")
+        cheapest = _make_flight(stops=0, price="$350")
+        with patch(
+            "trip_a_day.fetcher.get_flights",
+            return_value=_mock_result([expensive, cheaper, cheapest]),
+        ):
+            offer = get_flight_offers(
+                "HSV", "LHR", DEPART, RETURN, 1, 0, mock_session, direct_only=True
+            )
+        assert offer is not None
+        assert offer.price_total == 350.0
+
+    def test_direct_only_excludes_connecting_before_price_sort(self, mock_session):
+        """Connecting flights are excluded even when they are cheaper than nonstop."""
+        nonstop_expensive = _make_flight(stops=0, price="$800")
+        connecting_cheap = _make_flight(stops=1, price="$200")
+        with patch(
+            "trip_a_day.fetcher.get_flights",
+            return_value=_mock_result([nonstop_expensive, connecting_cheap]),
+        ):
+            offer = get_flight_offers(
+                "HSV", "LHR", DEPART, RETURN, 1, 0, mock_session, direct_only=True
+            )
+        assert offer is not None
+        assert offer.price_total == 800.0
+
+    def test_deep_link_encodes_direct_only(self, mock_session):
+        """booking_url differs between direct_only=True and direct_only=False."""
+        direct_flight = _make_flight(stops=0, price="$400")
+        with patch(
+            "trip_a_day.fetcher.get_flights",
+            return_value=_mock_result([direct_flight]),
+        ):
+            offer_direct = get_flight_offers(
+                "HSV", "LHR", DEPART, RETURN, 1, 0, mock_session, direct_only=True
+            )
+            offer_any = get_flight_offers(
+                "HSV", "LHR", DEPART, RETURN, 1, 0, mock_session, direct_only=False
+            )
+        assert offer_direct is not None
+        assert offer_any is not None
+        assert offer_direct.booking_url != offer_any.booking_url

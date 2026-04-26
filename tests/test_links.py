@@ -85,6 +85,26 @@ class TestBuildFlightUrl:
         url2 = build_flight_url("HSV", "CDG", _DEPART, _RETURN, adults=2, children=2)
         assert url1 != url2
 
+    def test_direct_only_true_produces_different_url_than_false(self):
+        """direct_only=True encodes max_stops=0; URL must differ from default."""
+        url_direct = build_flight_url("HSV", "CDG", _DEPART, _RETURN, direct_only=True)
+        url_any = build_flight_url("HSV", "CDG", _DEPART, _RETURN, direct_only=False)
+        assert url_direct != url_any
+
+    def test_direct_only_false_is_default(self):
+        """direct_only defaults to False; explicit False and default must produce same URL."""
+        url_default = build_flight_url("HSV", "CDG", _DEPART, _RETURN)
+        url_explicit = build_flight_url(
+            "HSV", "CDG", _DEPART, _RETURN, direct_only=False
+        )
+        assert url_default == url_explicit
+
+    def test_passenger_count_2_adults_differs_from_1(self):
+        """Passenger count is embedded in tfs; 2-adult URL must differ from 1-adult URL."""
+        url1 = build_flight_url("HSV", "CDG", _DEPART, _RETURN, adults=1, children=0)
+        url2 = build_flight_url("HSV", "CDG", _DEPART, _RETURN, adults=2, children=0)
+        assert url1 != url2
+
 
 class TestBuildHotelUrl:
     def test_google_hotels_returns_nonempty(self):
