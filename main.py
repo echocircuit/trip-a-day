@@ -169,6 +169,7 @@ def _stale_cache_fallback(
     car_rental_required: bool,
     trip_nights: int,
     preferred_car_site: str,
+    preferred_hotel_site: str = "google_hotels",
 ) -> list[TripCandidate]:
     """Build TripCandidates from stale (possibly TTL-expired) cached prices.
 
@@ -214,6 +215,7 @@ def _stale_cache_fallback(
             adults=num_adults,
             session=session,
             num_rooms=num_rooms,
+            hotel_site=preferred_hotel_site,
         )
         if hotel is None:
             continue
@@ -449,6 +451,7 @@ def run(triggered_by: str = "manual") -> None:
         num_adults = get_int(session, "num_adults")
         num_children = get_int(session, "num_children")
         num_rooms = get_int(session, "num_rooms")
+        preferred_hotel_site = get_or(session, "preferred_hotel_site", "google_hotels")
         preferred_car_site = get_or(session, "preferred_car_site", "kayak")
         ranking_strategy = get(session, "ranking_strategy")
         direct_flights_only = get_bool(session, "direct_flights_only")
@@ -825,6 +828,7 @@ def run(triggered_by: str = "manual") -> None:
                             adults=num_adults,
                             session=session,
                             num_rooms=num_rooms,
+                            hotel_site=preferred_hotel_site,
                         )
                         if hotel is None:
                             logger.info(
@@ -967,6 +971,7 @@ def run(triggered_by: str = "manual") -> None:
                 car_rental_required=car_rental_required,
                 trip_nights=trip_nights,
                 preferred_car_site=preferred_car_site,
+                preferred_hotel_site=preferred_hotel_site,
             )
             if stale_candidates:
                 pass1_stats["stale_cache_used"] = 1

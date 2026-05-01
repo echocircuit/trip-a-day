@@ -16,6 +16,12 @@ Google Flights note: The old #flt= URL fragment format stopped working around
 2020 when Google migrated to Base64-encoded protobuf ?tfs= parameters. The tfs=
 value encodes origin, destination, dates, and passenger counts inside a protobuf
 binary; airport codes and ISO dates are verifiable by base64-decoding the blob.
+
+Hotel URL patterns verified 2026-05-01 with checkin=2026-10-05, checkout=2026-10-09:
+  google_hotels: checkin=2026-10-05&checkout=2026-10-09 (YYYY-MM-DD via .isoformat())
+  booking_com:   checkin_year=2026&checkin_month=10&checkin_monthday=5 (no leading zeros)
+  expedia:       startDate=10/05/2026&endDate=10/09/2026 (MM/DD/YYYY)
+Note: preferred_hotel_site DB preference now wired through fetcher.py → main.py.
 """
 
 from __future__ import annotations

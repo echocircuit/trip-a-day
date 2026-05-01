@@ -801,6 +801,7 @@ def get_hotel_offers(
     adults: int,
     session: Session,
     num_rooms: int = 1,
+    hotel_site: str = "google_hotels",
 ) -> HotelOffer | None:
     """Return a per diem lodging estimate for the destination. Always returns an estimate.
 
@@ -831,7 +832,7 @@ def get_hotel_offers(
         adults,
         children=0,
         rooms=rooms,
-        site="google_hotels",
+        site=hotel_site,
     )
 
     note = (
