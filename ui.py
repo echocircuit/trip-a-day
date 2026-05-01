@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -34,6 +34,7 @@ from trip_a_day.db import (
     Destination,
     RunLog,
     SessionFactory,
+    TravelWindow,
     Trip,
     get_emails_sent_this_month,
     init_db,
@@ -802,6 +803,167 @@ def _preferences() -> None:
                 set_pref(s, "timezone", timezone_val.strip())
                 s.commit()
             st.success("Preferences saved.")
+
+    # ── Travel Windows ────────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("Travel Windows")
+    st.caption(
+        "Define fixed travel periods (school breaks, holidays) that constrain the "
+        "daily trip search. When one or more windows are active, the pipeline searches "
+        "only within those date ranges. If no trip is found, it falls back to the "
+        "normal advance booking window."
+    )
+    _tw_trip_nights = int(prefs.get("trip_length_nights", "7"))
+    _tw_trip_flex = int(prefs.get("trip_length_flex_nights", "0"))
+    _tw_min_nights = max(1, _tw_trip_nights - _tw_trip_flex)
+
+    with SessionFactory() as _tw_s:
+        _tw_all: list[TravelWindow] = (
+            _tw_s.query(TravelWindow).order_by(TravelWindow.earliest_departure).all()
+        )
+
+    # ── Table of existing windows ─────────────────────────────────────────────
+    if _tw_all:
+        today_tw = date.today()
+        for tw in _tw_all:
+            eff_s = tw.effective_start
+            eff_e = tw.effective_end
+            if not tw.enabled:
+                status_label = "Disabled"
+            elif eff_e < today_tw:
+                status_label = "Expired"
+            else:
+                status_label = "Active"
+            buf_str = (
+                f"-{tw.buffer_days_start} / +{tw.buffer_days_end} days"
+                if (tw.buffer_days_start or tw.buffer_days_end)
+                else "No buffer"
+            )
+            eff_days = (eff_e - eff_s).days + 1
+
+            col_name, col_range, col_buf, col_eff, col_status, col_actions = st.columns(
+                [2, 2, 1.5, 2, 1, 2]
+            )
+            col_name.write(f"**{tw.name}**")
+            col_range.write(f"{tw.earliest_departure} → {tw.latest_return}")
+            col_buf.write(buf_str)
+            col_eff.write(f"{eff_s} to {eff_e} ({eff_days}d)")
+            col_status.write(status_label)
+
+            with col_actions:
+                toggle_label = "Disable" if tw.enabled else "Enable"
+                if st.button(toggle_label, key=f"tw_toggle_{tw.id}"):
+                    with SessionFactory() as _s2:
+                        _tw_row = _s2.get(TravelWindow, tw.id)
+                        if _tw_row:
+                            _tw_row.enabled = not _tw_row.enabled
+                            _s2.commit()
+                    st.rerun()
+
+                _confirm_key = f"tw_del_confirm_{tw.id}"
+                if st.session_state.get(_confirm_key):
+                    if st.button("✅ Confirm delete", key=f"tw_del_ok_{tw.id}"):
+                        with SessionFactory() as _s2:
+                            _tw_row = _s2.get(TravelWindow, tw.id)
+                            if _tw_row:
+                                _s2.delete(_tw_row)
+                                _s2.commit()
+                        st.session_state.pop(_confirm_key, None)
+                        st.rerun()
+                else:
+                    if st.button("🗑 Delete", key=f"tw_del_{tw.id}"):
+                        st.session_state[_confirm_key] = True
+                        st.rerun()
+    else:
+        st.info("No travel windows defined yet. Add one below.")
+
+    # ── Add Window form ───────────────────────────────────────────────────────
+    st.write("**Add Travel Window**")
+    with st.form("add_travel_window_form", clear_on_submit=True):
+        tw_name = st.text_input("Name", placeholder="e.g. Fall Break 2026")
+        tw_col1, tw_col2 = st.columns(2)
+        tw_earliest = tw_col1.date_input(
+            "Earliest departure", value=date.today() + timedelta(days=30)
+        )
+        tw_latest = tw_col2.date_input(
+            "Latest return", value=date.today() + timedelta(days=37)
+        )
+        tw_buf_col1, tw_buf_col2 = st.columns(2)
+        tw_buf_start = tw_buf_col1.number_input(
+            "Buffer — start (days before earliest departure)",
+            min_value=0,
+            max_value=14,
+            value=0,
+        )
+        tw_buf_end = tw_buf_col2.number_input(
+            "Buffer — end (days after latest return)",
+            min_value=0,
+            max_value=14,
+            value=0,
+        )
+        tw_notes = st.text_area("Notes (optional)", height=68)
+        tw_submit = st.form_submit_button("Add Window")
+
+    # Live preview (outside form so it updates as the user types)
+    _tw_prev_start = tw_earliest - timedelta(days=int(tw_buf_start))
+    _tw_prev_end = tw_latest + timedelta(days=int(tw_buf_end))
+    _tw_prev_days = (_tw_prev_end - _tw_prev_start).days + 1
+    _tw_latest_dep = _tw_prev_end - timedelta(days=_tw_trip_nights)
+    with st.container():
+        st.caption(
+            f"**Effective search window:** {_tw_prev_start} to {_tw_prev_end}"
+            f" ({_tw_prev_days} days)  \n"
+            f"**Trip length:** {_tw_min_nights}-{_tw_trip_nights + _tw_trip_flex} nights"
+            " (from global preferences)  \n"
+            f"**Valid trips:** depart {_tw_prev_start} to {_tw_latest_dep},"
+            f" return by {_tw_prev_end}"
+        )
+
+    # Validation warnings (outside form, shown as feedback)
+    _tw_errs: list[str] = []
+    if tw_submit:
+        if not tw_name.strip():
+            _tw_errs.append("Name is required.")
+        if tw_latest <= tw_earliest:
+            _tw_errs.append(
+                "Latest return must be at least 1 day after earliest departure."
+            )
+        if not (0 <= int(tw_buf_start) <= 14):
+            _tw_errs.append("Buffer - start must be 0-14 days.")
+        if not (0 <= int(tw_buf_end) <= 14):
+            _tw_errs.append("Buffer - end must be 0-14 days.")
+        if _tw_prev_days < _tw_min_nights + 1:
+            _tw_errs.append(
+                f"⚠️ This window may be too short for your minimum trip length "
+                f"({_tw_min_nights} nights). Consider increasing the buffer or "
+                "adjusting your trip length preferences."
+            )
+        if tw_earliest < date.today() - timedelta(days=365):
+            st.warning(
+                f"⚠️ Earliest departure {tw_earliest} is more than 365 days in the "
+                "past — this window will likely be expired immediately."
+            )
+
+        if not _tw_errs:
+            with SessionFactory() as _s2:
+                _s2.add(
+                    TravelWindow(
+                        name=tw_name.strip(),
+                        earliest_departure=tw_earliest,
+                        latest_return=tw_latest,
+                        buffer_days_start=int(tw_buf_start),
+                        buffer_days_end=int(tw_buf_end),
+                        enabled=True,
+                        created_at=datetime.now(UTC),
+                        notes=tw_notes.strip() or None,
+                    )
+                )
+                _s2.commit()
+            st.success(f"✅ Added travel window: **{tw_name.strip()}**")
+            st.rerun()
+        else:
+            for err in _tw_errs:
+                st.error(err)
 
     # Email usage indicator — outside the form (read-only, always current)
     st.subheader("Email Usage This Month")
