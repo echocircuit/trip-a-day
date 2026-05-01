@@ -18,6 +18,7 @@ import subprocess
 import sys
 from datetime import UTC, date, datetime, time
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
 
@@ -47,6 +48,7 @@ from trip_a_day.fetcher import get_airport_city
 from trip_a_day.notifier import send_test_email
 from trip_a_day.preferences import get_all, set_pref
 from trip_a_day.selector import STRATEGY_LABELS
+from trip_a_day.utils import to_local_display
 
 _PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -134,6 +136,7 @@ def _dashboard() -> None:
         _prefs = get_all(_s)
         _notifs_enabled = _prefs.get("notifications_enabled", "true") == "true"
         _home_airport = _prefs.get("home_airport", "HSV")
+        _timezone = _prefs.get("timezone", "America/Chicago")
     if not _notifs_enabled:
         st.info("🔕 Notifications disabled — email will not be sent after runs.")
 
@@ -162,7 +165,7 @@ def _dashboard() -> None:
             icons = {"success": "✅", "partial": "⚠️", "failed": "❌"}
             icon = icons.get(last_run.status, "❓")
             st.metric("Status", f"{icon} {last_run.status.capitalize()}")
-            st.write(f"**When:** {last_run.run_at.strftime('%Y-%m-%d %H:%M')} UTC")
+            st.write(f"**When:** {to_local_display(last_run.run_at, _timezone)}")
             st.write(f"**Triggered by:** {last_run.triggered_by}")
             if last_run.duration_seconds is not None:
                 st.write(f"**Duration:** {last_run.duration_seconds:.1f}s")
@@ -693,6 +696,17 @@ def _preferences() -> None:
             help="A warning banner is added to outgoing emails when this percentage of the monthly limit is reached.",
         )
 
+        st.subheader("Display")
+        timezone_val = st.text_input(
+            "Timezone",
+            value=prefs.get("timezone", "America/Chicago"),
+            help=(
+                "Enter an IANA timezone name (e.g., America/Chicago, "
+                "America/New_York, America/Los_Angeles, Europe/London). "
+                "Default is America/Chicago (CST/CDT)."
+            ),
+        )
+
         st.subheader("Scheduler")
         raw_time = prefs.get("scheduled_run_time", "07:00")
         try:
@@ -705,66 +719,89 @@ def _preferences() -> None:
         submitted = st.form_submit_button("Save Preferences", type="primary")
 
     if submitted:
+        # Validate timezone before saving anything
+        _tz_valid = True
+        try:
+            ZoneInfo(timezone_val.strip())
+        except (ZoneInfoNotFoundError, KeyError):
+            st.error(
+                f"❌ Invalid timezone: **{timezone_val.strip()!r}**. "
+                "Enter a valid IANA timezone name (e.g., America/Chicago)."
+            )
+            _tz_valid = False
+
         new_emails = [e.strip() for e in notification_emails.split(",") if e.strip()]
-        with SessionFactory() as s:
-            set_pref(s, "home_airport", home_airport.upper().strip())
-            set_pref(s, "trip_length_nights", str(int(trip_nights)))
-            set_pref(s, "trip_length_flex_nights", str(int(trip_flex)))
-            set_pref(s, "advance_window_min_days", str(int(advance_window_min)))
-            set_pref(s, "advance_window_max_days", str(int(advance_window_max)))
-            set_pref(s, "search_radius_miles", str(int(search_radius_miles)))
-            set_pref(s, "irs_mileage_rate", f"{float(irs_mileage_rate):.2f}")
-            set_pref(s, "num_adults", str(int(num_adults)))
-            set_pref(s, "num_children", str(int(num_children)))
-            set_pref(s, "num_rooms", str(int(num_rooms)))
-            set_pref(s, "direct_flights_only", "true" if direct_only else "false")
-            set_pref(s, "car_rental_required", "true" if car_required else "false")
-            set_pref(s, "ranking_strategy", ranking_strategy)
-            set_pref(s, "daily_batch_size", str(int(daily_batch_size)))
-            set_pref(
-                s, "destination_selection_strategy", destination_selection_strategy
-            )
-            set_pref(s, "cache_ttl_enabled", "true" if cache_ttl_enabled else "false")
-            set_pref(s, "max_live_calls_per_run", str(int(max_live_calls)))
-            set_pref(s, "two_pass_candidate_count", str(int(two_pass_count)))
-            set_pref(s, "region_allowlist", json.dumps(region_allowlist_val))
-            set_pref(s, "region_blocklist", json.dumps(region_blocklist_val))
-            set_pref(s, "favorite_radius_miles", str(int(fav_radius)))
-            # Update user_favorited flag on all destinations to match multiselect
-            selected_iatas = set(fav_city_iatas)
-            for d in s.query(Destination).all():
-                d.user_favorited = d.iata_code in selected_iatas
-            set_pref(
-                s,
-                "exclude_previously_selected",
-                "true" if exclude_selected else "false",
-            )
-            set_pref(
-                s,
-                "exclude_previously_selected_days",
-                str(int(exclude_selected_days)),
-            )
-            set_pref(s, "exclude_booked", "true" if exclude_booked else "false")
-            set_pref(s, "preferred_hotel_site", preferred_hotel_site)
-            set_pref(s, "preferred_car_site", preferred_car_site)
-            set_pref(s, "preferred_hotel_site_manual_url", preferred_hotel_manual_url)
-            set_pref(s, "preferred_car_site_manual_url", preferred_car_manual_url)
-            # Only update notification_emails when not in test sender mode
-            _from_saved = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
-            if "onboarding@resend.dev" not in _from_saved and _from_saved.strip():
-                set_pref(s, "notification_emails", json.dumps(new_emails))
-            set_pref(
-                s,
-                "notifications_enabled",
-                "false" if notifications_enabled_val else "true",
-            )
-            set_pref(s, "email_monthly_limit", str(int(email_monthly_limit_val)))
-            set_pref(
-                s, "email_warning_threshold_pct", str(int(email_warning_threshold_val))
-            )
-            set_pref(s, "scheduled_run_time", run_time_val.strftime("%H:%M"))
-            s.commit()
-        st.success("Preferences saved.")
+        if not _tz_valid:
+            pass
+        else:
+            with SessionFactory() as s:
+                set_pref(s, "home_airport", home_airport.upper().strip())
+                set_pref(s, "trip_length_nights", str(int(trip_nights)))
+                set_pref(s, "trip_length_flex_nights", str(int(trip_flex)))
+                set_pref(s, "advance_window_min_days", str(int(advance_window_min)))
+                set_pref(s, "advance_window_max_days", str(int(advance_window_max)))
+                set_pref(s, "search_radius_miles", str(int(search_radius_miles)))
+                set_pref(s, "irs_mileage_rate", f"{float(irs_mileage_rate):.2f}")
+                set_pref(s, "num_adults", str(int(num_adults)))
+                set_pref(s, "num_children", str(int(num_children)))
+                set_pref(s, "num_rooms", str(int(num_rooms)))
+                set_pref(s, "direct_flights_only", "true" if direct_only else "false")
+                set_pref(s, "car_rental_required", "true" if car_required else "false")
+                set_pref(s, "ranking_strategy", ranking_strategy)
+                set_pref(s, "daily_batch_size", str(int(daily_batch_size)))
+                set_pref(
+                    s, "destination_selection_strategy", destination_selection_strategy
+                )
+                set_pref(
+                    s, "cache_ttl_enabled", "true" if cache_ttl_enabled else "false"
+                )
+                set_pref(s, "max_live_calls_per_run", str(int(max_live_calls)))
+                set_pref(s, "two_pass_candidate_count", str(int(two_pass_count)))
+                set_pref(s, "region_allowlist", json.dumps(region_allowlist_val))
+                set_pref(s, "region_blocklist", json.dumps(region_blocklist_val))
+                set_pref(s, "favorite_radius_miles", str(int(fav_radius)))
+                # Update user_favorited flag on all destinations to match multiselect
+                selected_iatas = set(fav_city_iatas)
+                for d in s.query(Destination).all():
+                    d.user_favorited = d.iata_code in selected_iatas
+                set_pref(
+                    s,
+                    "exclude_previously_selected",
+                    "true" if exclude_selected else "false",
+                )
+                set_pref(
+                    s,
+                    "exclude_previously_selected_days",
+                    str(int(exclude_selected_days)),
+                )
+                set_pref(s, "exclude_booked", "true" if exclude_booked else "false")
+                set_pref(s, "preferred_hotel_site", preferred_hotel_site)
+                set_pref(s, "preferred_car_site", preferred_car_site)
+                set_pref(
+                    s, "preferred_hotel_site_manual_url", preferred_hotel_manual_url
+                )
+                set_pref(s, "preferred_car_site_manual_url", preferred_car_manual_url)
+                # Only update notification_emails when not in test sender mode
+                _from_saved = os.environ.get(
+                    "RESEND_FROM_EMAIL", "onboarding@resend.dev"
+                )
+                if "onboarding@resend.dev" not in _from_saved and _from_saved.strip():
+                    set_pref(s, "notification_emails", json.dumps(new_emails))
+                set_pref(
+                    s,
+                    "notifications_enabled",
+                    "false" if notifications_enabled_val else "true",
+                )
+                set_pref(s, "email_monthly_limit", str(int(email_monthly_limit_val)))
+                set_pref(
+                    s,
+                    "email_warning_threshold_pct",
+                    str(int(email_warning_threshold_val)),
+                )
+                set_pref(s, "scheduled_run_time", run_time_val.strftime("%H:%M"))
+                set_pref(s, "timezone", timezone_val.strip())
+                s.commit()
+            st.success("Preferences saved.")
 
     # Email usage indicator — outside the form (read-only, always current)
     st.subheader("Email Usage This Month")

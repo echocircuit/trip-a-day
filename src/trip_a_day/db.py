@@ -224,6 +224,8 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     "preferred_car_site": "kayak",
     "preferred_hotel_site_manual_url": "",
     "preferred_car_site_manual_url": "",
+    # Display preferences
+    "timezone": "America/Chicago",
 }
 
 # Public alias for use in tests and tooling.
