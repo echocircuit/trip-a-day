@@ -52,8 +52,23 @@ from sqlalchemy.orm import Session
 
 from trip_a_day.db import get_api_calls_today, record_api_call
 from trip_a_day.links import build_flight_url, build_hotel_url
+from trip_a_day.preferences import get_or
 
 logger = logging.getLogger(__name__)
+
+
+def get_flight_data_mode(db_session: Session) -> str:
+    """Resolve flight data mode with DB preference taking priority over env var.
+
+    Priority: DB preference → FLIGHT_DATA_MODE env var → "mock".
+    This lets the UI toggle take effect without restarting Streamlit.
+    """
+    db_value = get_or(db_session, "flight_data_mode", "")
+    if db_value in ("mock", "live"):
+        return db_value
+    env_value = os.environ.get("FLIGHT_DATA_MODE", "mock").lower().strip()
+    return env_value if env_value in ("mock", "live") else "mock"
+
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SEED_AIRPORTS_PATH = _DATA_DIR / "seed_airports.json"

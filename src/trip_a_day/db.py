@@ -260,6 +260,10 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     "preferred_car_site_manual_url": "",
     # Display preferences
     "timezone": "America/Chicago",
+    # Flight data mode: "mock" uses fixture data, "live" queries Google Flights.
+    # DB preference takes priority over FLIGHT_DATA_MODE env var so the UI toggle
+    # takes effect without restarting Streamlit.
+    "flight_data_mode": "mock",
 }
 
 # Public alias for use in tests and tooling.

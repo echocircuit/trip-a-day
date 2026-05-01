@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import sys
 import time
 from datetime import UTC, date, datetime, timedelta
@@ -46,6 +45,7 @@ from trip_a_day.db import (
 )
 from trip_a_day.fetcher import (
     get_airport_info,
+    get_flight_data_mode,
     get_flight_offers,
     get_food_cost,
     get_hotel_offers,
@@ -464,7 +464,7 @@ def run(triggered_by: str = "manual") -> None:
         two_pass_count = get_int(session, "two_pass_candidate_count")
 
         night_variants = _build_night_variants(trip_nights, trip_flex)
-        is_mock = os.environ.get("FLIGHT_DATA_MODE", "mock") == "mock"
+        is_mock = get_flight_data_mode(session) == "mock"
 
         logger.info(
             "Searching from %s | window %d-%d days out | nights %s"

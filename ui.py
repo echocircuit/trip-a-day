@@ -45,7 +45,7 @@ from trip_a_day.destination_input import (
     fuzzy_match_per_diem,
     parse_destination_csv,
 )
-from trip_a_day.fetcher import get_airport_city
+from trip_a_day.fetcher import get_airport_city, get_flight_data_mode
 from trip_a_day.notifier import send_test_email
 from trip_a_day.preferences import get_all, set_pref
 from trip_a_day.selector import STRATEGY_LABELS
@@ -120,7 +120,8 @@ def _run_now() -> None:
 
 
 def _is_mock_mode() -> bool:
-    return os.environ.get("FLIGHT_DATA_MODE", "mock").lower().strip() == "mock"
+    with SessionFactory() as _s:
+        return get_flight_data_mode(_s) == "mock"
 
 
 def _dashboard() -> None:
@@ -129,7 +130,7 @@ def _dashboard() -> None:
     if _is_mock_mode():
         st.warning(
             "⚠️ Running in mock mode — flight prices are not real. "
-            "Set `FLIGHT_DATA_MODE=live` in your `.env` to use live data.",
+            "Change **Flight data mode** in Preferences to use live data.",
             icon=None,
         )
 
@@ -394,20 +395,21 @@ def _preferences() -> None:
         except (json.JSONDecodeError, TypeError):
             return []
 
-    # Read-only flight data mode indicator (env var, not a DB preference)
-    mode = os.environ.get("FLIGHT_DATA_MODE", "mock").lower().strip()
-    if mode == "mock":
-        st.info(
-            "**Flight data mode: mock** — Prices come from static fixtures, not Google Flights. "
-            "Set `FLIGHT_DATA_MODE=live` in your `.env` to use live pricing. "
-            "Mock mode is safe for development and testing.",
-        )
-    else:
-        st.success(
-            "**Flight data mode: live** — Prices are fetched from Google Flights in real time.",
-        )
-
     with st.form("preferences_form"):
+        st.subheader("Flight Data Mode")
+        _current_mode = prefs.get("flight_data_mode", "mock")
+        flight_data_mode_val = st.radio(
+            "Flight data mode",
+            options=["mock", "live"],
+            index=0 if _current_mode == "mock" else 1,
+            format_func=lambda m: (
+                "Mock — use fixture data (no API calls, safe for development)"
+                if m == "mock"
+                else "Live — query Google Flights (uses API budget)"
+            ),
+            label_visibility="collapsed",
+        )
+        st.divider()
         st.subheader("Trip Configuration")
         home_airport = st.text_input(
             "Home Airport (IATA code)", value=prefs.get("home_airport", "HSV")
@@ -830,8 +832,12 @@ def _preferences() -> None:
                 )
                 set_pref(s, "scheduled_run_time", run_time_val.strftime("%H:%M"))
                 set_pref(s, "timezone", timezone_val.strip())
+                set_pref(s, "flight_data_mode", flight_data_mode_val)
                 s.commit()
-            st.success("Preferences saved.")
+            st.success(
+                "Preferences saved. "
+                "Flight data mode updated — takes effect on the next run."
+            )
 
     # ── Travel Windows ────────────────────────────────────────────────────────
     st.divider()
