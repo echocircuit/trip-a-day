@@ -157,6 +157,21 @@ def _dashboard() -> None:
         )
         _email_sent_this_month = get_emails_sent_this_month(s)
         _email_limit_dash = int(_prefs.get("email_monthly_limit", "3000"))
+        # Travel windows — extract scalars before session closes
+        _active_tws = s.query(TravelWindow).filter(TravelWindow.enabled.is_(True)).all()
+        _active_tw_summaries: list[dict] = [
+            {
+                "name": tw.name,
+                "earliest": tw.earliest_departure,
+                "latest": tw.latest_return,
+                "eff_start": tw.effective_start,
+                "eff_end": tw.effective_end,
+            }
+            for tw in _active_tws
+        ]
+        _last_run_tw_name: str | None = (
+            getattr(last_run, "travel_window_name", None) if last_run else None
+        )
 
     col1, col2 = st.columns(2)
 
@@ -203,8 +218,22 @@ def _dashboard() -> None:
                                 f"- **{ex.get('city', '?')}** ({ex.get('iata', '?')}): "
                                 f"{ex.get('reason', 'unknown reason')}"
                             )
+            if _last_run_tw_name:
+                st.success(f"📅 Today's result found within: **{_last_run_tw_name}**")
+            elif _active_tw_summaries and last_run and last_run.status == "success":
+                st.info(
+                    "📅 Travel windows are active but this result used the standard "
+                    "advance booking window (no trip matched the window constraints)."
+                )
         else:
             st.info("No runs yet. Click **Run Now** below to get started.")
+
+        if _active_tw_summaries:
+            st.caption("**Active travel windows:**")
+            for _tw in _active_tw_summaries:
+                _eff_start = _tw["eff_start"].strftime("%b %-d")
+                _eff_end = _tw["eff_end"].strftime("%b %-d, %Y")
+                st.caption(f"  📅 {_tw['name']} (effective {_eff_start} to {_eff_end})")
 
     with col2:
         st.subheader("API Usage Today")

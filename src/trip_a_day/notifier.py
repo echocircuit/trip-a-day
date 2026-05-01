@@ -61,6 +61,8 @@ def send_trip_notification(
     home_airport: str = "",
     trip_id: int | None = None,
     db_session: Session | None = None,
+    travel_window_name: str | None = None,
+    window_fallback_used: bool = False,
 ) -> bool:
     """Send the daily trip notification email (or print to stdout if no API key).
 
@@ -75,6 +77,8 @@ def send_trip_notification(
         home_airport=home_airport,
         trip_id=trip_id,
         db_session=db_session,
+        travel_window_name=travel_window_name,
+        window_fallback_used=window_fallback_used,
     )
     plain_body = _build_plain(
         trip,
@@ -82,6 +86,8 @@ def send_trip_notification(
         is_mock=is_mock,
         home_airport=home_airport,
         trip_id=trip_id,
+        travel_window_name=travel_window_name,
+        window_fallback_used=window_fallback_used,
     )
 
     api_key = os.environ.get("RESEND_API_KEY", "")
@@ -259,6 +265,32 @@ def _price_history_section_html(trip: TripCandidate, db_session: Session | None)
     )
 
 
+def _travel_window_html(
+    trip: TripCandidate,
+    window_name: str | None,
+    window_fallback_used: bool,
+) -> str:
+    """Return the travel window card HTML, or the fallback notice, or empty string."""
+    if window_fallback_used:
+        return (
+            '<p style="color:#b8860b;background:#fffde7;padding:8px 12px;border-left:'
+            '4px solid #f9a825;margin:8px 0;">'
+            "&#9888;&#xFE0F; No trip found within your active travel windows. "
+            "Showing standard advance booking result instead.</p>"
+        )
+    if not window_name:
+        return ""
+    depart_fmt = trip.departure_date.strftime("%b %-d, %Y")
+    return_fmt = trip.return_date.strftime("%b %-d, %Y")
+    return (
+        '<p style="background:#e8f5e9;padding:8px 12px;border-left:4px solid #43a047;'
+        'margin:8px 0;">'
+        f"&#x1F4C5; <strong>Travel window:</strong> {window_name}<br>"
+        f"&nbsp;&nbsp;Departs: {depart_fmt}<br>"
+        f"&nbsp;&nbsp;Returns: {return_fmt}</p>"
+    )
+
+
 def _build_html(
     trip: TripCandidate,
     *,
@@ -267,6 +299,8 @@ def _build_html(
     home_airport: str = "",
     trip_id: int | None = None,
     db_session: Session | None = None,
+    travel_window_name: str | None = None,
+    window_fallback_used: bool = False,
 ) -> str:
     nights = (trip.return_date - trip.departure_date).days
     distance_str = (
@@ -294,6 +328,7 @@ def _build_html(
   <h1>&#x2708;&#xFE0F; Trip of the Day</h1>
   {_MOCK_DATA_BANNER_HTML if is_mock else ""}
   {_FILTER_FALLBACK_WARNING_HTML if filter_fallback else ""}
+  {_travel_window_html(trip, travel_window_name, window_fallback_used)}
   {_nearby_dep_html(trip, home_airport)}
   <h2>{trip.city}, {trip.country}</h2>
   <p>
@@ -329,6 +364,27 @@ def _build_html(
 </html>"""
 
 
+def _travel_window_plain(
+    trip: TripCandidate,
+    window_name: str | None,
+    window_fallback_used: bool,
+) -> str:
+    if window_fallback_used:
+        return (
+            "⚠️ No trip found within active travel windows. "
+            "Showing standard advance booking result.\n\n"
+        )
+    if not window_name:
+        return ""
+    depart_fmt = trip.departure_date.strftime("%b %-d, %Y")
+    return_fmt = trip.return_date.strftime("%b %-d, %Y")
+    return (
+        f"📅 Travel window: {window_name}\n"
+        f"   Departs: {depart_fmt}\n"
+        f"   Returns: {return_fmt}\n\n"
+    )
+
+
 def _build_plain(
     trip: TripCandidate,
     *,
@@ -336,6 +392,8 @@ def _build_plain(
     is_mock: bool = False,
     home_airport: str = "",
     trip_id: int | None = None,
+    travel_window_name: str | None = None,
+    window_fallback_used: bool = False,
 ) -> str:
     nights = (trip.return_date - trip.departure_date).days
     distance_str = (
@@ -343,6 +401,9 @@ def _build_plain(
     )
     mock_warning = _MOCK_DATA_BANNER_TEXT if is_mock else ""
     filter_warning = _FILTER_FALLBACK_WARNING_TEXT if filter_fallback else ""
+    window_section = _travel_window_plain(
+        trip, travel_window_name, window_fallback_used
+    )
     if trip.departure_airport:
         dep_label = _airport_label(trip.departure_airport)
         if trip.departure_airport != home_airport and home_airport:
@@ -357,6 +418,7 @@ def _build_plain(
     return (
         mock_warning
         + filter_warning
+        + window_section
         + textwrap.dedent(f"""\
         ✈️  TRIP OF THE DAY
         ==================

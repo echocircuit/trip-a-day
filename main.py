@@ -1105,6 +1105,8 @@ def run(triggered_by: str = "manual") -> None:
                 home_airport=home_airport,
                 trip_id=winner_trip_id,
                 db_session=session,
+                travel_window_name=winning_window_name,
+                window_fallback_used=window_fallback_used,
             )
             if notified:
                 winner_row = session.get(Trip, winner_trip_id)
