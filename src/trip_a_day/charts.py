@@ -22,9 +22,10 @@ def generate_price_history_chart(
 ) -> bytes | None:
     """Return PNG image bytes, or None if insufficient data for both series.
 
-    Series 1: historical prices for this destination (all recorded history).
-    Series 2: recent daily Trip of the Day costs for the past 7 days.
-    Returns None when Series 1 < 3 points AND Series 2 < 2 points.
+    Series 1: destination price history for the past 30 calendar days.
+    Series 2: recent daily Trip of the Day costs for the past 30 days.
+    Both series require at least 3 data points to be rendered.
+    Returns None when both series have fewer than 3 points.
     """
     try:
         import matplotlib
@@ -40,37 +41,34 @@ def generate_price_history_chart(
     try:
         from sqlalchemy import func
 
-        from trip_a_day.db import Destination, Trip
+        from trip_a_day.db import Trip
 
-        # Series 1: full price history for this destination
+        thirty_days_ago = today_run_date - timedelta(days=30)
+
+        # Series 1: destination price history for the past 30 days
         s1_rows = (
             db_session.query(
                 Trip.run_date,
                 func.min(Trip.total_cost_usd).label("total_cost_usd"),
             )
-            .filter(Trip.destination_iata == destination_iata)
+            .filter(
+                Trip.destination_iata == destination_iata,
+                Trip.run_date >= thirty_days_ago,
+            )
             .group_by(Trip.run_date)
             .order_by(Trip.run_date)
             .all()
         )
 
-        # Series 2: recent daily Trip of the Day (selected winner, past 7 days)
-        seven_days_ago = today_run_date - timedelta(days=7)
+        # Series 2: recent daily Trip of the Day (selected winner, past 30 days)
         s2_rows = (
             db_session.query(
                 Trip.run_date,
                 Trip.total_cost_usd,
-                Trip.destination_iata,
-                Destination.city,
-            )
-            .join(
-                Destination,
-                Trip.destination_iata == Destination.iata_code,
-                isouter=True,
             )
             .filter(
                 Trip.selected == True,  # noqa: E712
-                Trip.run_date >= seven_days_ago,
+                Trip.run_date >= thirty_days_ago,
             )
             .order_by(Trip.run_date)
             .all()
@@ -80,10 +78,9 @@ def generate_price_history_chart(
         s1_costs = [row.total_cost_usd for row in s1_rows]
         s2_dates = [row.run_date for row in s2_rows]
         s2_costs = [row.total_cost_usd for row in s2_rows]
-        s2_cities = [row.city or row.destination_iata for row in s2_rows]
 
         has_s1 = len(s1_dates) >= 3
-        has_s2 = len(s2_dates) >= 2
+        has_s2 = len(s2_dates) >= 3
 
         if not has_s1 and not has_s2:
             return None
@@ -168,19 +165,6 @@ def generate_price_history_chart(
                 markersize=3,
                 label="Recent daily picks",
             )
-
-            # Annotate each green point with a short city name
-            for xi, yi, city in zip(x_s2, s2_costs, s2_cities, strict=False):
-                short = city.split(",")[0][:10] if city else "?"
-                ax.annotate(
-                    short,
-                    (xi, yi),
-                    textcoords="offset points",
-                    xytext=(0, 5),
-                    fontsize=4,
-                    ha="center",
-                    color="#27ae60",
-                )
 
         # X-axis: derive range from whichever series are present
         all_dates = s1_dates + s2_dates
