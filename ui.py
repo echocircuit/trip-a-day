@@ -16,8 +16,9 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
 
@@ -33,6 +34,7 @@ from trip_a_day.db import (
     Destination,
     RunLog,
     SessionFactory,
+    TravelWindow,
     Trip,
     get_emails_sent_this_month,
     init_db,
@@ -47,6 +49,7 @@ from trip_a_day.fetcher import get_airport_city
 from trip_a_day.notifier import send_test_email
 from trip_a_day.preferences import get_all, set_pref
 from trip_a_day.selector import STRATEGY_LABELS
+from trip_a_day.utils import to_local_display
 
 _PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -134,6 +137,7 @@ def _dashboard() -> None:
         _prefs = get_all(_s)
         _notifs_enabled = _prefs.get("notifications_enabled", "true") == "true"
         _home_airport = _prefs.get("home_airport", "HSV")
+        _timezone = _prefs.get("timezone", "America/Chicago")
     if not _notifs_enabled:
         st.info("🔕 Notifications disabled — email will not be sent after runs.")
 
@@ -153,6 +157,21 @@ def _dashboard() -> None:
         )
         _email_sent_this_month = get_emails_sent_this_month(s)
         _email_limit_dash = int(_prefs.get("email_monthly_limit", "3000"))
+        # Travel windows — extract scalars before session closes
+        _active_tws = s.query(TravelWindow).filter(TravelWindow.enabled.is_(True)).all()
+        _active_tw_summaries: list[dict] = [
+            {
+                "name": tw.name,
+                "earliest": tw.earliest_departure,
+                "latest": tw.latest_return,
+                "eff_start": tw.effective_start,
+                "eff_end": tw.effective_end,
+            }
+            for tw in _active_tws
+        ]
+        _last_run_tw_name: str | None = (
+            getattr(last_run, "travel_window_name", None) if last_run else None
+        )
 
     col1, col2 = st.columns(2)
 
@@ -162,7 +181,7 @@ def _dashboard() -> None:
             icons = {"success": "✅", "partial": "⚠️", "failed": "❌"}
             icon = icons.get(last_run.status, "❓")
             st.metric("Status", f"{icon} {last_run.status.capitalize()}")
-            st.write(f"**When:** {last_run.run_at.strftime('%Y-%m-%d %H:%M')} UTC")
+            st.write(f"**When:** {to_local_display(last_run.run_at, _timezone)}")
             st.write(f"**Triggered by:** {last_run.triggered_by}")
             if last_run.duration_seconds is not None:
                 st.write(f"**Duration:** {last_run.duration_seconds:.1f}s")
@@ -199,8 +218,22 @@ def _dashboard() -> None:
                                 f"- **{ex.get('city', '?')}** ({ex.get('iata', '?')}): "
                                 f"{ex.get('reason', 'unknown reason')}"
                             )
+            if _last_run_tw_name:
+                st.success(f"📅 Today's result found within: **{_last_run_tw_name}**")
+            elif _active_tw_summaries and last_run and last_run.status == "success":
+                st.info(
+                    "📅 Travel windows are active but this result used the standard "
+                    "advance booking window (no trip matched the window constraints)."
+                )
         else:
             st.info("No runs yet. Click **Run Now** below to get started.")
+
+        if _active_tw_summaries:
+            st.caption("**Active travel windows:**")
+            for _tw in _active_tw_summaries:
+                _eff_start = _tw["eff_start"].strftime("%b %-d")
+                _eff_end = _tw["eff_end"].strftime("%b %-d, %Y")
+                st.caption(f"  📅 {_tw['name']} (effective {_eff_start} to {_eff_end})")
 
     with col2:
         st.subheader("API Usage Today")
@@ -693,6 +726,17 @@ def _preferences() -> None:
             help="A warning banner is added to outgoing emails when this percentage of the monthly limit is reached.",
         )
 
+        st.subheader("Display")
+        timezone_val = st.text_input(
+            "Timezone",
+            value=prefs.get("timezone", "America/Chicago"),
+            help=(
+                "Enter an IANA timezone name (e.g., America/Chicago, "
+                "America/New_York, America/Los_Angeles, Europe/London). "
+                "Default is America/Chicago (CST/CDT)."
+            ),
+        )
+
         st.subheader("Scheduler")
         raw_time = prefs.get("scheduled_run_time", "07:00")
         try:
@@ -705,66 +749,250 @@ def _preferences() -> None:
         submitted = st.form_submit_button("Save Preferences", type="primary")
 
     if submitted:
+        # Validate timezone before saving anything
+        _tz_valid = True
+        try:
+            ZoneInfo(timezone_val.strip())
+        except (ZoneInfoNotFoundError, KeyError):
+            st.error(
+                f"❌ Invalid timezone: **{timezone_val.strip()!r}**. "
+                "Enter a valid IANA timezone name (e.g., America/Chicago)."
+            )
+            _tz_valid = False
+
         new_emails = [e.strip() for e in notification_emails.split(",") if e.strip()]
-        with SessionFactory() as s:
-            set_pref(s, "home_airport", home_airport.upper().strip())
-            set_pref(s, "trip_length_nights", str(int(trip_nights)))
-            set_pref(s, "trip_length_flex_nights", str(int(trip_flex)))
-            set_pref(s, "advance_window_min_days", str(int(advance_window_min)))
-            set_pref(s, "advance_window_max_days", str(int(advance_window_max)))
-            set_pref(s, "search_radius_miles", str(int(search_radius_miles)))
-            set_pref(s, "irs_mileage_rate", f"{float(irs_mileage_rate):.2f}")
-            set_pref(s, "num_adults", str(int(num_adults)))
-            set_pref(s, "num_children", str(int(num_children)))
-            set_pref(s, "num_rooms", str(int(num_rooms)))
-            set_pref(s, "direct_flights_only", "true" if direct_only else "false")
-            set_pref(s, "car_rental_required", "true" if car_required else "false")
-            set_pref(s, "ranking_strategy", ranking_strategy)
-            set_pref(s, "daily_batch_size", str(int(daily_batch_size)))
-            set_pref(
-                s, "destination_selection_strategy", destination_selection_strategy
+        if not _tz_valid:
+            pass
+        else:
+            with SessionFactory() as s:
+                set_pref(s, "home_airport", home_airport.upper().strip())
+                set_pref(s, "trip_length_nights", str(int(trip_nights)))
+                set_pref(s, "trip_length_flex_nights", str(int(trip_flex)))
+                set_pref(s, "advance_window_min_days", str(int(advance_window_min)))
+                set_pref(s, "advance_window_max_days", str(int(advance_window_max)))
+                set_pref(s, "search_radius_miles", str(int(search_radius_miles)))
+                set_pref(s, "irs_mileage_rate", f"{float(irs_mileage_rate):.2f}")
+                set_pref(s, "num_adults", str(int(num_adults)))
+                set_pref(s, "num_children", str(int(num_children)))
+                set_pref(s, "num_rooms", str(int(num_rooms)))
+                set_pref(s, "direct_flights_only", "true" if direct_only else "false")
+                set_pref(s, "car_rental_required", "true" if car_required else "false")
+                set_pref(s, "ranking_strategy", ranking_strategy)
+                set_pref(s, "daily_batch_size", str(int(daily_batch_size)))
+                set_pref(
+                    s, "destination_selection_strategy", destination_selection_strategy
+                )
+                set_pref(
+                    s, "cache_ttl_enabled", "true" if cache_ttl_enabled else "false"
+                )
+                set_pref(s, "max_live_calls_per_run", str(int(max_live_calls)))
+                set_pref(s, "two_pass_candidate_count", str(int(two_pass_count)))
+                set_pref(s, "region_allowlist", json.dumps(region_allowlist_val))
+                set_pref(s, "region_blocklist", json.dumps(region_blocklist_val))
+                set_pref(s, "favorite_radius_miles", str(int(fav_radius)))
+                # Update user_favorited flag on all destinations to match multiselect
+                selected_iatas = set(fav_city_iatas)
+                for d in s.query(Destination).all():
+                    d.user_favorited = d.iata_code in selected_iatas
+                set_pref(
+                    s,
+                    "exclude_previously_selected",
+                    "true" if exclude_selected else "false",
+                )
+                set_pref(
+                    s,
+                    "exclude_previously_selected_days",
+                    str(int(exclude_selected_days)),
+                )
+                set_pref(s, "exclude_booked", "true" if exclude_booked else "false")
+                set_pref(s, "preferred_hotel_site", preferred_hotel_site)
+                set_pref(s, "preferred_car_site", preferred_car_site)
+                set_pref(
+                    s, "preferred_hotel_site_manual_url", preferred_hotel_manual_url
+                )
+                set_pref(s, "preferred_car_site_manual_url", preferred_car_manual_url)
+                # Only update notification_emails when not in test sender mode
+                _from_saved = os.environ.get(
+                    "RESEND_FROM_EMAIL", "onboarding@resend.dev"
+                )
+                if "onboarding@resend.dev" not in _from_saved and _from_saved.strip():
+                    set_pref(s, "notification_emails", json.dumps(new_emails))
+                set_pref(
+                    s,
+                    "notifications_enabled",
+                    "false" if notifications_enabled_val else "true",
+                )
+                set_pref(s, "email_monthly_limit", str(int(email_monthly_limit_val)))
+                set_pref(
+                    s,
+                    "email_warning_threshold_pct",
+                    str(int(email_warning_threshold_val)),
+                )
+                set_pref(s, "scheduled_run_time", run_time_val.strftime("%H:%M"))
+                set_pref(s, "timezone", timezone_val.strip())
+                s.commit()
+            st.success("Preferences saved.")
+
+    # ── Travel Windows ────────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("Travel Windows")
+    st.caption(
+        "Define fixed travel periods (school breaks, holidays) that constrain the "
+        "daily trip search. When one or more windows are active, the pipeline searches "
+        "only within those date ranges. If no trip is found, it falls back to the "
+        "normal advance booking window."
+    )
+    _tw_trip_nights = int(prefs.get("trip_length_nights", "7"))
+    _tw_trip_flex = int(prefs.get("trip_length_flex_nights", "0"))
+    _tw_min_nights = max(1, _tw_trip_nights - _tw_trip_flex)
+
+    with SessionFactory() as _tw_s:
+        _tw_all: list[TravelWindow] = (
+            _tw_s.query(TravelWindow).order_by(TravelWindow.earliest_departure).all()
+        )
+
+    # ── Table of existing windows ─────────────────────────────────────────────
+    if _tw_all:
+        today_tw = date.today()
+        for tw in _tw_all:
+            eff_s = tw.effective_start
+            eff_e = tw.effective_end
+            if not tw.enabled:
+                status_label = "Disabled"
+            elif eff_e < today_tw:
+                status_label = "Expired"
+            else:
+                status_label = "Active"
+            buf_str = (
+                f"-{tw.buffer_days_start} / +{tw.buffer_days_end} days"
+                if (tw.buffer_days_start or tw.buffer_days_end)
+                else "No buffer"
             )
-            set_pref(s, "cache_ttl_enabled", "true" if cache_ttl_enabled else "false")
-            set_pref(s, "max_live_calls_per_run", str(int(max_live_calls)))
-            set_pref(s, "two_pass_candidate_count", str(int(two_pass_count)))
-            set_pref(s, "region_allowlist", json.dumps(region_allowlist_val))
-            set_pref(s, "region_blocklist", json.dumps(region_blocklist_val))
-            set_pref(s, "favorite_radius_miles", str(int(fav_radius)))
-            # Update user_favorited flag on all destinations to match multiselect
-            selected_iatas = set(fav_city_iatas)
-            for d in s.query(Destination).all():
-                d.user_favorited = d.iata_code in selected_iatas
-            set_pref(
-                s,
-                "exclude_previously_selected",
-                "true" if exclude_selected else "false",
+            eff_days = (eff_e - eff_s).days + 1
+
+            col_name, col_range, col_buf, col_eff, col_status, col_actions = st.columns(
+                [2, 2, 1.5, 2, 1, 2]
             )
-            set_pref(
-                s,
-                "exclude_previously_selected_days",
-                str(int(exclude_selected_days)),
+            col_name.write(f"**{tw.name}**")
+            col_range.write(f"{tw.earliest_departure} → {tw.latest_return}")
+            col_buf.write(buf_str)
+            col_eff.write(f"{eff_s} to {eff_e} ({eff_days}d)")
+            col_status.write(status_label)
+
+            with col_actions:
+                toggle_label = "Disable" if tw.enabled else "Enable"
+                if st.button(toggle_label, key=f"tw_toggle_{tw.id}"):
+                    with SessionFactory() as _s2:
+                        _tw_row = _s2.get(TravelWindow, tw.id)
+                        if _tw_row:
+                            _tw_row.enabled = not _tw_row.enabled
+                            _s2.commit()
+                    st.rerun()
+
+                _confirm_key = f"tw_del_confirm_{tw.id}"
+                if st.session_state.get(_confirm_key):
+                    if st.button("✅ Confirm delete", key=f"tw_del_ok_{tw.id}"):
+                        with SessionFactory() as _s2:
+                            _tw_row = _s2.get(TravelWindow, tw.id)
+                            if _tw_row:
+                                _s2.delete(_tw_row)
+                                _s2.commit()
+                        st.session_state.pop(_confirm_key, None)
+                        st.rerun()
+                else:
+                    if st.button("🗑 Delete", key=f"tw_del_{tw.id}"):
+                        st.session_state[_confirm_key] = True
+                        st.rerun()
+    else:
+        st.info("No travel windows defined yet. Add one below.")
+
+    # ── Add Window form ───────────────────────────────────────────────────────
+    st.write("**Add Travel Window**")
+    with st.form("add_travel_window_form", clear_on_submit=True):
+        tw_name = st.text_input("Name", placeholder="e.g. Fall Break 2026")
+        tw_col1, tw_col2 = st.columns(2)
+        tw_earliest = tw_col1.date_input(
+            "Earliest departure", value=date.today() + timedelta(days=30)
+        )
+        tw_latest = tw_col2.date_input(
+            "Latest return", value=date.today() + timedelta(days=37)
+        )
+        tw_buf_col1, tw_buf_col2 = st.columns(2)
+        tw_buf_start = tw_buf_col1.number_input(
+            "Buffer — start (days before earliest departure)",
+            min_value=0,
+            max_value=14,
+            value=0,
+        )
+        tw_buf_end = tw_buf_col2.number_input(
+            "Buffer — end (days after latest return)",
+            min_value=0,
+            max_value=14,
+            value=0,
+        )
+        tw_notes = st.text_area("Notes (optional)", height=68)
+        tw_submit = st.form_submit_button("Add Window")
+
+    # Live preview (outside form so it updates as the user types)
+    _tw_prev_start = tw_earliest - timedelta(days=int(tw_buf_start))
+    _tw_prev_end = tw_latest + timedelta(days=int(tw_buf_end))
+    _tw_prev_days = (_tw_prev_end - _tw_prev_start).days + 1
+    _tw_latest_dep = _tw_prev_end - timedelta(days=_tw_trip_nights)
+    with st.container():
+        st.caption(
+            f"**Effective search window:** {_tw_prev_start} to {_tw_prev_end}"
+            f" ({_tw_prev_days} days)  \n"
+            f"**Trip length:** {_tw_min_nights}-{_tw_trip_nights + _tw_trip_flex} nights"
+            " (from global preferences)  \n"
+            f"**Valid trips:** depart {_tw_prev_start} to {_tw_latest_dep},"
+            f" return by {_tw_prev_end}"
+        )
+
+    # Validation warnings (outside form, shown as feedback)
+    _tw_errs: list[str] = []
+    if tw_submit:
+        if not tw_name.strip():
+            _tw_errs.append("Name is required.")
+        if tw_latest <= tw_earliest:
+            _tw_errs.append(
+                "Latest return must be at least 1 day after earliest departure."
             )
-            set_pref(s, "exclude_booked", "true" if exclude_booked else "false")
-            set_pref(s, "preferred_hotel_site", preferred_hotel_site)
-            set_pref(s, "preferred_car_site", preferred_car_site)
-            set_pref(s, "preferred_hotel_site_manual_url", preferred_hotel_manual_url)
-            set_pref(s, "preferred_car_site_manual_url", preferred_car_manual_url)
-            # Only update notification_emails when not in test sender mode
-            _from_saved = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
-            if "onboarding@resend.dev" not in _from_saved and _from_saved.strip():
-                set_pref(s, "notification_emails", json.dumps(new_emails))
-            set_pref(
-                s,
-                "notifications_enabled",
-                "false" if notifications_enabled_val else "true",
+        if not (0 <= int(tw_buf_start) <= 14):
+            _tw_errs.append("Buffer - start must be 0-14 days.")
+        if not (0 <= int(tw_buf_end) <= 14):
+            _tw_errs.append("Buffer - end must be 0-14 days.")
+        if _tw_prev_days < _tw_min_nights + 1:
+            _tw_errs.append(
+                f"⚠️ This window may be too short for your minimum trip length "
+                f"({_tw_min_nights} nights). Consider increasing the buffer or "
+                "adjusting your trip length preferences."
             )
-            set_pref(s, "email_monthly_limit", str(int(email_monthly_limit_val)))
-            set_pref(
-                s, "email_warning_threshold_pct", str(int(email_warning_threshold_val))
+        if tw_earliest < date.today() - timedelta(days=365):
+            st.warning(
+                f"⚠️ Earliest departure {tw_earliest} is more than 365 days in the "
+                "past — this window will likely be expired immediately."
             )
-            set_pref(s, "scheduled_run_time", run_time_val.strftime("%H:%M"))
-            s.commit()
-        st.success("Preferences saved.")
+
+        if not _tw_errs:
+            with SessionFactory() as _s2:
+                _s2.add(
+                    TravelWindow(
+                        name=tw_name.strip(),
+                        earliest_departure=tw_earliest,
+                        latest_return=tw_latest,
+                        buffer_days_start=int(tw_buf_start),
+                        buffer_days_end=int(tw_buf_end),
+                        enabled=True,
+                        created_at=datetime.now(UTC),
+                        notes=tw_notes.strip() or None,
+                    )
+                )
+                _s2.commit()
+            st.success(f"✅ Added travel window: **{tw_name.strip()}**")
+            st.rerun()
+        else:
+            for err in _tw_errs:
+                st.error(err)
 
     # Email usage indicator — outside the form (read-only, always current)
     st.subheader("Email Usage This Month")

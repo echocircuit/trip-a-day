@@ -153,6 +153,7 @@ class RunLog(Base):
     pass1_diagnostics: Mapped[str | None] = mapped_column(Text, nullable=True)
     email_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
     email_blocked_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    travel_window_name: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class ApiUsage(Base):
@@ -175,6 +176,39 @@ class EmailUsage(Base):
     month: Mapped[str] = mapped_column(String(7), nullable=False, unique=True)
     emails_sent: Mapped[int] = mapped_column(Integer, default=0)
     last_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class TravelWindow(Base):
+    """User-defined travel constraint window (e.g. school break, holiday).
+
+    Effective bounds (computed, never stored):
+        effective_start = earliest_departure - timedelta(days=buffer_days_start)
+        effective_end   = latest_return      + timedelta(days=buffer_days_end)
+    """
+
+    __tablename__ = "travel_windows"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    earliest_departure: Mapped[date] = mapped_column(Date, nullable=False)
+    latest_return: Mapped[date] = mapped_column(Date, nullable=False)
+    buffer_days_start: Mapped[int] = mapped_column(Integer, default=0)
+    buffer_days_end: Mapped[int] = mapped_column(Integer, default=0)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    @property
+    def effective_start(self) -> date:
+        from datetime import timedelta
+
+        return self.earliest_departure - timedelta(days=self.buffer_days_start)
+
+    @property
+    def effective_end(self) -> date:
+        from datetime import timedelta
+
+        return self.latest_return + timedelta(days=self.buffer_days_end)
 
 
 _PREFERENCE_DEFAULTS: dict[str, str] = {
@@ -224,6 +258,8 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     "preferred_car_site": "kayak",
     "preferred_hotel_site_manual_url": "",
     "preferred_car_site_manual_url": "",
+    # Display preferences
+    "timezone": "America/Chicago",
 }
 
 # Public alias for use in tests and tooling.
@@ -257,6 +293,7 @@ _RUN_LOG_NEW_COLUMNS: list[tuple[str, str]] = [
     ("pass1_diagnostics", "TEXT"),
     ("email_blocked", "BOOLEAN DEFAULT 0"),
     ("email_blocked_reason", "TEXT"),
+    ("travel_window_name", "TEXT"),
 ]
 
 # trips columns added via ALTER TABLE migration (idempotent).
@@ -300,6 +337,7 @@ def init_db() -> None:
     Base.metadata.create_all(engine)
     _migrate_schema()
     _seed_destinations()
+    _seed_travel_windows()
 
 
 def seed_preferences(session: Session) -> None:
@@ -428,3 +466,26 @@ def record_email_sent(session: Session) -> None:
         session.flush()
     row.emails_sent += 1
     row.last_sent_at = datetime.now(UTC)
+
+
+def _seed_travel_windows() -> None:
+    """Insert the default Fall Break 2026 travel window if no windows exist.
+
+    Idempotent: does nothing when the travel_windows table already has rows.
+    """
+    with SessionFactory() as session:
+        if session.query(TravelWindow).count() > 0:
+            return
+        session.add(
+            TravelWindow(
+                name="Fall Break 2026",
+                earliest_departure=date(2026, 10, 5),
+                latest_return=date(2026, 10, 9),
+                buffer_days_start=1,
+                buffer_days_end=2,
+                enabled=True,
+                created_at=datetime.now(UTC),
+                notes="Default fall break window. Edit or disable as needed.",
+            )
+        )
+        session.commit()

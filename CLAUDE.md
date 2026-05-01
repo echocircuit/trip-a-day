@@ -41,6 +41,8 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 ## Current phase
 
+**feature/timezone-and-travel-windows — Complete.** Timezone display in UI (utils.py helpers, `timezone` preference, Dashboard UTC→local conversion) and Travel Windows (DB table, pipeline integration with two-pass retry, Preferences UI, email rendering, Dashboard indicators). 320 tests passing (190 unit + 29 links + 11 imports + 2 smoke + 12 charts + 8 pass1-resilience + 7 api-counter + 16 email-limits + 11 utils + 28 travel-windows + 6 main-flex + 8 main-smoke; note some tests counted in multiple groups above).
+
 **Phase 8 — Complete.** Hybrid Destination Input: searchable pool table with enable/disable toggles, add-custom-destination form with live per-diem fuzzy-match preview, CSV bulk import with preview (matched/unmatched/error counts). 275 tests passing (190 unit + 29 links + 11 imports + 2 smoke + 12 charts + 8 pass1-resilience + 7 api-counter + 16 email-limits).
 
 **Phase 7 — Complete.** Multi-airport departure: haversine radius search for nearby airports, IRS-rate round-trip transport cost, global candidate ranking across all departure airports — includes advance booking window rework, price history chart (dual-series), bug-fix sessions, and email usage tracking feature (see below).
@@ -142,7 +144,7 @@ main.py
 - `CostBreakdown` (defined in `costs.py`) — flight, hotel, car, food, transport_usd, car_is_estimate, hotel_is_estimate; `total` is a computed `@property`
 - `TripCandidate` (defined in `ranker.py`) — full trip candidate with cost and metadata; `stale_cache: bool = False` marks trips built from expired cache data
 - Fetcher dataclasses (defined in `fetcher.py`): `FlightOffer`, `HotelOffer`, `FoodEstimate`, `AirportInfo`
-- SQLAlchemy ORM models (defined in `db.py`): `Preference`, `Destination` (`is_custom BOOLEAN` marks user-added rows), `Trip` (`stale_cache BOOLEAN`), `RunLog` (`pass1_diagnostics TEXT`, `email_blocked BOOLEAN`, `email_blocked_reason TEXT`), `ApiUsage`, `PriceCache`, `EmailUsage` (monthly email counter)
+- SQLAlchemy ORM models (defined in `db.py`): `Preference`, `Destination` (`is_custom BOOLEAN` marks user-added rows), `Trip` (`stale_cache BOOLEAN`), `RunLog` (`pass1_diagnostics TEXT`, `email_blocked BOOLEAN`, `email_blocked_reason TEXT`, `travel_window_name TEXT`), `ApiUsage`, `PriceCache`, `EmailUsage` (monthly email counter), `TravelWindow` (`effective_start`/`effective_end` computed properties)
 - `PerDiemMatch`, `CsvRow`, `CsvImportPreview` (defined in `destination_input.py`) — Phase 8 helper dataclasses for fuzzy matching and CSV import preview
 
 **Database:** `trip_of_the_day.db` at the project root. Path derived from `db.py` location using `pathlib.Path(__file__).resolve().parents[2]`.
@@ -216,6 +218,14 @@ main.py
 | CSV import skips existing IATA codes | Re-importing a CSV that overlaps with seed or prior custom data is a no-op for existing rows; prevents duplicate inserts without raising an error |
 | Per-diem preview rendered outside the form | Streamlit forms only update on submit; showing the match result outside the form gives live feedback as the user types the city name |
 | Destinations page in its own sidebar section (not in Preferences) | The pool manager, add-custom form, and CSV import are operationally distinct from the scalar preference inputs; separating them avoids a very long Preferences page |
+| `timezone` preference (default `America/Chicago`) | Stored as IANA tz string; validated with `ZoneInfo(tz_str)` on save (raises `ZoneInfoNotFoundError` on invalid input); UI blocks save and shows error when invalid |
+| Naive datetime assumed UTC in utils.py helpers | `run_at` in RunLog is stored without tz; assuming UTC is correct for all server-generated timestamps and consistent with APScheduler behaviour |
+| `TravelWindow` ORM model in `db.py` | New table `travel_windows`; `effective_start`/`effective_end` are computed `@property` values (not columns) to keep effective dates in sync without a stored field |
+| `_window_pass1_for_departure()` helper in `main.py` | Encapsulates per-departure-airport window logic; returns `(pass1_results, live_calls, cache_hits, iata_to_window_name)` so caller accumulates counters without shared mutable state |
+| Two-pass retry for travel windows | Window mode runs first (`_search_pass=0`); if no prices found, `window_fallback_used=True` is set and a normal advance-window search runs (`_search_pass=1`). Live API budget is shared across both passes |
+| `_travel_window_html/plain` private helpers in notifier.py | Keep window card rendering separate from the main HTML/plain builders; both accept `(trip, window_name, window_fallback_used)` so fallback flag takes priority over name |
+| `travel_window_name` column on `RunLog` | Nullable TEXT; written only when a window produced the winning trip; NULL for normal-mode runs and fallback runs |
+| `_seed_travel_windows()` inserts only when table is empty | Idempotent seeder prevents duplicate "Fall Break 2026" rows if `init_db()` is called repeatedly; user can delete the seed row without it reappearing |
 
 ## Key file map
 
@@ -235,6 +245,7 @@ main.py
 | `src/trip_a_day/links.py` | URL builders: `build_flight_url`, `build_hotel_url`, `build_car_url` |
 | `src/trip_a_day/window_search.py` | `find_cheapest_in_window()` — 3-probe adaptive triangulation across the advance booking window; cache-first, budget-aware |
 | `src/trip_a_day/destination_input.py` | Phase 8: `fuzzy_match_per_diem()` (difflib), `parse_destination_csv()`, `PerDiemMatch`, `CsvRow`, `CsvImportPreview` dataclasses |
+| `src/trip_a_day/utils.py` | `to_local_display(dt, tz_str)` and `to_local_time_only(dt, tz_str)` — timezone conversion helpers using `zoneinfo.ZoneInfo`; naive datetimes assumed UTC |
 | `car_rates.json` | Static regional daily car rental rate estimates (USD) |
 | `data/seed_airports.json` | 302 curated destination airports with lat/lon, region, subregion, price tier |
 | `data/per_diem_rates.json` | Merged GSA + State Dept per diem rates (1,377 locations) |
@@ -261,6 +272,8 @@ main.py
 | `tests/test_pass1_resilience.py` | Pass 1 failure modes: graceful exit, stale cache fallback, exception skipping, diagnostics JSON (8 tests) |
 | `tests/test_api_counter.py` | API counter consistency: mock/live modes, exception path counting, window search double-count prevention (7 tests) |
 | `tests/test_notifier_limits.py` | Monthly email limit enforcement: get/record helpers, _check_email_limit, warning banner, RunLog blocking (16 tests) |
+| `tests/test_utils.py` | Timezone conversion helpers: CST/CDT/EST/BST conversions, naive-as-UTC, invalid tz raises, format shape (11 tests) |
+| `tests/test_travel_windows.py` | Travel window model properties, `_window_pass1_for_departure` logic, notifier HTML/plain helpers, `send_trip_notification` signature, `_build_html/_build_plain` thread-through (28 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
 
 ## Environment setup

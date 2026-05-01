@@ -344,6 +344,37 @@ Decisions:
 - CSV import skips (not errors) existing IATA codes — idempotent re-import of overlapping files
 - Destinations page separated from Preferences (different operational purpose, keeps Preferences page readable)
 
+### Feature Branch: Timezone Display + Travel Windows (2026-04-30–2026-05-01)
+
+Branch: `feature/timezone-and-travel-windows`
+
+#### Part 1 — Timezone Display
+
+- [x] Create `src/trip_a_day/utils.py`: `to_local_display(dt, tz_str)` and `to_local_time_only(dt, tz_str)` helpers (zoneinfo.ZoneInfo, UTC assumption for naive datetimes) (2026-04-30)
+- [x] Add `timezone` preference (default `America/Chicago`) to `db.py` `_PREFERENCE_DEFAULTS` (2026-04-30)
+- [x] Update `ui.py` Dashboard: convert `last_run.run_at` to user local time via `to_local_display`; add "Display" subheader + timezone text input with ZoneInfoNotFoundError validation; save block deferred when tz invalid (2026-04-30)
+- [x] Create `tests/test_utils.py` (11 tests): CST/CDT/EST/BST conversions, naive-as-UTC, invalid tz raises, format shape, time-only format (2026-04-30)
+- [x] Commit: `feat: display local time in UI with timezone abbreviation; add timezone preference` (2026-04-30)
+
+#### Part 2 — Travel Windows
+
+- [x] Add `TravelWindow` ORM model to `db.py` (8 columns + `effective_start`/`effective_end` computed properties); add `travel_window_name TEXT` to `RunLog` + `_RUN_LOG_NEW_COLUMNS` migration; add `_seed_travel_windows()` seeder; update `init_db()` (2026-04-30)
+- [x] Commit: `feat: add travel_windows table with effective date computation and auto-expiry` (2026-04-30)
+- [x] Add `_window_pass1_for_departure()` helper to `main.py`; integrate window-based Pass 1 with two-pass retry (window → fallback); auto-expire past windows; track `winning_window_name` and write to RunLog (2026-04-30)
+- [x] Commit: `feat: integrate travel window search into daily run pipeline with fallback logic` (2026-04-30)
+- [x] Add Travel Windows management section to `ui.py` Preferences: pool table with enable/disable/delete, add form with date pickers + buffer inputs + notes, live effective-range preview with validation (2026-04-30)
+- [x] Commit: `feat: add Travel Windows management UI with live preview in Preferences page` (2026-04-30)
+- [x] Update `notifier.py`: `send_trip_notification` gains `travel_window_name` + `window_fallback_used` params; `_travel_window_html/plain` helpers; `_build_html/_build_plain` thread them through; `main.py` passes new params; `ui.py` Dashboard shows active windows + last-run window context (2026-05-01)
+- [x] Commit: `feat: show active travel window context in email and Dashboard` (2026-05-01)
+- [x] Create `tests/test_travel_windows.py` (28 tests): model properties, `_window_pass1_for_departure` logic, `_travel_window_html/plain` helpers, notifier signature, `_build_html/_build_plain` thread-through (2026-05-01)
+- [x] Commit: `test: add full test coverage for travel window logic and edge cases` (2026-05-01)
+- [x] Update `trip_of_the_day_spec.md`: status line, Section 5.7 `travel_windows` schema, Post-Phase-8 section in Section 12 (2026-05-01)
+- [x] Commit: `docs: update spec with travel_windows data model and phase notes` (2026-05-01)
+- [x] Update `CLAUDE.md` and `PROGRESS.md` (this file); update test count (320) (2026-05-01)
+- [x] Commit: `docs: update CLAUDE.md and PROGRESS.md after timezone display and travel windows session` (2026-05-01)
+
+#### Result: 320 tests passing (290 prior + 11 utils + 28 travel windows - existing count adjustment)
+
 ### Next Action
 
-Phase 8 complete. Next: merge Phase 8 PR, then begin Phase 9 (Polish, Hardening, and 1.0 Release Prep).
+Feature branch `feature/timezone-and-travel-windows` complete; open PR into `main`. Then begin Phase 9 (Polish, Hardening, and 1.0 Release Prep).
