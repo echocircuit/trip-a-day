@@ -41,6 +41,8 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 ## Current phase
 
+**feature/hotel-links-chart-cleanup — Complete.** Three contained fixes: (1) hotel deep-link date formatting verified + preferred_hotel_site preference wired through; (2) chart 30-day lookback + city-label removal; (3) flight_data_mode promoted to DB preference with UI toggle. 346 tests passing (320 prior + 5 new links + 5 new charts + 8 new settings; prior count: 190 unit + 34 links + 11 imports + 2 smoke + 17 charts + 8 pass1-resilience + 7 api-counter + 16 email-limits + 11 utils + 28 travel-windows + 6 main-flex + 8 main-smoke + 8 settings; note some tests counted in multiple groups above).
+
 **feature/timezone-and-travel-windows — Complete.** Timezone display in UI (utils.py helpers, `timezone` preference, Dashboard UTC→local conversion) and Travel Windows (DB table, pipeline integration with two-pass retry, Preferences UI, email rendering, Dashboard indicators). 320 tests passing (190 unit + 29 links + 11 imports + 2 smoke + 12 charts + 8 pass1-resilience + 7 api-counter + 16 email-limits + 11 utils + 28 travel-windows + 6 main-flex + 8 main-smoke; note some tests counted in multiple groups above).
 
 **Phase 8 — Complete.** Hybrid Destination Input: searchable pool table with enable/disable toggles, add-custom-destination form with live per-diem fuzzy-match preview, CSV bulk import with preview (matched/unmatched/error counts). 275 tests passing (190 unit + 29 links + 11 imports + 2 smoke + 12 charts + 8 pass1-resilience + 7 api-counter + 16 email-limits).
@@ -226,6 +228,11 @@ main.py
 | `_travel_window_html/plain` private helpers in notifier.py | Keep window card rendering separate from the main HTML/plain builders; both accept `(trip, window_name, window_fallback_used)` so fallback flag takes priority over name |
 | `travel_window_name` column on `RunLog` | Nullable TEXT; written only when a window produced the winning trip; NULL for normal-mode runs and fallback runs |
 | `_seed_travel_windows()` inserts only when table is empty | Idempotent seeder prevents duplicate "Fall Break 2026" rows if `init_db()` is called repeatedly; user can delete the seed row without it reappearing |
+| `preferred_hotel_site` wired through `get_hotel_offers()` | Previously hardcoded to `"google_hotels"` in `fetcher.py`; now reads from DB preference so Booking.com and Expedia URLs are actually generated when the user selects them |
+| Hotel URL date formats verified per site | google_hotels: YYYY-MM-DD via `.isoformat()`; booking_com: split year/month/day without leading zeros; expedia: MM/DD/YYYY with `%02d` padding |
+| Chart lookback extended to 30 days for both series | 7-day S2 window was too short for new installs; all-time S1 could load unbounded history; 30 days is a practical balance. Both series require ≥3 points. |
+| City-name annotations removed from chart Series 2 | Annotations were small and overlapping with no unique information beyond what the legend provides; removed `annotate()` call and the `Destination` join from the S2 query |
+| `flight_data_mode` DB preference, `get_flight_data_mode(session)` in `fetcher.py` | Promotes `FLIGHT_DATA_MODE` from env-var-only to a DB preference so the UI toggle takes effect without restarting Streamlit. Priority: DB → env var → "mock". |
 
 ## Key file map
 
@@ -262,18 +269,19 @@ main.py
 | `tests/unit/test_fetcher_nearby.py` | `get_nearby_airports` haversine radius tests (9 tests) |
 | `tests/unit/test_costs_transport.py` | `transport_usd` field on `CostBreakdown` (6 tests) |
 | `tests/unit/test_multi_airport.py` | Multi-airport pipeline smoke tests (2 tests) |
-| `tests/test_links.py` | URL builder tests for all three `links.py` functions (29 tests) |
+| `tests/test_links.py` | URL builder tests for all three `links.py` functions (34 tests) |
 | `tests/test_imports.py` | importlib-based public symbol existence checks for all 11 modules (11 tests) |
 | `tests/unit/test_destination_input.py` | `fuzzy_match_per_diem` + `parse_destination_csv` + dataclass property tests (21 tests) |
 | `tests/test_smoke.py` | `CostBreakdown` instantiation + `DEFAULT_PREFERENCES` key coverage (2 tests) |
 | `tests/unit/test_notifier_departure.py` | Departure airport line in HTML and plain text email (12 tests) |
 | `tests/unit/test_window_search.py` | `_probe_dates` and `find_cheapest_in_window` unit tests — budget, cache, and probe-selection (17 tests) |
-| `tests/test_charts.py` | Chart generation edge cases: None for <3 pts, PNG bytes + magic bytes for ≥3, edge costs, 7-point window; Series 2 degradation and dual-series rendering (12 tests) |
+| `tests/test_charts.py` | Chart generation: None for <3 pts, PNG bytes for ≥3, 30-day window boundary, S2 degradation, dual-series rendering, no city-name bytes (17 tests) |
 | `tests/test_pass1_resilience.py` | Pass 1 failure modes: graceful exit, stale cache fallback, exception skipping, diagnostics JSON (8 tests) |
 | `tests/test_api_counter.py` | API counter consistency: mock/live modes, exception path counting, window search double-count prevention (7 tests) |
 | `tests/test_notifier_limits.py` | Monthly email limit enforcement: get/record helpers, _check_email_limit, warning banner, RunLog blocking (16 tests) |
 | `tests/test_utils.py` | Timezone conversion helpers: CST/CDT/EST/BST conversions, naive-as-UTC, invalid tz raises, format shape (11 tests) |
 | `tests/test_travel_windows.py` | Travel window model properties, `_window_pass1_for_departure` logic, notifier HTML/plain helpers, `send_trip_notification` signature, `_build_html/_build_plain` thread-through (28 tests) |
+| `tests/test_settings.py` | `get_flight_data_mode()` priority logic: DB > env var > default; invalid value fallback; seed default (8 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
 
 ## Environment setup

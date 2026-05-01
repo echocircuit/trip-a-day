@@ -375,6 +375,35 @@ Branch: `feature/timezone-and-travel-windows`
 
 #### Result: 320 tests passing (290 prior + 11 utils + 28 travel windows - existing count adjustment)
 
+### Fix Session: Hotel Links, Chart Cleanup, Flight Mode Toggle (2026-05-01)
+
+Branch: `feature/hotel-links-chart-cleanup`
+
+#### Fix 1 — Hotel Deep Link Date Formatting
+
+Root cause: `fetcher.py` hardcoded `site="google_hotels"` in `build_hotel_url()`, ignoring the `preferred_hotel_site` DB preference. Users who configured Booking.com or Expedia always got a Google Hotels URL.
+
+- [x] Add `hotel_site: str = "google_hotels"` parameter to `get_hotel_offers()` in `fetcher.py` (2026-05-01)
+- [x] Read `preferred_hotel_site` in `main.py` and pass through to both `get_hotel_offers()` call sites (`_stale_cache_fallback` and Pass 2 loop) (2026-05-01)
+- [x] Add verification comment to `links.py` docstring documenting date format per site (2026-05-01)
+- [x] Add 5 new tests to `tests/test_links.py`: ISO format for Google Hotels, split params for Booking.com, MM/DD/YYYY for Expedia, checkout date in all sites, date-object == iso-string (34 total) (2026-05-01)
+
+#### Fix 2 — Price History Chart Cleanup
+
+- [x] Extend Series 1 lookback from all-time to past 30 calendar days (2026-05-01)
+- [x] Extend Series 2 lookback from 7 days to 30 days; raise minimum threshold from 2 → 3 points (2026-05-01)
+- [x] Remove city-name `annotate()` calls from Series 2 and drop the `Destination` join from the S2 query (2026-05-01)
+- [x] Update `tests/test_charts.py`: fix existing tests for 30-day constraint; add 5 new tests (30-day boundary, S2-filters, both-below-3, no-city-name-bytes) (17 total) (2026-05-01)
+
+#### Fix 3 — Promote FLIGHT_DATA_MODE to DB Preference
+
+- [x] Add `"flight_data_mode": "mock"` to `_PREFERENCE_DEFAULTS` in `db.py` (2026-05-01)
+- [x] Add `get_flight_data_mode(db_session)` to `fetcher.py` — DB priority > env var > "mock" (2026-05-01)
+- [x] Replace `os.environ.get("FLIGHT_DATA_MODE", "mock")` in `main.py` with `get_flight_data_mode(session)` (2026-05-01)
+- [x] Update `ui.py`: `_is_mock_mode()` uses `get_flight_data_mode()`; replace read-only indicator in Preferences with a radio toggle inside the form; dashboard banner directs to Preferences (2026-05-01)
+- [x] Create `tests/test_settings.py` with 8 tests covering DB > env priority, fallback chain, seeded default (2026-05-01)
+- [x] 346 tests passing; ruff + mypy clean (2026-05-01)
+
 ### Next Action
 
-Feature branch `feature/timezone-and-travel-windows` complete; open PR into `main`. Then begin Phase 9 (Polish, Hardening, and 1.0 Release Prep).
+Feature branch `feature/hotel-links-chart-cleanup` complete; PR open into `main`. Then begin Phase 9 (Polish, Hardening, and 1.0 Release Prep).

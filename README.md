@@ -63,7 +63,10 @@ cp .env.example .env
 **`.env` reference:**
 
 ```env
-# Flight data — no key required (fast-flights queries Google Flights directly)
+# Flight data — no key required (fli queries Google Flights directly)
+# FLIGHT_DATA_MODE fallback: set to "live" here to override the DB default ("mock").
+# The UI Preferences page is the primary way to change this — no restart needed.
+FLIGHT_DATA_MODE=mock
 
 # Hotel + food estimates (domestic US) — register free at https://api.data.gov/signup/
 GSA_API_KEY=your_key_here
