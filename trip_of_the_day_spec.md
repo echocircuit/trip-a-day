@@ -3,7 +3,7 @@
 **Version:** 1.3
 **Date:** 2026-04-19
 **Language:** Python
-**Status:** Phases 1–7 complete; Phase 8 next
+**Status:** Phases 1–8 complete
 
 > **Modification policy:** This spec is the authoritative reference for the project. Do not modify it except to update phase completion status (e.g., changing "In Progress" to "Complete"). All other edits require explicit instruction from the project owner. This policy was temporarily lifted for the v1.3 phase renumbering only.
 
@@ -320,6 +320,30 @@ Tracks monthly outgoing email volume for Resend free-tier limit enforcement. One
 | `last_sent_at` | DATETIME | Timestamp of the most recent successful send |
 
 The counter resets automatically because each new month gets a fresh row. No manual cleanup required.
+
+### 5.7 `travel_windows`
+
+User-defined date windows during which the daily search is constrained. The pipeline uses window effective dates (earliest_departure ± buffer_days_start, latest_return ± buffer_days_end) as `min_days`/`max_days` bounds for `find_cheapest_in_window`. If no window yields results, the run falls back to the normal advance-booking window.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PRIMARY KEY | Auto-incrementing row ID |
+| `name` | TEXT NOT NULL | User label, e.g. "Fall Break 2026" |
+| `earliest_departure` | DATE NOT NULL | Earliest acceptable departure date |
+| `latest_return` | DATE NOT NULL | Latest acceptable return date |
+| `buffer_days_start` | INTEGER | Days subtracted from `earliest_departure` to widen the window (default 0) |
+| `buffer_days_end` | INTEGER | Days added to `latest_return` to widen the window (default 0) |
+| `enabled` | BOOLEAN | Whether this window is active (default True) |
+| `created_at` | DATETIME | When the window was created |
+| `notes` | TEXT | Optional free-text notes |
+
+**Computed properties (not stored):**
+- `effective_start = earliest_departure - timedelta(days=buffer_days_start)`
+- `effective_end = latest_return + timedelta(days=buffer_days_end)`
+
+**Auto-expiry:** At run start, any window whose `effective_end < today` is automatically disabled (no manual cleanup needed).
+
+**`run_log` addition:** The `travel_window_name` column (TEXT, nullable) records the name of the active window that produced the winning trip. NULL when the run used the standard advance-booking mode or the window fallback path.
 
 **Rate limit behavior:**
 - Before each API call, `fetcher.py` checks the current daily and monthly counts against known limits
@@ -752,6 +776,27 @@ All values in Section 5.1 are stored in the `preferences` table and editable via
 - Option to enable/disable specific destinations per run (existing `enabled` flag)
 
 **Success criteria:** User can add a custom destination through the UI form (or CSV upload) and the app treats it equally alongside the 302 seed airport candidates in the next daily run.
+
+---
+
+### Post-Phase-8 Feature Branch: Timezone Display & Travel Windows — ✅ Complete
+
+**Goal:** Two independent UX improvements implemented on `feature/timezone-and-travel-windows` after Phase 8.
+
+**Timezone display:**
+- New `src/trip_a_day/utils.py` with `to_local_display(dt, tz_str)` and `to_local_time_only(dt, tz_str)` helpers using `zoneinfo.ZoneInfo`.
+- `timezone` preference (default `America/Chicago`) added to DB; editable in UI with live ZoneInfo validation.
+- Dashboard last-run timestamp converted to user local time with abbreviation (e.g. `2026-05-01 07:12 CDT`).
+
+**Travel Windows:**
+- `travel_windows` DB table (see Section 5.7) with effective-date computed properties and auto-expiry.
+- `_window_pass1_for_departure()` helper in `main.py`: for each enabled window × destination, converts effective dates to advance-day offsets and calls `find_cheapest_in_window`; keeps cheapest per destination across all windows.
+- Two-pass retry: window mode runs first; if no results, falls back to standard advance-booking window (logged as `window_fallback_used`).
+- `travel_window_name` column on `RunLog`; winning window name written after ranking.
+- Email: green card "📅 Travel window: Name / Departs / Returns" when result is from a window; amber notice when fallback fired.
+- UI: Travel Windows section in Preferences with table, per-row enable/disable/delete, add form with date pickers and buffer inputs, and live effective-range preview. Dashboard shows active windows and which window produced today's result.
+
+**Test coverage:** 11 util tests (`tests/test_utils.py`), 28 travel window tests (`tests/test_travel_windows.py`); total 320 tests passing.
 
 ---
 
