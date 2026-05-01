@@ -2,7 +2,7 @@
 apscheduler==3.11.2
 fast-flights==2.2   # TFSData URL builder (links.py) -- no API calls, pure protobuf encoding
 flights>=0.8.4      # flight search via fli (replaces fast-flights get_flights, deprecated April 2026)
-matplotlib>=3.8
+matplotlib>=3.10.9
 openpyxl==3.1.5
 python-dotenv==1.2.2
 requests==2.33.1
