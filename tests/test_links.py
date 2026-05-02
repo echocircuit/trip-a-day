@@ -122,16 +122,16 @@ class TestBuildHotelUrl:
             "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "google_hotels"
         )
         assert "google.com/travel/hotels" in url
-        assert "checkin=2026-06-15" in url
-        assert "checkout=2026-06-22" in url
+        assert "check_in_date=2026-06-15" in url
+        assert "check_out_date=2026-06-22" in url
 
     def test_google_hotels_checkin_iso_format(self):
-        """Google Hotels requires YYYY-MM-DD via a single checkin= parameter."""
+        """Google Hotels requires check_in_date/check_out_date params in YYYY-MM-DD format."""
         url = build_hotel_url(
             "Tokyo", "Japan", _CHECKIN_OCT, _CHECKOUT_OCT, 1, 0, 1, "google_hotels"
         )
-        assert "checkin=2026-10-05" in url
-        assert "checkout=2026-10-09" in url
+        assert "check_in_date=2026-10-05" in url
+        assert "check_out_date=2026-10-09" in url
 
     def test_booking_com_returns_nonempty(self):
         url = build_hotel_url(
@@ -189,7 +189,7 @@ class TestBuildHotelUrl:
             # Each site encodes checkout differently; verify 2026 and 9 both appear
             assert "2026" in url, f"{site}: year missing from checkout"
             if site == "google_hotels":
-                assert "checkout=2026-10-09" in url
+                assert "check_out_date=2026-10-09" in url
             elif site == "booking_com":
                 assert "checkout_monthday=9" in url
             elif site == "expedia":
