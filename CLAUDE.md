@@ -41,6 +41,8 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 ## Current phase
 
+**feature/performance-fix — In progress.** Root cause: sequential fli calls (~49s each) with no concurrency, compounded by 2 active travel windows multiplying the batch (2 windows × 15 dests × 3 probes = 90 sequential calls = 70-min run). Fixes: WAL-mode SQLite + per-thread sessions for thread safety; `ThreadPoolExecutor` parallel Pass 1 (3 workers default); random jitter per call to stagger TLS connections; global run timeout (20 min); probe hard cap (7/dest); travel window seed changed to `enabled=False`; Performance preferences exposed in UI; Streamlit network config added. 350 tests passing (346 prior + 7 new performance; note some counted in multiple groups above).
+
 **feature/hotel-links-chart-cleanup — Complete.** Three contained fixes: (1) hotel deep-link date formatting verified + preferred_hotel_site preference wired through; (2) chart 30-day lookback + city-label removal; (3) flight_data_mode promoted to DB preference with UI toggle. 346 tests passing (320 prior + 5 new links + 5 new charts + 8 new settings; prior count: 190 unit + 34 links + 11 imports + 2 smoke + 17 charts + 8 pass1-resilience + 7 api-counter + 16 email-limits + 11 utils + 28 travel-windows + 6 main-flex + 8 main-smoke + 8 settings; note some tests counted in multiple groups above).
 
 **feature/timezone-and-travel-windows — Complete.** Timezone display in UI (utils.py helpers, `timezone` preference, Dashboard UTC→local conversion) and Travel Windows (DB table, pipeline integration with two-pass retry, Preferences UI, email rendering, Dashboard indicators). 320 tests passing (190 unit + 29 links + 11 imports + 2 smoke + 12 charts + 8 pass1-resilience + 7 api-counter + 16 email-limits + 11 utils + 28 travel-windows + 6 main-flex + 8 main-smoke; note some tests counted in multiple groups above).
@@ -83,7 +85,7 @@ The final commit of each phase must be a doc sweep that confirms all three files
 **Launch UI:** `streamlit run ui.py`
 **Launch scheduler:** `python scheduler.py` (daily at time in `scheduled_run_time` pref, default 07:00 local)
 
-**Next: Phase 9.** Begin with `git checkout main && git pull && git checkout -b feature/phase-9-polish`.
+**Next: Phase 9.** After performance-fix PR merges, begin with `git checkout main && git pull && git checkout -b feature/phase-9-polish`.
 
 ## Development workflow
 
@@ -234,6 +236,15 @@ main.py
 | Chart lookback extended to 30 days for both series | 7-day S2 window was too short for new installs; all-time S1 could load unbounded history; 30 days is a practical balance. Both series require ≥3 points. |
 | City-name annotations removed from chart Series 2 | Annotations were small and overlapping with no unique information beyond what the legend provides; removed `annotate()` call and the `Destination` join from the S2 query |
 | `flight_data_mode` DB preference, `get_flight_data_mode(session)` in `fetcher.py` | Promotes `FLIGHT_DATA_MODE` from env-var-only to a DB preference so the UI toggle takes effect without restarting Streamlit. Priority: DB → env var → "mock". |
+| WAL mode enabled on SQLite engine | WAL (`PRAGMA journal_mode=WAL`) allows concurrent readers alongside one writer; required for the parallel Pass 1 thread pool to cache results without deadlocking. `connect_args={"timeout": 30}` handles write serialization. |
+| Pass 1 parallelized with `ThreadPoolExecutor` (3 workers default) | Each destination is probed in a separate thread with its own DB session; main session is only used for collecting results and stat updates. `_probe_dest_window` / `_probe_dest_normal` are the thread-entry functions. |
+| `_extract_dest_data` converts ORM Destination to a plain dict | ORM objects are bound to a specific session and cannot be passed across thread boundaries; extracting to dict before submission avoids `DetachedInstanceError`. |
+| Random jitter (0–2s) before first live fli call per thread | Staggers simultaneous TLS connection setups; 5 threads all starting Chrome impersonation at the exact same moment is more detectable than staggered starts. Skipped in mock mode. |
+| `max_concurrent_flight_queries` preference (default 3) | Conservative default: 3 parallel Chrome sessions is consistent with a real user's browsing pattern. Users who see rate-limiting should reduce to 1 (fully sequential). |
+| `run_timeout_minutes` preference (default 20) | Hard cap prevents the scheduler from hanging indefinitely. Pass 1 stops submitting new work once elapsed > timeout; in-flight calls finish but no new ones start. |
+| `MAX_PROBES_PER_DESTINATION = 7` in `window_search.py` | Hard upper bound so that if `_DEFAULT_PROBE_COUNT` is ever increased, per-destination call count stays bounded without code changes. |
+| Travel window seed changed to `enabled=False` | An active travel window multiplies the API call count (N_windows × destinations × probes); enabling it should be a deliberate choice. Existing users with enabled windows are unaffected; only new installs get the disabled default. |
+| `.streamlit/config.toml` sets `address = "0.0.0.0"` | Binds Streamlit to all interfaces so the UI is reachable from other devices on the local network (tablets, phones). `secrets.toml` added to `.gitignore`. |
 
 ## Key file map
 
@@ -283,6 +294,7 @@ main.py
 | `tests/test_utils.py` | Timezone conversion helpers: CST/CDT/EST/BST conversions, naive-as-UTC, invalid tz raises, format shape (11 tests) |
 | `tests/test_travel_windows.py` | Travel window model properties, `_window_pass1_for_departure` logic, notifier HTML/plain helpers, `send_trip_notification` signature, `_build_html/_build_plain` thread-through (28 tests) |
 | `tests/test_settings.py` | `get_flight_data_mode()` priority logic: DB > env var > default; invalid value fallback; seed default (8 tests) |
+| `tests/test_performance.py` | Probe cap enforcement, travel window call-count correctness (2 windows × 3 dests = 6 calls), max_workers=1 sequential behavior, run timeout submission guard (7 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
 
 ## Environment setup

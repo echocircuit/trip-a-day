@@ -404,6 +404,18 @@ Root cause: `fetcher.py` hardcoded `site="google_hotels"` in `build_hotel_url()`
 - [x] Create `tests/test_settings.py` with 8 tests covering DB > env priority, fallback chain, seeded default (2026-05-01)
 - [x] 346 tests passing; ruff + mypy clean (2026-05-01)
 
+### Performance Fix Session (2026-05-02) — branch: feature/performance-fix
+
+Root cause confirmed: sequential fli calls (~49 s each) × 90 total calls (2 active travel windows × 15 dests × 3 probes) = 70-min run. Secondary: `pass1_stats["live_calls"]` diagnostic mismatch with `api_calls_flights` (not yet traced to a single cause; `api_calls_flights` via `api_usage` is now the authoritative counter).
+
+- [x] `db.py`: enable WAL mode + 30 s busy timeout on engine; add performance preferences (`max_concurrent_flight_queries=3`, `flight_query_timeout_seconds=10`, `run_timeout_minutes=20`); change travel window seed to `enabled=False` (2026-05-02)
+- [x] `window_search.py`: add `MAX_PROBES_PER_DESTINATION = 7` hard cap (2026-05-02)
+- [x] `main.py`: add imports (`random`, `concurrent.futures.{ThreadPoolExecutor,wait}`, `SimpleNamespace`); add `_JITTER_MAX_SECONDS = 2.0` constant; add `_extract_dest_data`, `_probe_dest_window`, `_probe_dest_normal` thread-entry helpers; read `max_workers` + `run_timeout_seconds` in `run()`; replace sequential Pass 1 block with parallelized `ThreadPoolExecutor` version (both window-mode and normal-mode paths) (2026-05-02)
+- [x] `ui.py`: add Performance section (parallel queries, per-request timeout, run timeout) to Preferences form (2026-05-02)
+- [x] `.streamlit/config.toml`: bind to `0.0.0.0:8501` for local network access; add `secrets.toml` to `.gitignore` (2026-05-02)
+- [x] `tests/test_performance.py`: 7 tests covering probe cap, window call-count correctness, max_workers=1 sequential behavior, run timeout guard (2026-05-02)
+- [x] 350 tests passing; ruff + mypy clean; mock run completes in 0.2 s (2026-05-02)
+
 ### Next Action
 
-Feature branch `feature/hotel-links-chart-cleanup` complete; PR open into `main`. Then begin Phase 9 (Polish, Hardening, and 1.0 Release Prep).
+Open PR `feature/performance-fix` → `main`. After merge, begin Phase 9 (Polish, Hardening, and 1.0 Release Prep).
