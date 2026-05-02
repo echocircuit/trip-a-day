@@ -32,23 +32,6 @@ def test_session(tmp_path_factory):
 
 
 @pytest.mark.integration
-def test_get_cheapest_destinations_returns_list(test_session):
-    """get_cheapest_destinations iterates seed airports and returns sorted results."""
-    from trip_a_day.fetcher import get_cheapest_destinations
-
-    departure = date.today() + timedelta(days=14)
-    results = get_cheapest_destinations("ATL", departure, test_session, n=3)
-    assert isinstance(results, list)
-    for dest in results:
-        assert dest.origin == "ATL"
-        assert len(dest.destination) == 3
-        assert dest.price_total > 0
-    # Results must be sorted ascending by price
-    prices = [r.price_total for r in results]
-    assert prices == sorted(prices)
-
-
-@pytest.mark.integration
 def test_get_flight_offers_returns_offer_or_none(test_session):
     """get_flight_offers returns a FlightOffer with a Google Flights booking URL."""
     from trip_a_day.fetcher import get_flight_offers
