@@ -22,6 +22,7 @@ def _make_trip(
     total_cost: float,
     *,
     selected: bool = False,
+    is_mock: bool = False,
 ) -> Trip:
     return Trip(
         run_date=run_date,
@@ -35,6 +36,7 @@ def _make_trip(
         total_cost_usd=total_cost,
         distance_miles=1000.0,
         selected=selected,
+        is_mock=is_mock,
     )
 
 
@@ -364,3 +366,61 @@ def test_png_bytes_do_not_contain_city_name_strings():
     # "Paris" must not appear as raw UTF-8 text in the PNG byte stream
     assert b"Paris" not in result
     assert b"Tokyo" not in result
+
+
+# ── Mock-run filtering tests ──────────────────────────────────────────────────
+
+
+def test_mock_trips_excluded_from_s1():
+    """Series 1 must not include trips where is_mock=True.
+
+    5 mock trips + 2 live trips for the same destination → only 2 live points
+    counted, below the 3-point threshold, so the chart returns None.
+    """
+    today = BASE_DATE + timedelta(days=25)
+    trips = [
+        _make_trip("ORD", BASE_DATE + timedelta(days=i), 900.0 + i * 10, is_mock=True)
+        for i in range(5)
+    ] + [
+        _make_trip("ORD", BASE_DATE + timedelta(days=10), 950.0),
+        _make_trip("ORD", BASE_DATE + timedelta(days=11), 960.0),
+    ]
+    engine = _build_engine(trips)
+    with Session(engine) as session:
+        result = generate_price_history_chart(
+            "ORD", "Chicago, USA", 960.0, today, session
+        )
+    # Only 2 live S1 points, no live S2 → None
+    assert result is None
+
+
+def test_mock_trips_excluded_from_s2():
+    """Series 2 must not include selected trips where is_mock=True.
+
+    S1 has 4 live points (renders). S2 has 5 mock selected picks and 2 live
+    selected picks — only the 2 live picks count, below the 3-point threshold,
+    so S2 is omitted (chart still renders via S1 alone).
+    """
+    today = BASE_DATE + timedelta(days=25)
+    s1_trips = [
+        _make_trip("BOS", BASE_DATE + timedelta(days=i), 1100.0 + i * 10)
+        for i in range(4)
+    ]
+    mock_selected = [
+        _make_trip(
+            "LAS", today - timedelta(days=5 + i), 700.0, selected=True, is_mock=True
+        )
+        for i in range(5)
+    ]
+    live_selected = [
+        _make_trip("ATL", today - timedelta(days=2), 750.0, selected=True),
+        _make_trip("MIA", today - timedelta(days=1), 800.0, selected=True),
+    ]
+    engine = _build_engine(s1_trips + mock_selected + live_selected)
+    with Session(engine) as session:
+        result = generate_price_history_chart(
+            "BOS", "Boston, USA", 1130.0, today, session
+        )
+    # S1 renders (4 live points). S2 has only 2 live picks → omitted silently.
+    assert result is not None
+    assert result[:4] == b"\x89PNG"

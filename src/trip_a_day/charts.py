@@ -45,7 +45,7 @@ def generate_price_history_chart(
 
         thirty_days_ago = today_run_date - timedelta(days=30)
 
-        # Series 1: destination price history for the past 30 days
+        # Series 1: destination price history for the past 30 days (live runs only)
         s1_rows = (
             db_session.query(
                 Trip.run_date,
@@ -54,13 +54,14 @@ def generate_price_history_chart(
             .filter(
                 Trip.destination_iata == destination_iata,
                 Trip.run_date >= thirty_days_ago,
+                Trip.is_mock == False,  # noqa: E712
             )
             .group_by(Trip.run_date)
             .order_by(Trip.run_date)
             .all()
         )
 
-        # Series 2: recent daily Trip of the Day (selected winner, past 30 days)
+        # Series 2: recent daily Trip of the Day (selected winner, past 30 days, live only)
         s2_rows = (
             db_session.query(
                 Trip.run_date,
@@ -69,6 +70,7 @@ def generate_price_history_chart(
             .filter(
                 Trip.selected == True,  # noqa: E712
                 Trip.run_date >= thirty_days_ago,
+                Trip.is_mock == False,  # noqa: E712
             )
             .order_by(Trip.run_date)
             .all()

@@ -129,6 +129,7 @@ class Trip(Base):
     manually_logged: Mapped[bool] = mapped_column(Boolean, default=False)
     departure_iata: Mapped[str | None] = mapped_column(String(10), nullable=True)
     stale_cache: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_mock: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class RunLog(Base):
@@ -307,6 +308,7 @@ _TRIP_NEW_COLUMNS: list[tuple[str, str]] = [
     ("manually_logged", "BOOLEAN DEFAULT 0"),
     ("departure_iata", "TEXT"),
     ("stale_cache", "BOOLEAN DEFAULT 0"),
+    ("is_mock", "BOOLEAN DEFAULT 0"),
 ]
 
 

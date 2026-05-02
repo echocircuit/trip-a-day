@@ -90,7 +90,7 @@ def _is_excluded(session, iata: str) -> bool:
 
 
 def _store_results(
-    session, candidates: list[TripCandidate], run_date: date
+    session, candidates: list[TripCandidate], run_date: date, is_mock: bool = False
 ) -> list[int]:
     trip_ids: list[int] = []
     for rank, candidate in enumerate(candidates, start=1):
@@ -116,6 +116,7 @@ def _store_results(
             car_cost_is_estimate=candidate.cost.car_is_estimate,
             departure_iata=candidate.departure_airport or None,
             stale_cache=candidate.stale_cache,
+            is_mock=is_mock,
         )
         session.add(db_trip)
         session.flush()
@@ -1046,7 +1047,7 @@ def run(triggered_by: str = "manual") -> None:
             dep_note,
         )
 
-        trip_ids = _store_results(session, ranked, run_date)
+        trip_ids = _store_results(session, ranked, run_date, is_mock=is_mock)
         winner_trip_id = trip_ids[0]
 
         # Update winner destination stats
