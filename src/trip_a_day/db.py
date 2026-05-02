@@ -129,6 +129,7 @@ class Trip(Base):
     manually_logged: Mapped[bool] = mapped_column(Boolean, default=False)
     departure_iata: Mapped[str | None] = mapped_column(String(10), nullable=True)
     stale_cache: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_mock: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class RunLog(Base):
@@ -254,12 +255,16 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     # Phase 7 — multi-airport departure
     "irs_mileage_rate": "0.70",
     # Booking preferences
-    "preferred_hotel_site": "google_hotels",
+    "preferred_hotel_site": "booking_com",
     "preferred_car_site": "kayak",
     "preferred_hotel_site_manual_url": "",
     "preferred_car_site_manual_url": "",
     # Display preferences
     "timezone": "America/Chicago",
+    # Flight data mode: "mock" uses fixture data, "live" queries Google Flights.
+    # DB preference takes priority over FLIGHT_DATA_MODE env var so the UI toggle
+    # takes effect without restarting Streamlit.
+    "flight_data_mode": "mock",
 }
 
 # Public alias for use in tests and tooling.
@@ -303,6 +308,7 @@ _TRIP_NEW_COLUMNS: list[tuple[str, str]] = [
     ("manually_logged", "BOOLEAN DEFAULT 0"),
     ("departure_iata", "TEXT"),
     ("stale_cache", "BOOLEAN DEFAULT 0"),
+    ("is_mock", "BOOLEAN DEFAULT 0"),
 ]
 
 
@@ -332,10 +338,37 @@ def _migrate_schema() -> None:
         conn.commit()
 
 
+def _migrate_preferences(session: Session | None = None) -> None:
+    """Fix up stale preference values after options are removed or renamed.
+
+    Each entry is idempotent: runs on every startup but only updates rows
+    that still hold the old value.
+
+    Pass a *session* explicitly when calling from tests to operate on an
+    in-memory DB. Omit it (default) to let the function open its own
+    SessionFactory connection to the real database.
+    """
+
+    def _run(s: Session) -> None:
+        # google_hotels removed 2026-05-01: SPA ignores URL date params.
+        pref = s.get(Preference, "preferred_hotel_site")
+        if pref is not None and pref.value == "google_hotels":
+            pref.value = "booking_com"
+            pref.updated_at = datetime.now(UTC)
+
+    if session is not None:
+        _run(session)
+    else:
+        with SessionFactory() as s:
+            _run(s)
+            s.commit()
+
+
 def init_db() -> None:
     """Create all tables if they do not exist and run schema migrations."""
     Base.metadata.create_all(engine)
     _migrate_schema()
+    _migrate_preferences()
     _seed_destinations()
     _seed_travel_windows()
 

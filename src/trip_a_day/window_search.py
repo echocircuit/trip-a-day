@@ -139,6 +139,7 @@ def find_cheapest_in_window(
                 children=children,
                 session=db_session,
                 direct_only=direct_flights_only,
+                is_mock=is_mock,
             )
             if not is_mock:
                 live_calls_used += 1

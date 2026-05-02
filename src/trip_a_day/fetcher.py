@@ -32,7 +32,7 @@ import json
 import logging
 import math
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -52,8 +52,23 @@ from sqlalchemy.orm import Session
 
 from trip_a_day.db import get_api_calls_today, record_api_call
 from trip_a_day.links import build_flight_url, build_hotel_url
+from trip_a_day.preferences import get_or
 
 logger = logging.getLogger(__name__)
+
+
+def get_flight_data_mode(db_session: Session) -> str:
+    """Resolve flight data mode with DB preference taking priority over env var.
+
+    Priority: DB preference → FLIGHT_DATA_MODE env var → "mock".
+    This lets the UI toggle take effect without restarting Streamlit.
+    """
+    db_value = get_or(db_session, "flight_data_mode", "")
+    if db_value in ("mock", "live"):
+        return db_value
+    env_value = os.environ.get("FLIGHT_DATA_MODE", "mock").lower().strip()
+    return env_value if env_value in ("mock", "live") else "mock"
+
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SEED_AIRPORTS_PATH = _DATA_DIR / "seed_airports.json"
@@ -285,18 +300,6 @@ _LODGING_FALLBACK: dict[str, float] = {
 
 
 @dataclass
-class FlightDestination:
-    """A cheap destination found by iterating the seed airport list."""
-
-    origin: str
-    destination: str
-    departure_date: date
-    return_date: date
-    price_total: float
-    links: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass
 class FlightOffer:
     """Cheapest flight offer for a specific route."""
 
@@ -366,11 +369,6 @@ def _load_per_diem() -> list[dict]:
     if _per_diem_rates is None:
         _per_diem_rates = json.loads(_PER_DIEM_PATH.read_text(encoding="utf-8"))
     return _per_diem_rates
-
-
-def _flight_data_mode() -> str:
-    """Return 'mock' or 'live' based on the FLIGHT_DATA_MODE env var (default: 'mock')."""
-    return os.environ.get("FLIGHT_DATA_MODE", "mock").lower().strip()
 
 
 def _load_mock_flights() -> dict:
@@ -582,118 +580,6 @@ def _lookup_per_diem(
     return 0.0, 0.0, "fallback"
 
 
-# ---------------------------------------------------------------------------
-# Public functions (signatures identical to Phase 1)
-# ---------------------------------------------------------------------------
-
-
-def get_cheapest_destinations(
-    origin_iata: str,
-    departure_date: date,
-    session: Session,
-    n: int = 10,
-    direct_only: bool = True,
-) -> list[FlightDestination]:
-    """Iterate seed airports, query Google Flights, return the n cheapest destinations.
-
-    When *direct_only* is True, destinations reachable only via connecting flights
-    are excluded. When False, connecting flights are accepted as a fallback.
-    """
-    from datetime import timedelta
-
-    airports = _load_seed_airports()
-    results: list[FlightDestination] = []
-    errors = 0
-    # Placeholder return date for preliminary screening (exact price confirmed by
-    # get_flight_offers); fli requires both outbound and return segments.
-    placeholder_return = departure_date + timedelta(days=7)
-
-    for airport in airports:
-        dest_iata = airport["iata"]
-        if dest_iata == origin_iata:
-            continue
-        if not _check_soft_limit(session):
-            break
-
-        try:
-            if _flight_data_mode() == "mock":
-                ff_result = _mock_flight_result(origin_iata, dest_iata)
-            else:
-                record_api_call(session, "google_flights")
-                try:
-                    ff_result = get_flights(
-                        origin_iata,
-                        dest_iata,
-                        departure_date,
-                        placeholder_return,
-                        1,
-                        0,
-                    )
-                except ValueError as exc:
-                    # Airport not in fli enum -- skip gracefully
-                    logger.debug(
-                        "Skipping %s->%s: %s",
-                        origin_iata,
-                        dest_iata,
-                        exc,
-                    )
-                    continue
-                except Exception as exc:
-                    logger.warning(
-                        "Google Flights query %s->%s failed: %s: %s",
-                        origin_iata,
-                        dest_iata,
-                        type(exc).__name__,
-                        exc,
-                    )
-                    errors += 1
-                    if errors >= 10:
-                        logger.warning(
-                            "Too many Google Flights errors -- stopping destination sweep."
-                        )
-                        break
-                    continue
-        except Exception as exc:
-            logger.warning(
-                "Unexpected error fetching %s->%s: %s: %s",
-                origin_iata,
-                dest_iata,
-                type(exc).__name__,
-                exc,
-            )
-            errors += 1
-            if errors >= 10:
-                logger.warning(
-                    "Too many Google Flights errors -- stopping destination sweep."
-                )
-                break
-            continue
-
-        if not ff_result or not ff_result.flights:
-            continue
-
-        direct = [f for f in ff_result.flights if f.stops == 0]
-        candidates = direct if direct_only else (direct or ff_result.flights)
-        prices = [(_parse_price(f.price), f) for f in candidates]
-        valid = [(p, f) for p, f in prices if p is not None]
-        if not valid:
-            continue
-
-        price, _ = min(valid, key=lambda x: x[0])
-        results.append(
-            FlightDestination(
-                origin=origin_iata,
-                destination=dest_iata,
-                departure_date=departure_date,
-                return_date=departure_date,
-                price_total=price,  # type: ignore[arg-type]
-            )
-        )
-
-    results.sort(key=lambda r: r.price_total)
-    return results[:n]
-
-
 def get_flight_offers(
     origin: str,
     destination: str,
@@ -703,18 +589,21 @@ def get_flight_offers(
     children: int,
     session: Session,
     direct_only: bool = True,
+    is_mock: bool = False,
 ) -> FlightOffer | None:
     """Return the cheapest qualifying flight for the exact route, or None if unavailable.
 
     When *direct_only* is True, only nonstop flights are considered; the function
     returns None if no direct option exists. When False, connecting flights are
     accepted as a fallback when no direct flight is available.
+
+    Pass is_mock=True to use fixture data instead of calling Google Flights.
     """
     if not _check_soft_limit(session):
         return None
 
     try:
-        if _flight_data_mode() == "mock":
+        if is_mock:
             ff_result = _mock_flight_result(origin, destination)
         else:
             # Count the attempt before calling — ensures api_usage tracks all live
@@ -801,6 +690,7 @@ def get_hotel_offers(
     adults: int,
     session: Session,
     num_rooms: int = 1,
+    hotel_site: str = "booking_com",
 ) -> HotelOffer | None:
     """Return a per diem lodging estimate for the destination. Always returns an estimate.
 
@@ -831,7 +721,7 @@ def get_hotel_offers(
         adults,
         children=0,
         rooms=rooms,
-        site="google_hotels",
+        site=hotel_site,
     )
 
     note = (

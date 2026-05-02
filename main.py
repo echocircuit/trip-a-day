@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import sys
 import time
 from datetime import UTC, date, datetime, timedelta
@@ -46,6 +45,7 @@ from trip_a_day.db import (
 )
 from trip_a_day.fetcher import (
     get_airport_info,
+    get_flight_data_mode,
     get_flight_offers,
     get_food_cost,
     get_hotel_offers,
@@ -90,7 +90,7 @@ def _is_excluded(session, iata: str) -> bool:
 
 
 def _store_results(
-    session, candidates: list[TripCandidate], run_date: date
+    session, candidates: list[TripCandidate], run_date: date, is_mock: bool = False
 ) -> list[int]:
     trip_ids: list[int] = []
     for rank, candidate in enumerate(candidates, start=1):
@@ -116,6 +116,7 @@ def _store_results(
             car_cost_is_estimate=candidate.cost.car_is_estimate,
             departure_iata=candidate.departure_airport or None,
             stale_cache=candidate.stale_cache,
+            is_mock=is_mock,
         )
         session.add(db_trip)
         session.flush()
@@ -141,6 +142,7 @@ def _connectivity_ok(session, is_mock: bool) -> bool:
         children=0,
         session=session,
         direct_only=False,
+        is_mock=False,
     )
     if result is None:
         logger.warning(
@@ -169,6 +171,7 @@ def _stale_cache_fallback(
     car_rental_required: bool,
     trip_nights: int,
     preferred_car_site: str,
+    preferred_hotel_site: str = "booking_com",
 ) -> list[TripCandidate]:
     """Build TripCandidates from stale (possibly TTL-expired) cached prices.
 
@@ -214,6 +217,7 @@ def _stale_cache_fallback(
             adults=num_adults,
             session=session,
             num_rooms=num_rooms,
+            hotel_site=preferred_hotel_site,
         )
         if hotel is None:
             continue
@@ -449,6 +453,7 @@ def run(triggered_by: str = "manual") -> None:
         num_adults = get_int(session, "num_adults")
         num_children = get_int(session, "num_children")
         num_rooms = get_int(session, "num_rooms")
+        preferred_hotel_site = get_or(session, "preferred_hotel_site", "booking_com")
         preferred_car_site = get_or(session, "preferred_car_site", "kayak")
         ranking_strategy = get(session, "ranking_strategy")
         direct_flights_only = get_bool(session, "direct_flights_only")
@@ -461,7 +466,7 @@ def run(triggered_by: str = "manual") -> None:
         two_pass_count = get_int(session, "two_pass_candidate_count")
 
         night_variants = _build_night_variants(trip_nights, trip_flex)
-        is_mock = os.environ.get("FLIGHT_DATA_MODE", "mock") == "mock"
+        is_mock = get_flight_data_mode(session) == "mock"
 
         logger.info(
             "Searching from %s | window %d-%d days out | nights %s"
@@ -808,6 +813,7 @@ def run(triggered_by: str = "manual") -> None:
                             children=num_children,
                             session=session,
                             direct_only=direct_flights_only,
+                            is_mock=is_mock,
                         )
                         if flight is None:
                             logger.info(
@@ -825,6 +831,7 @@ def run(triggered_by: str = "manual") -> None:
                             adults=num_adults,
                             session=session,
                             num_rooms=num_rooms,
+                            hotel_site=preferred_hotel_site,
                         )
                         if hotel is None:
                             logger.info(
@@ -967,6 +974,7 @@ def run(triggered_by: str = "manual") -> None:
                 car_rental_required=car_rental_required,
                 trip_nights=trip_nights,
                 preferred_car_site=preferred_car_site,
+                preferred_hotel_site=preferred_hotel_site,
             )
             if stale_candidates:
                 pass1_stats["stale_cache_used"] = 1
@@ -1039,7 +1047,7 @@ def run(triggered_by: str = "manual") -> None:
             dep_note,
         )
 
-        trip_ids = _store_results(session, ranked, run_date)
+        trip_ids = _store_results(session, ranked, run_date, is_mock=is_mock)
         winner_trip_id = trip_ids[0]
 
         # Update winner destination stats

@@ -106,21 +106,11 @@ class TestBuildFlightUrl:
         assert url1 != url2
 
 
+_CHECKIN_OCT = date(2026, 10, 5)
+_CHECKOUT_OCT = date(2026, 10, 9)
+
+
 class TestBuildHotelUrl:
-    def test_google_hotels_returns_nonempty(self):
-        url = build_hotel_url(
-            "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "google_hotels"
-        )
-        assert url and isinstance(url, str)
-
-    def test_google_hotels_contains_expected_params(self):
-        url = build_hotel_url(
-            "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "google_hotels"
-        )
-        assert "google.com/travel/hotels" in url
-        assert "checkin=2026-06-15" in url
-        assert "checkout=2026-06-22" in url
-
     def test_booking_com_returns_nonempty(self):
         url = build_hotel_url(
             "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "booking_com"
@@ -135,6 +125,18 @@ class TestBuildHotelUrl:
         assert "group_adults=2" in url
         assert "no_rooms=1" in url
 
+    def test_booking_com_split_date_params_no_leading_zeros(self):
+        """Booking.com requires split year/month/day params without leading zeros."""
+        url = build_hotel_url(
+            "Tokyo", "Japan", _CHECKIN_OCT, _CHECKOUT_OCT, 1, 0, 1, "booking_com"
+        )
+        assert "checkin_year=2026" in url
+        assert "checkin_month=10" in url
+        assert "checkin_monthday=5" in url  # no leading zero
+        assert "checkout_year=2026" in url
+        assert "checkout_month=10" in url
+        assert "checkout_monthday=9" in url  # no leading zero
+
     def test_expedia_returns_nonempty(self):
         url = build_hotel_url(
             "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "expedia"
@@ -147,6 +149,46 @@ class TestBuildHotelUrl:
         )
         assert "expedia.com/Hotel-Search" in url
         assert "06/15/2026" in url
+
+    def test_expedia_mm_dd_yyyy_format(self):
+        """Expedia requires MM/DD/YYYY for startDate and endDate."""
+        url = build_hotel_url(
+            "Tokyo", "Japan", _CHECKIN_OCT, _CHECKOUT_OCT, 1, 0, 1, "expedia"
+        )
+        assert "startDate=10/05/2026" in url
+        assert "endDate=10/09/2026" in url
+
+    def test_checkout_date_present_in_all_sites(self):
+        """Checkout date must appear in every supported site's URL."""
+        for site in ("booking_com", "expedia"):
+            url = build_hotel_url(
+                "Tokyo", "Japan", _CHECKIN_OCT, _CHECKOUT_OCT, 1, 0, 1, site
+            )
+            assert "2026" in url, f"{site}: year missing from checkout"
+            if site == "booking_com":
+                assert "checkout_monthday=9" in url
+            elif site == "expedia":
+                assert "endDate=10/09/2026" in url
+
+    def test_date_object_and_iso_string_produce_same_result(self):
+        """Passing a date object should produce identical output to parsing an ISO string."""
+        from datetime import date as dt
+
+        checkin_obj = dt(2026, 10, 5)
+        url_obj = build_hotel_url(
+            "Tokyo", "Japan", checkin_obj, dt(2026, 10, 9), 1, 0, 1, "booking_com"
+        )
+        url_iso = build_hotel_url(
+            "Tokyo",
+            "Japan",
+            dt.fromisoformat("2026-10-05"),
+            dt.fromisoformat("2026-10-09"),
+            1,
+            0,
+            1,
+            "booking_com",
+        )
+        assert url_obj == url_iso
 
     def test_unknown_site_raises_value_error(self):
         with pytest.raises(ValueError, match="Unknown hotel site"):
