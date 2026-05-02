@@ -718,18 +718,21 @@ def get_flight_offers(
     children: int,
     session: Session,
     direct_only: bool = True,
+    is_mock: bool = False,
 ) -> FlightOffer | None:
     """Return the cheapest qualifying flight for the exact route, or None if unavailable.
 
     When *direct_only* is True, only nonstop flights are considered; the function
     returns None if no direct option exists. When False, connecting flights are
     accepted as a fallback when no direct flight is available.
+
+    Pass is_mock=True to use fixture data instead of calling Google Flights.
     """
     if not _check_soft_limit(session):
         return None
 
     try:
-        if _flight_data_mode() == "mock":
+        if is_mock:
             ff_result = _mock_flight_result(origin, destination)
         else:
             # Count the attempt before calling — ensures api_usage tracks all live

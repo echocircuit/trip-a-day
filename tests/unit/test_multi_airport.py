@@ -152,6 +152,7 @@ def test_multi_airport_selects_cheapest_globally(in_memory_session):
         children,
         session,
         direct_only=True,
+        is_mock=False,
     ):
         price = 300.0 if origin == "BHM" else 800.0
         return _flight(origin, destination, price, depart_date)

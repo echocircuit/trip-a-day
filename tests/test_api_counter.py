@@ -69,14 +69,12 @@ def _mock_ff_result(flights=None):
 # ── Test 1: mock mode records zero calls ───────────────────────────────────
 
 
-def test_mock_mode_does_not_increment_api_usage(db_session, monkeypatch):
+def test_mock_mode_does_not_increment_api_usage(db_session):
     """In mock mode, get_flight_offers never calls record_api_call.
 
     api_usage must stay at 0 after a mock flight query.
     """
-    monkeypatch.setenv("FLIGHT_DATA_MODE", "mock")
-
-    get_flight_offers("HSV", "JFK", DEPART, RETURN, 2, 0, db_session)
+    get_flight_offers("HSV", "JFK", DEPART, RETURN, 2, 0, db_session, is_mock=True)
 
     row = (
         db_session.query(ApiUsage).filter(ApiUsage.api_name == "google_flights").first()
@@ -87,15 +85,15 @@ def test_mock_mode_does_not_increment_api_usage(db_session, monkeypatch):
 # ── Test 2: live mode — successful call increments counter ─────────────────
 
 
-def test_successful_live_call_increments_api_usage(db_session, monkeypatch):
+def test_successful_live_call_increments_api_usage(db_session):
     """A successful live call to get_flights increments api_usage by 1."""
-    monkeypatch.setenv("FLIGHT_DATA_MODE", "live")
-
     with patch(
         "trip_a_day.fetcher.get_flights",
         return_value=_mock_ff_result([_make_flight_obj(stops=0, price="$400")]),
     ):
-        offer = get_flight_offers("HSV", "JFK", DEPART, RETURN, 2, 0, db_session)
+        offer = get_flight_offers(
+            "HSV", "JFK", DEPART, RETURN, 2, 0, db_session, is_mock=False
+        )
 
     db_session.flush()
     row = (
@@ -106,9 +104,8 @@ def test_successful_live_call_increments_api_usage(db_session, monkeypatch):
     assert offer is not None
 
 
-def test_multiple_live_calls_accumulate_in_api_usage(db_session, monkeypatch):
+def test_multiple_live_calls_accumulate_in_api_usage(db_session):
     """N sequential live calls produces api_usage.calls_made == N."""
-    monkeypatch.setenv("FLIGHT_DATA_MODE", "live")
     n = 3
 
     with patch(
@@ -116,7 +113,9 @@ def test_multiple_live_calls_accumulate_in_api_usage(db_session, monkeypatch):
         return_value=_mock_ff_result([_make_flight_obj(stops=0, price="$300")]),
     ):
         for _ in range(n):
-            get_flight_offers("HSV", "JFK", DEPART, RETURN, 2, 0, db_session)
+            get_flight_offers(
+                "HSV", "JFK", DEPART, RETURN, 2, 0, db_session, is_mock=False
+            )
 
     db_session.flush()
     row = (
@@ -137,13 +136,13 @@ def test_exception_in_get_flights_still_increments_api_usage(db_session, monkeyp
     After the fix: record_api_call is called before get_flights() in the live
     branch, so every attempted call is counted regardless of outcome.
     """
-    monkeypatch.setenv("FLIGHT_DATA_MODE", "live")
-
     with patch(
         "trip_a_day.fetcher.get_flights",
         side_effect=RuntimeError("playwright 401"),
     ):
-        offer = get_flight_offers("HSV", "LHR", DEPART, RETURN, 2, 0, db_session)
+        offer = get_flight_offers(
+            "HSV", "LHR", DEPART, RETURN, 2, 0, db_session, is_mock=False
+        )
 
     assert offer is None  # exception was caught and returned as None
 
@@ -155,9 +154,8 @@ def test_exception_in_get_flights_still_increments_api_usage(db_session, monkeyp
     assert row.calls_made == 1  # counted even though get_flights raised
 
 
-def test_multiple_exceptions_all_counted(db_session, monkeypatch):
+def test_multiple_exceptions_all_counted(db_session):
     """Multiple failing calls each increment the counter."""
-    monkeypatch.setenv("FLIGHT_DATA_MODE", "live")
     n = 5
 
     with patch(
@@ -165,7 +163,9 @@ def test_multiple_exceptions_all_counted(db_session, monkeypatch):
         side_effect=ConnectionError("timeout"),
     ):
         for _ in range(n):
-            get_flight_offers("HSV", "CDG", DEPART, RETURN, 1, 0, db_session)
+            get_flight_offers(
+                "HSV", "CDG", DEPART, RETURN, 1, 0, db_session, is_mock=False
+            )
 
     db_session.flush()
     row = (
@@ -186,8 +186,6 @@ def test_window_search_does_not_double_count(db_session, monkeypatch):
     calls. After the fix, record_api_call fires BEFORE get_flights(). The count
     should still be exactly N (number of probes), not 2N.
     """
-    monkeypatch.setenv("FLIGHT_DATA_MODE", "live")
-
     from trip_a_day.window_search import find_cheapest_in_window
 
     dest = SimpleNamespace(

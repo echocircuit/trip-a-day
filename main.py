@@ -141,6 +141,7 @@ def _connectivity_ok(session, is_mock: bool) -> bool:
         children=0,
         session=session,
         direct_only=False,
+        is_mock=False,
     )
     if result is None:
         logger.warning(
@@ -811,6 +812,7 @@ def run(triggered_by: str = "manual") -> None:
                             children=num_children,
                             session=session,
                             direct_only=direct_flights_only,
+                            is_mock=is_mock,
                         )
                         if flight is None:
                             logger.info(
