@@ -21,10 +21,13 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 # Load .env before any other imports that might read env vars
 from dotenv import load_dotenv
@@ -70,6 +73,10 @@ logger = logging.getLogger("main")
 # HSV coordinates — fallback if home airport has no coordinates in DB.
 _HSV_LAT = 34.6418
 _HSV_LON = -86.7751
+
+# Maximum random delay (seconds) added before each live fli call in parallel mode.
+# Staggers simultaneous TLS connections so they don't all hit Google at once.
+_JITTER_MAX_SECONDS = 2.0
 
 
 def _build_night_variants(target: int, flex: int) -> list[int]:
@@ -301,6 +308,198 @@ def _stale_cache_fallback(
 _logger_tw = logging.getLogger("travel_windows")
 
 
+def _extract_dest_data(dest: Destination) -> dict[str, str]:
+    """Extract ORM fields to a plain dict safe for passing across thread boundaries."""
+    return {
+        "iata": dest.iata_code,
+        "city": dest.city or dest.iata_code,
+        "country": dest.country or "Unknown",
+        "region": dest.region or "Other",
+    }
+
+
+def _probe_dest_window(
+    dep_iata: str,
+    dest_data: dict[str, str],
+    window_data_list: list[dict],
+    trip_nights: int,
+    adults: int,
+    children: int,
+    num_rooms: int,
+    car_rental_required: bool,
+    direct_flights_only: bool,
+    cache_ttl_enabled: bool,
+    is_mock: bool,
+    live_calls_budget: int,
+    transport_usd: float,
+) -> tuple[str, object, object, int, int, str | None]:
+    """Probe one destination against all active travel windows. Thread-safe.
+
+    Creates its own DB session. Applies random jitter before the first live
+    call to stagger simultaneous Google Flights connections.
+
+    Returns (iata, best_cost_or_None, best_date_or_None, live_calls, cache_hits,
+    winning_window_name_or_None).
+    """
+    if not is_mock:
+        time.sleep(random.uniform(0, _JITTER_MAX_SECONDS))
+
+    iata = dest_data["iata"]
+    dest = SimpleNamespace(
+        iata_code=iata,
+        city=dest_data["city"],
+        country=dest_data["country"],
+        region=dest_data["region"],
+    )
+
+    best_cost = None
+    best_date = None
+    best_window_name: str | None = None
+    live_calls_used = 0
+    cache_hits_used = 0
+
+    with SessionFactory() as thread_session:
+        for tw_data in window_data_list:
+            remaining = live_calls_budget - live_calls_used
+            if remaining <= 0 and not is_mock:
+                break
+            try:
+                cost, probe_date, calls, hits = find_cheapest_in_window(
+                    origin_iata=dep_iata,
+                    destination=dest,
+                    min_days=tw_data["min_days"],
+                    max_days=tw_data["max_days"],
+                    trip_length_nights=trip_nights,
+                    adults=adults,
+                    children=children,
+                    num_rooms=num_rooms,
+                    car_rental_required=car_rental_required,
+                    direct_flights_only=direct_flights_only,
+                    cache_ttl_enabled=cache_ttl_enabled,
+                    is_mock=is_mock,
+                    db_session=thread_session,
+                    live_calls_remaining=remaining,
+                    transport_usd=transport_usd,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "  [P1/win] %s→%s (%s) — exception: %s: %s",
+                    dep_iata,
+                    iata,
+                    tw_data["name"],
+                    type(exc).__name__,
+                    exc,
+                )
+                continue
+
+            live_calls_used += calls
+            cache_hits_used += hits
+
+            if cost is None or probe_date is None:
+                continue
+
+            return_date_check = probe_date + timedelta(days=trip_nights)
+            if return_date_check > tw_data["eff_end"]:
+                logger.debug(
+                    "  [P1/win] %s→%s (%s): return %s > window end %s — excluded",
+                    dep_iata,
+                    iata,
+                    tw_data["name"],
+                    return_date_check,
+                    tw_data["eff_end"],
+                )
+                continue
+
+            if best_cost is None or cost.total < best_cost.total:
+                best_cost = cost
+                best_date = probe_date
+                best_window_name = tw_data["name"]
+
+        try:
+            thread_session.commit()
+        except Exception:
+            thread_session.rollback()
+
+    return (
+        iata,
+        best_cost,
+        best_date,
+        live_calls_used,
+        cache_hits_used,
+        best_window_name,
+    )
+
+
+def _probe_dest_normal(
+    dep_iata: str,
+    dest_data: dict[str, str],
+    min_days: int,
+    max_days: int,
+    trip_nights: int,
+    adults: int,
+    children: int,
+    num_rooms: int,
+    car_rental_required: bool,
+    direct_flights_only: bool,
+    cache_ttl_enabled: bool,
+    is_mock: bool,
+    live_calls_budget: int,
+    transport_usd: float,
+) -> tuple[str, object, object, int, int, None]:
+    """Normal advance-window probe for one destination. Thread-safe.
+
+    Creates its own DB session. Applies random jitter before the first live
+    call.
+
+    Returns (iata, best_cost_or_None, best_date_or_None, live_calls, cache_hits, None).
+    The trailing None keeps the return shape uniform with _probe_dest_window.
+    """
+    if not is_mock:
+        time.sleep(random.uniform(0, _JITTER_MAX_SECONDS))
+
+    iata = dest_data["iata"]
+    dest = SimpleNamespace(
+        iata_code=iata,
+        city=dest_data["city"],
+        country=dest_data["country"],
+        region=dest_data["region"],
+    )
+
+    with SessionFactory() as thread_session:
+        try:
+            cost, best_date, calls, hits = find_cheapest_in_window(
+                origin_iata=dep_iata,
+                destination=dest,
+                min_days=min_days,
+                max_days=max_days,
+                trip_length_nights=trip_nights,
+                adults=adults,
+                children=children,
+                num_rooms=num_rooms,
+                car_rental_required=car_rental_required,
+                direct_flights_only=direct_flights_only,
+                cache_ttl_enabled=cache_ttl_enabled,
+                is_mock=is_mock,
+                db_session=thread_session,
+                live_calls_remaining=live_calls_budget,
+                transport_usd=transport_usd,
+            )
+            try:
+                thread_session.commit()
+            except Exception:
+                thread_session.rollback()
+            return iata, cost, best_date, calls, hits, None
+        except Exception as exc:
+            logger.warning(
+                "  [P1] %s→%s — unhandled exception in window search: %s: %s",
+                dep_iata,
+                iata,
+                type(exc).__name__,
+                exc,
+            )
+            return iata, None, None, 0, 0, None
+
+
 def _window_pass1_for_departure(
     *,
     session,
@@ -464,6 +663,9 @@ def run(triggered_by: str = "manual") -> None:
         cache_ttl_enabled = get_bool(session, "cache_ttl_enabled")
         max_live_calls = get_int(session, "max_live_calls_per_run")
         two_pass_count = get_int(session, "two_pass_candidate_count")
+        max_workers = max(1, get_int(session, "max_concurrent_flight_queries"))
+        run_timeout_minutes_pref = get_int(session, "run_timeout_minutes")
+        run_timeout_seconds = run_timeout_minutes_pref * 60
 
         night_variants = _build_night_variants(trip_nights, trip_flex)
         is_mock = get_flight_data_mode(session) == "mock"
@@ -622,134 +824,193 @@ def run(triggered_by: str = "manual") -> None:
                     transport_usd,
                 )
 
-                # ── Pass 1 ──────────────────────────────────────────────────────
-                if use_window_mode:
-                    # Window-based: probe each active window, keep cheapest per dest.
-                    pass1_results, _tw_calls, _tw_hits, _tw_iata_map = (
-                        _window_pass1_for_departure(
-                            session=session,
-                            dep_iata=dep_iata,
-                            batch=batch,
-                            active_windows=active_windows,
-                            trip_nights=trip_nights,
-                            num_adults=num_adults,
-                            num_children=num_children,
-                            num_rooms=num_rooms,
-                            car_rental_required=car_rental_required,
-                            direct_flights_only=direct_flights_only,
-                            cache_ttl_enabled=cache_ttl_enabled,
-                            is_mock=is_mock,
-                            max_live_calls=max_live_calls,
-                            live_calls_made_so_far=live_calls_made,
-                            transport_usd=transport_usd,
-                        )
+                # ── Pass 1 (parallelized) ────────────────────────────────────
+                pass1_results = []
+
+                # Hard stop: if the overall run has already exceeded the timeout,
+                # don't start any more API calls for this departure airport.
+                elapsed = time.monotonic() - start_time
+                if elapsed > run_timeout_seconds:
+                    logger.warning(
+                        "Run timeout (%dm) reached before Pass 1 from %s — stopping.",
+                        run_timeout_minutes_pref,
+                        dep_iata,
                     )
-                    live_calls_made += _tw_calls
-                    cache_hits += _tw_hits
-                    pass1_stats["cache_hits"] += _tw_hits
-                    pass1_stats["live_calls"] += _tw_calls
-                    if pass1_results:
-                        pass1_stats["valid"] += len(pass1_results)
-                        _iata_to_window.update(_tw_iata_map)
-                        for _d, _c, _dt in pass1_results:
-                            logger.info(
-                                "  [P1/win] %s→%s — $%.0f (depart %s, window: %s)",
+                    break
+
+                # Filter excluded destinations before touching the thread pool.
+                eligible_batch = [
+                    d for d in batch if not _is_excluded(session, d.iata_code)
+                ]
+
+                # Pre-compute travel window params (ORM → plain dicts, thread-safe).
+                window_data_list: list[dict] = []
+                if use_window_mode:
+                    for tw in active_windows:
+                        eff_start = tw.effective_start
+                        eff_end = tw.effective_end
+                        min_days_tw = max(0, (eff_start - run_date).days)
+                        max_days_tw = (
+                            eff_end - timedelta(days=trip_nights) - run_date
+                        ).days
+                        if max_days_tw < min_days_tw:
+                            _logger_tw.info(
+                                '"%s" effective range too short for %d-night trip'
+                                " from %s — skipping.",
+                                tw.name,
+                                trip_nights,
                                 dep_iata,
-                                _d.iata_code,
-                                _c,
-                                _dt,
-                                _tw_iata_map.get(_d.iata_code, "?"),
                             )
-                    else:
-                        pass1_stats["no_price"] += len(batch)
-
-                    # Update destination stats (home airport only).
-                    if dep_iata == home_airport:
-                        for _d, _c, _dt in pass1_results:
-                            _d.last_queried_at = now_utc
-                            _d.last_known_price_usd = _c
-                            _d.last_known_price_date = run_date
-                            _d.query_count = (_d.query_count or 0) + 1
-
-                else:
-                    # Normal Pass 1: probe departure dates across the advance window.
-                    pass1_results = []
-
-                    for dest in batch:
-                        iata = dest.iata_code
-
-                        if _is_excluded(session, iata):
                             continue
+                        window_data_list.append(
+                            {
+                                "name": tw.name,
+                                "min_days": min_days_tw,
+                                "max_days": max_days_tw,
+                                "eff_end": eff_end,
+                            }
+                        )
 
-                        live_budget = max_live_calls - live_calls_made
+                # iata → ORM Destination for stat updates on the main session later.
+                iata_to_dest: dict[str, Destination] = {
+                    d.iata_code: d for d in eligible_batch
+                }
+
+                # Submit one future per destination; each thread owns its DB session.
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    fut_to_iata: dict = {}
+                    for dest in eligible_batch:
+                        if time.monotonic() - start_time > run_timeout_seconds:
+                            logger.warning(
+                                "Run timeout (%dm) reached mid-batch — stopping.",
+                                run_timeout_minutes_pref,
+                            )
+                            break
+
+                        live_budget = max(0, max_live_calls - live_calls_made)
                         if live_budget <= 0 and not is_mock:
                             pass1_stats["budget_exhausted"] += 1
-                            logger.debug(
-                                "  [P1] %s→%s — live call budget exhausted, skipping",
-                                dep_iata,
-                                iata,
-                            )
                             continue
 
+                        dest_data = _extract_dest_data(dest)
+                        if use_window_mode:
+                            fut = executor.submit(
+                                _probe_dest_window,
+                                dep_iata,
+                                dest_data,
+                                window_data_list,
+                                trip_nights,
+                                num_adults,
+                                num_children,
+                                num_rooms,
+                                car_rental_required,
+                                direct_flights_only,
+                                cache_ttl_enabled,
+                                is_mock,
+                                live_budget,
+                                transport_usd,
+                            )
+                        else:
+                            fut = executor.submit(
+                                _probe_dest_normal,
+                                dep_iata,
+                                dest_data,
+                                advance_window_min,
+                                advance_window_max,
+                                trip_nights,
+                                num_adults,
+                                num_children,
+                                num_rooms,
+                                car_rental_required,
+                                direct_flights_only,
+                                cache_ttl_enabled,
+                                is_mock,
+                                live_budget,
+                                transport_usd,
+                            )
+                        fut_to_iata[fut] = dest.iata_code
+
+                    # Wait for futures with a generous timeout (remaining run budget
+                    # + 60 s grace for in-flight calls that started just before
+                    # the deadline).
+                    remaining_run_budget = max(
+                        60.0,
+                        run_timeout_seconds - (time.monotonic() - start_time) + 60,
+                    )
+                    done_set, pending_set = wait(
+                        list(fut_to_iata),
+                        timeout=remaining_run_budget,
+                    )
+
+                    # Collect completed results.
+                    for fut in done_set:
+                        iata_res = fut_to_iata[fut]
                         try:
-                            cost, best_date, calls_used, hits_used = (
-                                find_cheapest_in_window(
-                                    origin_iata=dep_iata,
-                                    destination=dest,
-                                    min_days=advance_window_min,
-                                    max_days=advance_window_max,
-                                    trip_length_nights=trip_nights,
-                                    adults=num_adults,
-                                    children=num_children,
-                                    num_rooms=num_rooms,
-                                    car_rental_required=car_rental_required,
-                                    direct_flights_only=direct_flights_only,
-                                    cache_ttl_enabled=cache_ttl_enabled,
-                                    is_mock=is_mock,
-                                    db_session=session,
-                                    live_calls_remaining=live_budget,
-                                    transport_usd=transport_usd,
-                                )
+                            r_iata, cost, best_date, calls, hits, window_name = (
+                                fut.result(timeout=1)
                             )
                         except Exception as exc:
                             logger.warning(
-                                "  [P1] %s→%s — unhandled exception in window search:"
-                                " %s: %s",
+                                "  [P1] %s→%s — future error: %s: %s",
                                 dep_iata,
-                                iata,
+                                iata_res,
                                 type(exc).__name__,
                                 exc,
                             )
                             pass1_stats["no_price"] += 1
                             continue
-                        live_calls_made += calls_used
-                        cache_hits += hits_used
-                        pass1_stats["cache_hits"] += hits_used
-                        pass1_stats["live_calls"] += calls_used
 
-                        if cost is None or best_date is None:
+                        live_calls_made += calls
+                        cache_hits += hits
+                        pass1_stats["cache_hits"] += hits
+                        pass1_stats["live_calls"] += calls
+
+                        if cost is not None and best_date is not None:
+                            dest_obj = iata_to_dest[r_iata]
+                            pass1_stats["valid"] += 1
+                            pass1_results.append((dest_obj, cost.total, best_date))
+                            if use_window_mode:
+                                _iata_to_window[r_iata] = window_name or "?"
+                                logger.info(
+                                    "  [P1/win] %s→%s — $%.0f (depart %s, window: %s)",
+                                    dep_iata,
+                                    r_iata,
+                                    cost.total,
+                                    best_date,
+                                    window_name,
+                                )
+                            else:
+                                logger.info(
+                                    "  [P1] %s→%s — $%.0f (depart %s)",
+                                    dep_iata,
+                                    r_iata,
+                                    cost.total,
+                                    best_date,
+                                )
+                            # Destination stat updates run on the main session.
+                            if dep_iata == home_airport:
+                                dest_obj.last_queried_at = now_utc
+                                dest_obj.last_known_price_usd = cost.total
+                                dest_obj.last_known_price_date = run_date
+                                dest_obj.query_count = (dest_obj.query_count or 0) + 1
+                        else:
                             pass1_stats["no_price"] += 1
                             logger.info(
-                                "  [P1] %s→%s — no valid price found", dep_iata, iata
+                                "  [P1] %s→%s — no valid price found",
+                                dep_iata,
+                                iata_res,
                             )
-                            continue
 
-                        pass1_stats["valid"] += 1
-                        pass1_results.append((dest, cost.total, best_date))
-                        logger.info(
-                            "  [P1] %s→%s — $%.0f (depart %s)",
+                    # Log and cancel futures that didn't complete before timeout.
+                    for fut in pending_set:
+                        iata_res = fut_to_iata[fut]
+                        logger.warning(
+                            "  [P1] %s→%s — timed out waiting for result",
                             dep_iata,
-                            iata,
-                            cost.total,
-                            best_date,
+                            iata_res,
                         )
-
-                        # Only track destination stats against the home airport.
-                        if dep_iata == home_airport:
-                            dest.last_queried_at = now_utc
-                            dest.last_known_price_usd = cost.total
-                            dest.last_known_price_date = run_date
-                            dest.query_count = (dest.query_count or 0) + 1
+                        pass1_stats["no_price"] += 1
+                        fut.cancel()
 
                 session.commit()
 
