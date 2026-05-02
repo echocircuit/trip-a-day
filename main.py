@@ -19,6 +19,7 @@ sent (or printed to stdout if no RESEND_API_KEY is configured).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import random
@@ -363,6 +364,12 @@ def _probe_dest_window(
             remaining = live_calls_budget - live_calls_used
             if remaining <= 0 and not is_mock:
                 break
+            # Initialize per-window so counts survive an exception without
+            # wiping out those accumulated from previous windows.
+            calls = 0
+            hits = 0
+            cost = None
+            probe_date = None
             try:
                 cost, probe_date, calls, hits = find_cheapest_in_window(
                     origin_iata=dep_iata,
@@ -390,7 +397,6 @@ def _probe_dest_window(
                     type(exc).__name__,
                     exc,
                 )
-                continue
 
             live_calls_used += calls
             cache_hits_used += hits
@@ -465,6 +471,12 @@ def _probe_dest_normal(
         region=dest_data["region"],
     )
 
+    # Initialize outside try so counts survive an unexpected exception from
+    # find_cheapest_in_window (e.g. a bad store_flight_cache write).
+    calls: int = 0
+    hits: int = 0
+    cost = None
+    best_date = None
     with SessionFactory() as thread_session:
         try:
             cost, best_date, calls, hits = find_cheapest_in_window(
@@ -488,7 +500,6 @@ def _probe_dest_normal(
                 thread_session.commit()
             except Exception:
                 thread_session.rollback()
-            return iata, cost, best_date, calls, hits, None
         except Exception as exc:
             logger.warning(
                 "  [P1] %s→%s — unhandled exception in window search: %s: %s",
@@ -497,7 +508,9 @@ def _probe_dest_normal(
                 type(exc).__name__,
                 exc,
             )
-            return iata, None, None, 0, 0, None
+            with contextlib.suppress(Exception):
+                thread_session.rollback()
+    return iata, cost, best_date, calls, hits, None
 
 
 def _window_pass1_for_departure(
