@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Phase: Phase 7 — Multi-Airport Departure
-## Status: Complete (PR #21 open, pending merge)
-## Last updated: 2026-04-23 — 155 unit tests passing; post-Phase-7 polish complete
+## Current Phase: fix/pass1-live-calls-counter
+## Status: In progress
+## Last updated: 2026-05-02 — 354 tests passing
 
 ### Phase 1 Checklist
 

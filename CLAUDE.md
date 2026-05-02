@@ -245,6 +245,9 @@ main.py
 | `MAX_PROBES_PER_DESTINATION = 7` in `window_search.py` | Hard upper bound so that if `_DEFAULT_PROBE_COUNT` is ever increased, per-destination call count stays bounded without code changes. |
 | Travel window seed changed to `enabled=False` | An active travel window multiplies the API call count (N_windows × destinations × probes); enabling it should be a deliberate choice. Existing users with enabled windows are unaffected; only new installs get the disabled default. |
 | `.streamlit/config.toml` sets `address = "0.0.0.0"` | Binds Streamlit to all interfaces so the UI is reachable from other devices on the local network (tablets, phones). `secrets.toml` added to `.gitignore`. |
+| `live_calls_used += 1` increments BEFORE `get_flight_offers()` in `window_search.py` | `record_api_call()` fires before `get_flights()` in `fetcher.py`; the local counter must match that timing so `pass1_stats["live_calls"]` agrees with `api_usage.calls_made`. Previously the increment was after the call, so exceptions between those two lines would leave the counters misaligned. |
+| `_probe_dest_normal` initialises `calls/hits` outside the try block | Previously returned hard-coded `(0, 0)` on any exception from `find_cheapest_in_window`; now the outer variables survive the except branch, preserving whatever partial counts were set before the exception. |
+| `_probe_dest_window` initialises per-window `calls/hits=0` before each try/except | Previously the `continue` in the except block skipped `live_calls_used += calls`, discarding counts for the failed window. Accumulation now always runs (with `calls=0` for a failed window), preserving counts from earlier windows in the same destination pass. |
 
 ## Key file map
 

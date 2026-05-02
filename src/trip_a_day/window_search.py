@@ -134,6 +134,11 @@ def find_cheapest_in_window(
                 )
                 continue
 
+            # Increment before the call so the local counter stays in sync with
+            # record_api_call(), which also fires before get_flights() in fetcher.py.
+            if not is_mock:
+                live_calls_used += 1
+
             flight_offer = get_flight_offers(
                 origin=origin_iata,
                 destination=iata,
@@ -145,8 +150,6 @@ def find_cheapest_in_window(
                 direct_only=direct_flights_only,
                 is_mock=is_mock,
             )
-            if not is_mock:
-                live_calls_used += 1
 
             if flight_offer is None:
                 logger.debug(
