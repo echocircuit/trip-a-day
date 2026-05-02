@@ -54,3 +54,6 @@ uv.lock
 # Project-specific build artifacts
 *.so
 *.dylib
+
+# Streamlit secrets (may contain API keys)
+.streamlit/secrets.toml
