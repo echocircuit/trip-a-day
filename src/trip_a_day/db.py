@@ -336,10 +336,37 @@ def _migrate_schema() -> None:
         conn.commit()
 
 
+def _migrate_preferences(session: Session | None = None) -> None:
+    """Fix up stale preference values after options are removed or renamed.
+
+    Each entry is idempotent: runs on every startup but only updates rows
+    that still hold the old value.
+
+    Pass a *session* explicitly when calling from tests to operate on an
+    in-memory DB. Omit it (default) to let the function open its own
+    SessionFactory connection to the real database.
+    """
+
+    def _run(s: Session) -> None:
+        # google_hotels removed 2026-05-01: SPA ignores URL date params.
+        pref = s.get(Preference, "preferred_hotel_site")
+        if pref is not None and pref.value == "google_hotels":
+            pref.value = "booking_com"
+            pref.updated_at = datetime.now(UTC)
+
+    if session is not None:
+        _run(session)
+    else:
+        with SessionFactory() as s:
+            _run(s)
+            s.commit()
+
+
 def init_db() -> None:
     """Create all tables if they do not exist and run schema migrations."""
     Base.metadata.create_all(engine)
     _migrate_schema()
+    _migrate_preferences()
     _seed_destinations()
     _seed_travel_windows()
 
