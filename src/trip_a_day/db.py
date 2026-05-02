@@ -254,7 +254,7 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     # Phase 7 — multi-airport departure
     "irs_mileage_rate": "0.70",
     # Booking preferences
-    "preferred_hotel_site": "google_hotels",
+    "preferred_hotel_site": "booking_com",
     "preferred_car_site": "kayak",
     "preferred_hotel_site_manual_url": "",
     "preferred_car_site_manual_url": "",

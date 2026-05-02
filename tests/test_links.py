@@ -111,28 +111,6 @@ _CHECKOUT_OCT = date(2026, 10, 9)
 
 
 class TestBuildHotelUrl:
-    def test_google_hotels_returns_nonempty(self):
-        url = build_hotel_url(
-            "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "google_hotels"
-        )
-        assert url and isinstance(url, str)
-
-    def test_google_hotels_contains_expected_params(self):
-        url = build_hotel_url(
-            "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "google_hotels"
-        )
-        assert "google.com/travel/hotels" in url
-        assert "check_in_date=2026-06-15" in url
-        assert "check_out_date=2026-06-22" in url
-
-    def test_google_hotels_checkin_iso_format(self):
-        """Google Hotels requires check_in_date/check_out_date params in YYYY-MM-DD format."""
-        url = build_hotel_url(
-            "Tokyo", "Japan", _CHECKIN_OCT, _CHECKOUT_OCT, 1, 0, 1, "google_hotels"
-        )
-        assert "check_in_date=2026-10-05" in url
-        assert "check_out_date=2026-10-09" in url
-
     def test_booking_com_returns_nonempty(self):
         url = build_hotel_url(
             "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "booking_com"
@@ -182,15 +160,12 @@ class TestBuildHotelUrl:
 
     def test_checkout_date_present_in_all_sites(self):
         """Checkout date must appear in every supported site's URL."""
-        for site in ("google_hotels", "booking_com", "expedia"):
+        for site in ("booking_com", "expedia"):
             url = build_hotel_url(
                 "Tokyo", "Japan", _CHECKIN_OCT, _CHECKOUT_OCT, 1, 0, 1, site
             )
-            # Each site encodes checkout differently; verify 2026 and 9 both appear
             assert "2026" in url, f"{site}: year missing from checkout"
-            if site == "google_hotels":
-                assert "check_out_date=2026-10-09" in url
-            elif site == "booking_com":
+            if site == "booking_com":
                 assert "checkout_monthday=9" in url
             elif site == "expedia":
                 assert "endDate=10/09/2026" in url
@@ -201,7 +176,7 @@ class TestBuildHotelUrl:
 
         checkin_obj = dt(2026, 10, 5)
         url_obj = build_hotel_url(
-            "Tokyo", "Japan", checkin_obj, dt(2026, 10, 9), 1, 0, 1, "google_hotels"
+            "Tokyo", "Japan", checkin_obj, dt(2026, 10, 9), 1, 0, 1, "booking_com"
         )
         url_iso = build_hotel_url(
             "Tokyo",
@@ -211,7 +186,7 @@ class TestBuildHotelUrl:
             1,
             0,
             1,
-            "google_hotels",
+            "booking_com",
         )
         assert url_obj == url_iso
 

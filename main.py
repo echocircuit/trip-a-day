@@ -170,7 +170,7 @@ def _stale_cache_fallback(
     car_rental_required: bool,
     trip_nights: int,
     preferred_car_site: str,
-    preferred_hotel_site: str = "google_hotels",
+    preferred_hotel_site: str = "booking_com",
 ) -> list[TripCandidate]:
     """Build TripCandidates from stale (possibly TTL-expired) cached prices.
 
@@ -452,7 +452,7 @@ def run(triggered_by: str = "manual") -> None:
         num_adults = get_int(session, "num_adults")
         num_children = get_int(session, "num_children")
         num_rooms = get_int(session, "num_rooms")
-        preferred_hotel_site = get_or(session, "preferred_hotel_site", "google_hotels")
+        preferred_hotel_site = get_or(session, "preferred_hotel_site", "booking_com")
         preferred_car_site = get_or(session, "preferred_car_site", "kayak")
         ranking_strategy = get(session, "ranking_strategy")
         direct_flights_only = get_bool(session, "direct_flights_only")

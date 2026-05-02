@@ -6,7 +6,6 @@ they never build booking URLs directly.
 URL patterns verified 2026-04-24:
   google_flights : ✓ tfs= protobuf format — origin, destination, and dates
                      embedded in Base64 protobuf; pre-fills correctly in browser
-  google_hotels  : ✓  (Google Travel Hotels search with check_in_date/check_out_date params)
   booking_com    : ✓  (Booking.com searchresults with split date params)
   expedia_hotels : ✓  (Expedia Hotel-Search with MM/DD/YYYY dates)
   kayak          : ✓  (Kayak /cars/{IATA}/{date-10h}/{date-10h} pattern)
@@ -17,15 +16,15 @@ Google Flights note: The old #flt= URL fragment format stopped working around
 value encodes origin, destination, dates, and passenger counts inside a protobuf
 binary; airport codes and ISO dates are verifiable by base64-decoding the blob.
 
-Google Hotels note: The correct date parameters are check_in_date and check_out_date
-(not checkin/checkout). YYYY-MM-DD format is correct. Verified against SerpAPI and
-SearchAPI documentation for google.com/travel/hotels.
+Google Hotels note: Removed 2026-05-01. Google Hotels is a SPA that reads dates
+from an internal qs= protobuf parameter (not check_in_date/check_out_date query
+params). URL parameters are silently ignored — dates displayed always match the
+Google session default, not the link. Booking.com is the default hotel site.
 
 Hotel URL patterns verified 2026-05-01:
-  google_hotels: check_in_date=2026-10-05&check_out_date=2026-10-09 (YYYY-MM-DD)
-  booking_com:   checkin_year=2026&checkin_month=10&checkin_monthday=5 (no leading zeros)
-  expedia:       startDate=10/05/2026&endDate=10/09/2026 (MM/DD/YYYY)
-Note: preferred_hotel_site DB preference now wired through fetcher.py → main.py.
+  booking_com: checkin_year=2026&checkin_month=10&checkin_monthday=5 (no leading zeros)
+  expedia:     startDate=10/05/2026&endDate=10/09/2026 (MM/DD/YYYY)
+Note: preferred_hotel_site DB preference wired through fetcher.py → main.py.
 """
 
 from __future__ import annotations
@@ -89,19 +88,11 @@ def build_hotel_url(
 ) -> str:
     """Return a hotel search URL for *site*.
 
-    Supported sites: google_hotels, booking_com, expedia, manual.
+    Supported sites: booking_com, expedia, manual.
     Raises ValueError for unknown *site* identifiers.
     """
     city_enc = quote_plus(city)
     country_enc = quote_plus(country)
-
-    if site == "google_hotels":
-        return (
-            f"https://www.google.com/travel/hotels?q=hotels+in+{city_enc}"
-            f"&check_in_date={checkin.isoformat()}"
-            f"&check_out_date={checkout.isoformat()}"
-            f"&guests={adults}"
-        )
 
     if site == "booking_com":
         return (

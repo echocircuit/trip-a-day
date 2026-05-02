@@ -229,7 +229,8 @@ main.py
 | `travel_window_name` column on `RunLog` | Nullable TEXT; written only when a window produced the winning trip; NULL for normal-mode runs and fallback runs |
 | `_seed_travel_windows()` inserts only when table is empty | Idempotent seeder prevents duplicate "Fall Break 2026" rows if `init_db()` is called repeatedly; user can delete the seed row without it reappearing |
 | `preferred_hotel_site` wired through `get_hotel_offers()` | Previously hardcoded to `"google_hotels"` in `fetcher.py`; now reads from DB preference so Booking.com and Expedia URLs are actually generated when the user selects them |
-| Hotel URL date formats verified per site | google_hotels: YYYY-MM-DD via `.isoformat()`; booking_com: split year/month/day without leading zeros; expedia: MM/DD/YYYY with `%02d` padding |
+| Google Hotels removed as a hotel site option | Google Hotels is a SPA that uses an internal `qs=` protobuf for dates; `check_in_date`/`check_out_date` URL params are silently ignored. Default changed to `booking_com`. |
+| Hotel URL date formats verified per site | booking_com: split year/month/day without leading zeros; expedia: MM/DD/YYYY with `%02d` padding |
 | Chart lookback extended to 30 days for both series | 7-day S2 window was too short for new installs; all-time S1 could load unbounded history; 30 days is a practical balance. Both series require ≥3 points. |
 | City-name annotations removed from chart Series 2 | Annotations were small and overlapping with no unique information beyond what the legend provides; removed `annotate()` call and the `Destination` join from the S2 query |
 | `flight_data_mode` DB preference, `get_flight_data_mode(session)` in `fetcher.py` | Promotes `FLIGHT_DATA_MODE` from env-var-only to a DB preference so the UI toggle takes effect without restarting Streamlit. Priority: DB → env var → "mock". |

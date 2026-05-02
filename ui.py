@@ -606,9 +606,8 @@ def _preferences() -> None:
 
         st.subheader("Booking Preferences")
         st.caption("Choose which booking site links are used in the daily email.")
-        _hotel_sites = ["google_hotels", "booking_com", "expedia", "manual"]
+        _hotel_sites = ["booking_com", "expedia", "manual"]
         _hotel_site_labels = {
-            "google_hotels": "Google Hotels",
             "booking_com": "Booking.com",
             "expedia": "Expedia",
             "manual": "Manual URL",
@@ -620,7 +619,7 @@ def _preferences() -> None:
             "manual": "Manual URL",
         }
         bk1, bk2 = st.columns(2)
-        _hotel_site_default = prefs.get("preferred_hotel_site", "google_hotels")
+        _hotel_site_default = prefs.get("preferred_hotel_site", "booking_com")
         preferred_hotel_site = bk1.selectbox(
             "Hotel booking site",
             _hotel_sites,
