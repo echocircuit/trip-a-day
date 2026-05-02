@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 # Number of departure dates to probe across the booking window on the first pass.
 _DEFAULT_PROBE_COUNT = 3
 
+# Hard upper bound on probes per destination regardless of probe_count argument,
+# to prevent runaway calls if probe_count is ever increased.
+MAX_PROBES_PER_DESTINATION = 7
+
 
 def _probe_dates(today: date, min_days: int, max_days: int, n: int) -> list[date]:
     """Return n dates spread evenly across [today+min_days, today+max_days].
@@ -71,7 +75,7 @@ def find_cheapest_in_window(
     best_cost_breakdown is None if no valid result was found.
     """
     today = date.today()
-    probe_count = _DEFAULT_PROBE_COUNT
+    probe_count = min(_DEFAULT_PROBE_COUNT, MAX_PROBES_PER_DESTINATION)
     probes = _probe_dates(today, min_days, max_days, probe_count)
 
     iata = destination.iata_code
