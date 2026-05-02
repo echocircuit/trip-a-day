@@ -335,6 +335,12 @@ def _migrate_schema() -> None:
         for col_name, col_def in _TRIP_NEW_COLUMNS:
             if col_name not in trip_cols:
                 conn.execute(text(f"ALTER TABLE trips ADD COLUMN {col_name} {col_def}"))
+                # When is_mock is first added, backfill all existing rows as mock.
+                # Every trip recorded before this column existed was a test run;
+                # they have is_mock=0 (SQLite DEFAULT substitution) and would
+                # otherwise pass the is_mock == False chart filter as if live.
+                if col_name == "is_mock":
+                    conn.execute(text("UPDATE trips SET is_mock = 1"))
         conn.commit()
 
 
