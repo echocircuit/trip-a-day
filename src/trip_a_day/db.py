@@ -335,12 +335,24 @@ def _migrate_schema() -> None:
         for col_name, col_def in _TRIP_NEW_COLUMNS:
             if col_name not in trip_cols:
                 conn.execute(text(f"ALTER TABLE trips ADD COLUMN {col_name} {col_def}"))
-                # When is_mock is first added, backfill all existing rows as mock.
-                # Every trip recorded before this column existed was a test run;
-                # they have is_mock=0 (SQLite DEFAULT substitution) and would
-                # otherwise pass the is_mock == False chart filter as if live.
                 if col_name == "is_mock":
                     conn.execute(text("UPDATE trips SET is_mock = 1"))
+
+        # One-time backfill for DBs where is_mock column already existed before
+        # the backfill was introduced. SQLite applies DEFAULT 0 to old rows, so
+        # they appear as is_mock=0 (live) even though they predate mock tracking.
+        # The marker prevents this from running on every startup after the first time.
+        backfill_done = conn.execute(
+            text("SELECT value FROM preferences WHERE key = '_is_mock_backfill_done'")
+        ).fetchone()
+        if backfill_done is None:
+            conn.execute(text("UPDATE trips SET is_mock = 1 WHERE is_mock = 0"))
+            conn.execute(
+                text(
+                    "INSERT OR IGNORE INTO preferences (key, value)"
+                    " VALUES ('_is_mock_backfill_done', '1')"
+                )
+            )
         conn.commit()
 
 
