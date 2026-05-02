@@ -727,6 +727,35 @@ def _preferences() -> None:
             help="A warning banner is added to outgoing emails when this percentage of the monthly limit is reached.",
         )
 
+        st.subheader("Performance")
+        st.caption(
+            "Controls how many destinations are queried in parallel and how long a "
+            "run is allowed to take. Increasing concurrency speeds up runs but may "
+            "increase the chance of Google rate-limiting. Set to 1 for fully "
+            "sequential behavior."
+        )
+        max_concurrent_val = st.number_input(
+            "Parallel destination queries",
+            min_value=1,
+            max_value=10,
+            value=_int("max_concurrent_flight_queries", 3),
+            help="Number of destinations queried simultaneously. Default 3 is conservative.",
+        )
+        flight_timeout_val = st.number_input(
+            "Per-request timeout (seconds)",
+            min_value=5,
+            max_value=120,
+            value=_int("flight_query_timeout_seconds", 10),
+            help="Maximum time to wait for a single Google Flights response before skipping.",
+        )
+        run_timeout_val = st.number_input(
+            "Run timeout (minutes)",
+            min_value=1,
+            max_value=120,
+            value=_int("run_timeout_minutes", 20),
+            help="Hard cap on total run duration. Pass 1 stops early if this is exceeded.",
+        )
+
         st.subheader("Display")
         timezone_val = st.text_input(
             "Timezone",
@@ -832,6 +861,13 @@ def _preferences() -> None:
                 set_pref(s, "scheduled_run_time", run_time_val.strftime("%H:%M"))
                 set_pref(s, "timezone", timezone_val.strip())
                 set_pref(s, "flight_data_mode", flight_data_mode_val)
+                set_pref(
+                    s, "max_concurrent_flight_queries", str(int(max_concurrent_val))
+                )
+                set_pref(
+                    s, "flight_query_timeout_seconds", str(int(flight_timeout_val))
+                )
+                set_pref(s, "run_timeout_minutes", str(int(run_timeout_val)))
                 s.commit()
             st.success(
                 "Preferences saved. "
