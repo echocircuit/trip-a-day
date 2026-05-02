@@ -28,7 +28,17 @@ _SEED_AIRPORTS_PATH = _PROJECT_ROOT / "data" / "seed_airports.json"
 
 
 def _engine():
-    return create_engine(f"sqlite:///{DB_PATH}", echo=False)
+    e = create_engine(
+        f"sqlite:///{DB_PATH}",
+        echo=False,
+        # 30-second busy timeout so concurrent threads don't deadlock on writes.
+        connect_args={"timeout": 30},
+    )
+    with e.connect() as conn:
+        # WAL mode allows concurrent readers alongside one writer — required for
+        # the parallel Pass 1 thread pool to cache results without deadlocking.
+        conn.execute(text("PRAGMA journal_mode=WAL"))
+    return e
 
 
 engine = _engine()
@@ -265,6 +275,10 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     # DB preference takes priority over FLIGHT_DATA_MODE env var so the UI toggle
     # takes effect without restarting Streamlit.
     "flight_data_mode": "mock",
+    # Performance tuning (conservative defaults to avoid Google rate-limiting)
+    "max_concurrent_flight_queries": "3",
+    "flight_query_timeout_seconds": "10",
+    "run_timeout_minutes": "20",
 }
 
 # Public alias for use in tests and tooling.
@@ -516,9 +530,11 @@ def _seed_travel_windows() -> None:
                 latest_return=date(2026, 10, 9),
                 buffer_days_start=1,
                 buffer_days_end=2,
-                enabled=True,
+                # Seeded disabled: active windows multiply the API call count
+                # (N_windows x destinations x probes). Enable explicitly in the UI.
+                enabled=False,
                 created_at=datetime.now(UTC),
-                notes="Default fall break window. Edit or disable as needed.",
+                notes="Example window — enable in Travel Windows settings when ready.",
             )
         )
         session.commit()
