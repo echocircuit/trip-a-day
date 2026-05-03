@@ -189,7 +189,8 @@ def _email_limit_warning_html(db_session: Session | None) -> str:
             f" &mdash; the counter resets automatically on the 1st.\n"
             f"  </div>\n"
         )
-    except Exception:
+    except Exception as exc:
+        logger.warning("Could not render email limit warning banner: %s", exc)
         return ""
 
 

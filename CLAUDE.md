@@ -41,7 +41,11 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 ## Current phase
 
-**feature/performance-fix — In progress.** Root cause: sequential fli calls (~49s each) with no concurrency, compounded by 2 active travel windows multiplying the batch (2 windows × 15 dests × 3 probes = 90 sequential calls = 70-min run). Fixes: WAL-mode SQLite + per-thread sessions for thread safety; `ThreadPoolExecutor` parallel Pass 1 (3 workers default); random jitter per call to stagger TLS connections; global run timeout (20 min); probe hard cap (7/dest); travel window seed changed to `enabled=False`; Performance preferences exposed in UI; Streamlit network config added. 350 tests passing (346 prior + 7 new performance; note some counted in multiple groups above).
+**v1.0 pre-release review — Complete.** Full diagnostic read of all source files; 2 must-fix and 5 should-fix items resolved. Fixes: `build_hotel_url`/`build_car_url` `site="manual"` crash; `sys.exit(1)` → `sys.exit(0)` for Pass 2 no-candidates; removed `_window_pass1_for_departure` dead code; `hotel_is_estimate=True` in `build_cost_breakdown`; removed phantom `numpy`/`scipy` deps; added exception logging to `_email_limit_warning_html`; documented `DB_PATH` in `.env.example`. 357 tests passing.
+
+**Phase 9 — Complete.** Polish, hardening, and 1.0 release prep: README audited (scheduler launchd plist example, fli reference, preferences table, project structure); CHANGELOG.md added; CONTRIBUTING.md expanded (dev setup, test commands, PR checklist); version bumped to 1.0.0; spec reviewed and Phase 9 marked complete; Linux headless smoke tests moved to Section 14 Future Work. 350 tests passing (unchanged — Phase 9 is docs-only).
+
+**feature/performance-fix — Complete.** Root cause: sequential fli calls (~49s each) with no concurrency, compounded by 2 active travel windows multiplying the batch (2 windows × 15 dests × 3 probes = 90 sequential calls = 70-min run). Fixes: WAL-mode SQLite + per-thread sessions for thread safety; `ThreadPoolExecutor` parallel Pass 1 (3 workers default); random jitter per call to stagger TLS connections; global run timeout (20 min); probe hard cap (7/dest); travel window seed changed to `enabled=False`; Performance preferences exposed in UI; Streamlit network config added. 350 tests passing (346 prior + 7 new performance; note some counted in multiple groups above).
 
 **feature/hotel-links-chart-cleanup — Complete.** Three contained fixes: (1) hotel deep-link date formatting verified + preferred_hotel_site preference wired through; (2) chart 30-day lookback + city-label removal; (3) flight_data_mode promoted to DB preference with UI toggle. 346 tests passing (320 prior + 5 new links + 5 new charts + 8 new settings; prior count: 190 unit + 34 links + 11 imports + 2 smoke + 17 charts + 8 pass1-resilience + 7 api-counter + 16 email-limits + 11 utils + 28 travel-windows + 6 main-flex + 8 main-smoke + 8 settings; note some tests counted in multiple groups above).
 
@@ -222,10 +226,10 @@ main.py
 | CSV import skips existing IATA codes | Re-importing a CSV that overlaps with seed or prior custom data is a no-op for existing rows; prevents duplicate inserts without raising an error |
 | Per-diem preview rendered outside the form | Streamlit forms only update on submit; showing the match result outside the form gives live feedback as the user types the city name |
 | Destinations page in its own sidebar section (not in Preferences) | The pool manager, add-custom form, and CSV import are operationally distinct from the scalar preference inputs; separating them avoids a very long Preferences page |
-| `timezone` preference (default `America/Chicago`) | Stored as IANA tz string; validated with `ZoneInfo(tz_str)` on save (raises `ZoneInfoNotFoundError` on invalid input); UI blocks save and shows error when invalid |
+| `timezone` preference (default `America/New_York`) | Stored as IANA tz string; validated with `ZoneInfo(tz_str)` on save (raises `ZoneInfoNotFoundError` on invalid input); UI blocks save and shows error when invalid |
 | Naive datetime assumed UTC in utils.py helpers | `run_at` in RunLog is stored without tz; assuming UTC is correct for all server-generated timestamps and consistent with APScheduler behaviour |
 | `TravelWindow` ORM model in `db.py` | New table `travel_windows`; `effective_start`/`effective_end` are computed `@property` values (not columns) to keep effective dates in sync without a stored field |
-| `_window_pass1_for_departure()` helper in `main.py` | Encapsulates per-departure-airport window logic; returns `(pass1_results, live_calls, cache_hits, iata_to_window_name)` so caller accumulates counters without shared mutable state |
+| `_probe_dest_window()` / `_probe_dest_normal()` thread entry points in `main.py` | Each destination is probed in a thread via `ThreadPoolExecutor`; functions accept pre-extracted plain dicts (not ORM objects) and open their own DB sessions; results are collected by `run()` |
 | Two-pass retry for travel windows | Window mode runs first (`_search_pass=0`); if no prices found, `window_fallback_used=True` is set and a normal advance-window search runs (`_search_pass=1`). Live API budget is shared across both passes |
 | `_travel_window_html/plain` private helpers in notifier.py | Keep window card rendering separate from the main HTML/plain builders; both accept `(trip, window_name, window_fallback_used)` so fallback flag takes priority over name |
 | `travel_window_name` column on `RunLog` | Nullable TEXT; written only when a window produced the winning trip; NULL for normal-mode runs and fallback runs |
@@ -295,7 +299,7 @@ main.py
 | `tests/test_api_counter.py` | API counter consistency: mock/live modes, exception path counting, window search double-count prevention (7 tests) |
 | `tests/test_notifier_limits.py` | Monthly email limit enforcement: get/record helpers, _check_email_limit, warning banner, RunLog blocking (16 tests) |
 | `tests/test_utils.py` | Timezone conversion helpers: CST/CDT/EST/BST conversions, naive-as-UTC, invalid tz raises, format shape (11 tests) |
-| `tests/test_travel_windows.py` | Travel window model properties, `_window_pass1_for_departure` logic, notifier HTML/plain helpers, `send_trip_notification` signature, `_build_html/_build_plain` thread-through (28 tests) |
+| `tests/test_travel_windows.py` | Travel window model properties, `_probe_dest_window` behavior (best result selection, exception handling), notifier HTML/plain helpers, `send_trip_notification` signature, `_build_html/_build_plain` thread-through (27 tests) |
 | `tests/test_settings.py` | `get_flight_data_mode()` priority logic: DB > env var > default; invalid value fallback; seed default (8 tests) |
 | `tests/test_performance.py` | Probe cap enforcement, travel window call-count correctness (2 windows × 3 dests = 6 calls), max_workers=1 sequential behavior, run timeout submission guard (7 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
@@ -334,6 +338,16 @@ python main.py
 - Google Flights occasionally fails for specific routes (returns no data); those destinations are silently skipped.
 - Mock flight prices are static fixtures; they don't reflect real market prices or trends.
 - **fast-flights deprecated (2026-04-26):** `fast-flights==2.2` was fully replaced by `fli` (PyPI: `flights>=0.8.4`). fast-flights was returning 401 `{"error":"no token provided"}` on every live call — Google changed their internal auth endpoint. fli uses primp for Chrome TLS mimicry and works correctly as of the migration date.
+
+## Spec discrepancies (Phase 9 review)
+
+The following parts of `trip_of_the_day_spec.md` are historical artifacts predating library migrations and are **not updated** per the spec's read-only authorship policy:
+
+- Architecture diagram (Section 3) still shows "Tequila" as the flight data source — actual source is `fli`
+- Section 4.1 references `fast-flights` by name and shows the old Python usage example
+- Section 4.2 lists seed list size as "75–100 airports" — current size is 302
+- Section 6 module list predates `selector.py`, `filters.py`, `cache.py`, `window_search.py`, `links.py`, `utils.py`, `charts.py`, `destination_input.py`
+- Section 11 lists `TEQUILA_API_KEY` in the env vars template — this key is unused; `fli` requires no key
 
 ## Branch Convention
 

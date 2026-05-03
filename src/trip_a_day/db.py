@@ -223,7 +223,7 @@ class TravelWindow(Base):
 
 
 _PREFERENCE_DEFAULTS: dict[str, str] = {
-    "home_airport": "HSV",
+    "home_airport": "JFK",
     "trip_length_nights": "7",
     "trip_length_flex_nights": "0",
     "advance_days": "7",  # kept for backwards-compat; pipeline now uses min/max below
@@ -267,10 +267,8 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     # Booking preferences
     "preferred_hotel_site": "booking_com",
     "preferred_car_site": "kayak",
-    "preferred_hotel_site_manual_url": "",
-    "preferred_car_site_manual_url": "",
     # Display preferences
-    "timezone": "America/Chicago",
+    "timezone": "America/New_York",
     # Flight data mode: "mock" uses fixture data, "live" queries Google Flights.
     # DB preference takes priority over FLIGHT_DATA_MODE env var so the UI toggle
     # takes effect without restarting Streamlit.

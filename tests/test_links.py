@@ -6,8 +6,6 @@ import base64
 import re
 from datetime import date
 
-import pytest
-
 from trip_a_day.links import build_car_url, build_flight_url, build_hotel_url
 
 _DEPART = date(2026, 6, 15)
@@ -190,11 +188,32 @@ class TestBuildHotelUrl:
         )
         assert url_obj == url_iso
 
-    def test_unknown_site_raises_value_error(self):
-        with pytest.raises(ValueError, match="Unknown hotel site"):
-            build_hotel_url(
-                "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "unknown_site"
-            )
+    def test_custom_url_returned_as_is(self):
+        """Any value not matching a named site is returned as-is (accept_new_options URL)."""
+        custom = "https://example.com/hotels?city=Paris"
+        url = build_hotel_url("Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, custom)
+        assert url == custom
+
+    def test_custom_url_http_returned_as_is(self):
+        custom = "http://example.com/hotels"
+        url = build_hotel_url("Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, custom)
+        assert url == custom
+
+    def test_bare_domain_gets_https_prepended(self):
+        url = build_hotel_url(
+            "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "hilton.com"
+        )
+        assert url == "https://hilton.com"
+
+    def test_bare_path_gets_https_prepended(self):
+        url = build_hotel_url(
+            "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "hilton.com/page"
+        )
+        assert url == "https://hilton.com/page"
+
+    def test_empty_string_returned_as_is(self):
+        url = build_hotel_url("Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "")
+        assert url == ""
 
 
 class TestBuildCarUrl:
@@ -217,6 +236,25 @@ class TestBuildCarUrl:
         assert "expedia.com/carsearch" in url
         assert "06/15/2026" in url
 
-    def test_unknown_site_raises_value_error(self):
-        with pytest.raises(ValueError, match="Unknown car site"):
-            build_car_url("CDG", "Paris", _DEPART, _RETURN, "unknown_site")
+    def test_custom_url_returned_as_is(self):
+        """Any value not matching a named site is returned as-is (accept_new_options URL)."""
+        custom = "https://example.com/cars?city=Paris"
+        url = build_car_url("CDG", "Paris", _DEPART, _RETURN, custom)
+        assert url == custom
+
+    def test_custom_url_http_returned_as_is(self):
+        custom = "http://example.com/cars"
+        url = build_car_url("CDG", "Paris", _DEPART, _RETURN, custom)
+        assert url == custom
+
+    def test_bare_domain_gets_https_prepended(self):
+        url = build_car_url("CDG", "Paris", _DEPART, _RETURN, "rentalcars.com")
+        assert url == "https://rentalcars.com"
+
+    def test_bare_path_gets_https_prepended(self):
+        url = build_car_url("CDG", "Paris", _DEPART, _RETURN, "rentalcars.com/results")
+        assert url == "https://rentalcars.com/results"
+
+    def test_empty_string_returned_as_is(self):
+        url = build_car_url("CDG", "Paris", _DEPART, _RETURN, "")
+        assert url == ""

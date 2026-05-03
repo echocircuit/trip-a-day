@@ -88,8 +88,9 @@ def build_hotel_url(
 ) -> str:
     """Return a hotel search URL for *site*.
 
-    Supported sites: booking_com, expedia, manual.
-    Raises ValueError for unknown *site* identifiers.
+    Supported named sites: booking_com, expedia.
+    Any other value is treated as a direct URL and returned as-is — this is
+    how user-typed URLs from the accept_new_options selectbox are handled.
     """
     city_enc = quote_plus(city)
     country_enc = quote_plus(country)
@@ -123,7 +124,11 @@ def build_hotel_url(
             f"&children={children}"
         )
 
-    raise ValueError(f"Unknown hotel site: {site!r}")
+    # User-supplied URL (typed via accept_new_options selectbox).
+    # Prepend https:// if no scheme so bare domains don't become relative paths.
+    if site and not site.startswith(("http://", "https://")):
+        return f"https://{site}"
+    return site
 
 
 def build_car_url(
@@ -135,8 +140,9 @@ def build_car_url(
 ) -> str:
     """Return a car rental search URL for *site*.
 
-    Supported sites: kayak, expedia_cars, manual.
-    Raises ValueError for unknown *site* identifiers.
+    Supported named sites: kayak, expedia_cars.
+    Any other value is treated as a direct URL and returned as-is — this is
+    how user-typed URLs from the accept_new_options selectbox are handled.
     """
     city_enc = quote_plus(city)
     pickup_str = pickup_date.isoformat()
@@ -153,4 +159,8 @@ def build_car_url(
         ri = f"{return_date.month:02d}/{return_date.day:02d}/{return_date.year}"
         return f"https://www.expedia.com/carsearch?locn={city_enc}&d1={pi}&d2={ri}"
 
-    raise ValueError(f"Unknown car site: {site!r}")
+    # User-supplied URL (typed via accept_new_options selectbox).
+    # Prepend https:// if no scheme so bare domains don't become relative paths.
+    if site and not site.startswith(("http://", "https://")):
+        return f"https://{site}"
+    return site

@@ -71,9 +71,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("main")
 
-# HSV coordinates — fallback if home airport has no coordinates in DB.
-_HSV_LAT = 34.6418
-_HSV_LON = -86.7751
+# JFK coordinates — fallback if home airport has no coordinates in DB.
+_DEFAULT_LAT = 40.6413
+_DEFAULT_LON = -73.7781
 
 # Maximum random delay (seconds) added before each live fli call in parallel mode.
 # Staggers simultaneous TLS connections so they don't all hit Google at once.
@@ -133,7 +133,7 @@ def _store_results(
 
 
 def _connectivity_ok(session, is_mock: bool) -> bool:
-    """Make one test call to Google Flights (HSV→ATL) to verify live API access.
+    """Make one test call to Google Flights (JFK→LAX) to verify live API access.
 
     Skipped entirely in mock mode. Logs a WARNING on failure but never aborts
     the run — cached prices may still be usable even when live calls are broken.
@@ -142,8 +142,8 @@ def _connectivity_ok(session, is_mock: bool) -> bool:
         return True
     test_date = date.today() + timedelta(days=7)
     result = get_flight_offers(
-        origin="HSV",
-        destination="ATL",
+        origin="JFK",
+        destination="LAX",
         depart_date=test_date,
         return_date=test_date + timedelta(days=7),
         adults=1,
@@ -154,12 +154,12 @@ def _connectivity_ok(session, is_mock: bool) -> bool:
     )
     if result is None:
         logger.warning(
-            "Connectivity pre-check: test call HSV→ATL returned no result"
+            "Connectivity pre-check: test call JFK→LAX returned no result"
             " — live Google Flights API may be degraded or blocked."
         )
         return False
     logger.info(
-        "Connectivity pre-check: OK (HSV→ATL ≈ $%.0f on %s).",
+        "Connectivity pre-check: OK (JFK→LAX ≈ $%.0f on %s).",
         result.price_total,
         test_date,
     )
@@ -513,135 +513,6 @@ def _probe_dest_normal(
     return iata, cost, best_date, calls, hits, None
 
 
-def _window_pass1_for_departure(
-    *,
-    session,
-    dep_iata: str,
-    batch: list,
-    active_windows: list,
-    trip_nights: int,
-    num_adults: int,
-    num_children: int,
-    num_rooms: int,
-    car_rental_required: bool,
-    direct_flights_only: bool,
-    cache_ttl_enabled: bool,
-    is_mock: bool,
-    max_live_calls: int,
-    live_calls_made_so_far: int,
-    transport_usd: float,
-) -> tuple[list, int, int, dict[str, str]]:
-    """Run window-based Pass 1 for a single departure airport across all active windows.
-
-    For each (window, destination) pair:
-      - Converts window effective dates to min_days/max_days from today
-      - Calls find_cheapest_in_window
-      - Verifies the return date fits within effective_end
-      - Keeps the best result per destination (lowest total cost across all windows)
-
-    Returns:
-        (pass1_results, live_calls_used, cache_hits_used, iata_to_window_name)
-        pass1_results: list of (Destination, cost_total, best_departure_date)
-        iata_to_window_name: maps destination IATA → name of the window that produced the result
-    """
-    today = date.today()
-    # Best result per destination across all windows: iata -> (cost, best_date, window_name)
-    best_per_dest: dict[str, tuple[float, date, str]] = {}
-    live_calls_used = 0
-    cache_hits_used = 0
-
-    for tw in active_windows:
-        eff_start = tw.effective_start
-        eff_end = tw.effective_end
-        min_days_tw = max(0, (eff_start - today).days)
-        # Latest sensible departure: must leave enough nights before window closes
-        max_days_tw = (eff_end - timedelta(days=trip_nights) - today).days
-
-        if max_days_tw < min_days_tw:
-            _logger_tw.info(
-                '"%s" effective range too short for %d-night trip — skipping departure '
-                "from %s.",
-                tw.name,
-                trip_nights,
-                dep_iata,
-            )
-            continue
-
-        for dest in batch:
-            iata = dest.iata_code
-            if _is_excluded(session, iata):
-                continue
-
-            live_budget = max_live_calls - live_calls_made_so_far - live_calls_used
-            if live_budget <= 0 and not is_mock:
-                continue
-
-            try:
-                cost, best_date, calls_used, hits_used = find_cheapest_in_window(
-                    origin_iata=dep_iata,
-                    destination=dest,
-                    min_days=min_days_tw,
-                    max_days=max_days_tw,
-                    trip_length_nights=trip_nights,
-                    adults=num_adults,
-                    children=num_children,
-                    num_rooms=num_rooms,
-                    car_rental_required=car_rental_required,
-                    direct_flights_only=direct_flights_only,
-                    cache_ttl_enabled=cache_ttl_enabled,
-                    is_mock=is_mock,
-                    db_session=session,
-                    live_calls_remaining=live_budget,
-                    transport_usd=transport_usd,
-                )
-            except Exception as exc:
-                logger.warning(
-                    "  [P1/win] %s→%s (%s) — exception: %s: %s",
-                    dep_iata,
-                    iata,
-                    tw.name,
-                    type(exc).__name__,
-                    exc,
-                )
-                continue
-
-            live_calls_used += calls_used
-            cache_hits_used += hits_used
-
-            if cost is None or best_date is None:
-                continue
-
-            # Verify return date fits within this window's effective_end
-            return_date_check = best_date + timedelta(days=trip_nights)
-            if return_date_check > eff_end:
-                logger.debug(
-                    "  [P1/win] %s→%s (%s): return %s > window end %s — excluded",
-                    dep_iata,
-                    iata,
-                    tw.name,
-                    return_date_check,
-                    eff_end,
-                )
-                continue
-
-            # Keep the cheapest result across all windows for this destination
-            existing = best_per_dest.get(iata)
-            if existing is None or cost.total < existing[0]:
-                best_per_dest[iata] = (cost.total, best_date, tw.name)
-
-    # Convert to (Destination, cost_total, best_date) format expected by Pass 2
-    pass1_results: list[tuple] = []
-    iata_to_window: dict[str, str] = {}
-    for dest in batch:
-        iata = dest.iata_code
-        if iata in best_per_dest:
-            total, best_date, window_name = best_per_dest[iata]
-            pass1_results.append((dest, total, best_date))
-            iata_to_window[iata] = window_name
-
-    return pass1_results, live_calls_used, cache_hits_used, iata_to_window
-
-
 def run(triggered_by: str = "manual") -> None:
     start_time = time.monotonic()
     run_date = date.today()
@@ -697,9 +568,11 @@ def run(triggered_by: str = "manual") -> None:
 
         # Resolve home airport coordinates
         home_info = get_airport_info(home_airport, session)
-        home_lat = home_info.latitude if home_info and home_info.latitude else _HSV_LAT
+        home_lat = (
+            home_info.latitude if home_info and home_info.latitude else _DEFAULT_LAT
+        )
         home_lon = (
-            home_info.longitude if home_info and home_info.longitude else _HSV_LON
+            home_info.longitude if home_info and home_info.longitude else _DEFAULT_LON
         )
 
         # ── Apply destination filters to full pool before batch selection ──────
@@ -1293,7 +1166,7 @@ def run(triggered_by: str = "manual") -> None:
                 )
             )
             session.commit()
-            sys.exit(1)
+            sys.exit(0)
 
         # ── Rank and store ────────────────────────────────────────────────────
         ranked = rank_trips(all_candidates, strategy=ranking_strategy)

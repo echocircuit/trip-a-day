@@ -605,56 +605,47 @@ def _preferences() -> None:
         )
 
         st.subheader("Booking Preferences")
-        st.caption("Choose which booking site links are used in the daily email.")
-        _hotel_sites = ["booking_com", "expedia", "manual"]
+        st.caption("Choose a booking site or type any URL directly into the field.")
+        _hotel_sites = ["booking_com", "expedia"]
         _hotel_site_labels = {
             "booking_com": "Booking.com",
             "expedia": "Expedia",
-            "manual": "Manual URL",
         }
-        _car_sites = ["kayak", "expedia_cars", "manual"]
+        _car_sites = ["kayak", "expedia_cars"]
         _car_site_labels = {
             "kayak": "Kayak",
             "expedia_cars": "Expedia Cars",
-            "manual": "Manual URL",
         }
         bk1, bk2 = st.columns(2)
         _hotel_site_default = prefs.get("preferred_hotel_site", "booking_com")
+        # If the saved value is a custom URL, prepend it so it appears selected.
+        _hotel_opts = (
+            [_hotel_site_default, *_hotel_sites]
+            if _hotel_site_default not in _hotel_sites
+            else _hotel_sites
+        )
         preferred_hotel_site = bk1.selectbox(
             "Hotel booking site",
-            _hotel_sites,
-            index=_hotel_sites.index(_hotel_site_default)
-            if _hotel_site_default in _hotel_sites
-            else 0,
-            format_func=lambda k: _hotel_site_labels[k],
+            _hotel_opts,
+            index=_hotel_opts.index(_hotel_site_default),
+            format_func=lambda k: _hotel_site_labels.get(k, k),
+            accept_new_options=True,
+            help="Select a site or type a custom URL — it will be used as-is in booking links.",
         )
         _car_site_default = prefs.get("preferred_car_site", "kayak")
+        _car_opts = (
+            [_car_site_default, *_car_sites]
+            if _car_site_default not in _car_sites
+            else _car_sites
+        )
         preferred_car_site = bk2.selectbox(
             "Car rental site",
-            _car_sites,
-            index=_car_sites.index(_car_site_default)
-            if _car_site_default in _car_sites
-            else 0,
-            format_func=lambda k: _car_site_labels[k],
+            _car_opts,
+            index=_car_opts.index(_car_site_default),
+            format_func=lambda k: _car_site_labels.get(k, k),
+            accept_new_options=True,
+            help="Select a site or type a custom URL — it will be used as-is in booking links.",
         )
-        if preferred_hotel_site == "manual":
-            preferred_hotel_manual_url = st.text_input(
-                "Hotel base URL",
-                value=prefs.get("preferred_hotel_site_manual_url", ""),
-                help="This URL will be used as-is — no trip details will be added automatically.",
-            )
-        else:
-            preferred_hotel_manual_url = prefs.get(
-                "preferred_hotel_site_manual_url", ""
-            )
-        if preferred_car_site == "manual":
-            preferred_car_manual_url = st.text_input(
-                "Car rental base URL",
-                value=prefs.get("preferred_car_site_manual_url", ""),
-                help="This URL will be used as-is — no trip details will be added automatically.",
-            )
-        else:
-            preferred_car_manual_url = prefs.get("preferred_car_site_manual_url", "")
 
         st.subheader("Notifications")
         _from_email = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
@@ -837,10 +828,6 @@ def _preferences() -> None:
                 set_pref(s, "exclude_booked", "true" if exclude_booked else "false")
                 set_pref(s, "preferred_hotel_site", preferred_hotel_site)
                 set_pref(s, "preferred_car_site", preferred_car_site)
-                set_pref(
-                    s, "preferred_hotel_site_manual_url", preferred_hotel_manual_url
-                )
-                set_pref(s, "preferred_car_site_manual_url", preferred_car_manual_url)
                 # Only update notification_emails when not in test sender mode
                 _from_saved = os.environ.get(
                     "RESEND_FROM_EMAIL", "onboarding@resend.dev"

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trip-a-day"
-version = "0.1.0"
+version = "1.0.0"
 description = "Determines the cheapest trip that can be booked each day."
 readme = "README.md"
 license = "MIT"
@@ -12,10 +12,7 @@ requires-python = ">=3.12"
 authors = [
     { name = "echocircuit" },
 ]
-dependencies = [
-    "numpy>=1.26",
-    "scipy>=1.12",
-]
+dependencies = []
 
 [project.optional-dependencies]
 dev = [
