@@ -3,6 +3,56 @@
 This is a solo project, but I follow a branch-based workflow with CI enforcement
 to build good habits and keep main stable.
 
+---
+
+## Dev environment setup
+
+```bash
+# 1. Clone and enter the repo
+git clone git@github.com:YOUR_USERNAME/trip-a-day.git
+cd trip-a-day
+
+# 2. Create a virtual environment and install all dependencies
+uv venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+uv pip install -e ".[dev]"
+pip install -r requirements.txt
+
+# 3. Install pre-commit hooks (ruff on commit, unit tests on push)
+pre-commit install
+pre-commit install --hook-type pre-push
+
+# 4. Copy the env template — no keys are required to run in mock mode
+cp .env.example .env
+```
+
+Running `python main.py` immediately after setup works out of the box: `FLIGHT_DATA_MODE=mock` (the default) reads `tests/fixtures/mock_flights.json` and makes no network calls.
+
+---
+
+## Running the test suite
+
+```bash
+# Fast unit tests — no API calls, runs in ~1 s
+pytest tests/unit/
+
+# All fast tests (unit + smoke + links + charts + …)
+pytest
+
+# Integration tests — makes real Google Flights calls (no key required, ~1–2 min)
+pytest tests/integration/ -m integration -v
+
+# Single test
+pytest tests/unit/test_costs.py::test_foo
+
+# With coverage
+pytest --cov=src/trip_a_day
+```
+
+The default `pytest` invocation excludes `tests/integration/` automatically (see `addopts` in `pyproject.toml`).
+
+---
+
 ## Workflow
 
 1. Create a feature branch: `git checkout -b feature/short-description`
@@ -13,6 +63,32 @@ to build good habits and keep main stable.
 6. Squash-merge the PR on GitHub
 7. Pull main locally: `git checkout main && git pull`
 8. Delete the old branch: `git branch -d feature/short-description`
+
+### Branch naming convention
+
+| Prefix | When to use |
+|---|---|
+| `feature/<name>` | New capability or phase |
+| `fix/<name>` | Bug fix |
+| `docs/<name>` | Documentation-only change |
+| `chore/<name>` | Dependency bump, tooling |
+
+---
+
+## PR checklist
+
+Before opening a PR, verify:
+
+- [ ] `ruff check .` — no lint errors
+- [ ] `ruff format --check .` — no formatting changes needed
+- [ ] `pytest` — all fast tests pass
+- [ ] If you added a new module: added to **Key file map** in `CLAUDE.md` and **Project structure** in `README.md`
+- [ ] If you added or renamed a preference or env var: updated `CLAUDE.md` Architecture decisions table and `README.md` Default preferences table
+- [ ] If you changed a public type (`CostBreakdown`, `TripCandidate`, etc.): updated **Key types** in `CLAUDE.md`
+- [ ] `PROGRESS.md` "Next Action" line updated to reflect the current state
+- [ ] Docs updated in the same commit as the code they describe (per `CLAUDE.md`)
+
+---
 
 ## Commit message style
 
@@ -25,12 +101,16 @@ Use conventional-ish prefixes for scanability:
 - `docs: update README with usage example`
 - `ci: update workflow to cache pip`
 - `chore: bump dependencies`
+- `perf: reduce run time`
+
+---
 
 ## Testing philosophy
 
-- **Unit tests** (`tests/unit/`): fast, isolated, no I/O. Run on every commit via CI.
-- **Integration tests** (`tests/integration/`): can hit files, databases, APIs. Run on PRs to main.
-- **Demo scripts** (`scripts/demo_*.py`): runnable examples showing the project works end-to-end. Run on PRs.
+- **Unit tests** (`tests/unit/`): fast, isolated, no I/O. Run on every commit via pre-commit push hook.
+- **Integration tests** (`tests/integration/`): hit real Google Flights (no key required). Run explicitly with `-m integration`.
+
+---
 
 ## Tools
 
