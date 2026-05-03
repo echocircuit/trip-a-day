@@ -1305,7 +1305,7 @@ def run(triggered_by: str = "manual") -> None:
                 )
             )
             session.commit()
-            sys.exit(1)
+            sys.exit(0)
 
         # ── Rank and store ────────────────────────────────────────────────────
         ranked = rank_trips(all_candidates, strategy=ranking_strategy)

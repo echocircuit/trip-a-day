@@ -422,8 +422,12 @@ def test_run_summary_logged(in_memory_session, caplog):
     assert any("destinations evaluated" in r.message for r in caplog.records)
 
 
-def test_run_exits_1_when_all_flights_missing(in_memory_session):
-    """Pipeline exits with code 1 when Pass 1 has prices but Pass 2 yields no complete trips."""
+def test_run_exits_0_when_all_flights_missing(in_memory_session):
+    """Pipeline exits cleanly with code 0 when Pass 2 yields no complete trips.
+
+    Previously exited with code 1, which crashed the APScheduler process. Changed
+    to exit 0 so the scheduler survives and retries the next day.
+    """
     import main
 
     depart = date.today() + timedelta(days=7)
@@ -445,4 +449,4 @@ def test_run_exits_1_when_all_flights_missing(in_memory_session):
     ):
         main.run()
 
-    assert exc_info.value.code == 1
+    assert exc_info.value.code == 0
