@@ -180,6 +180,8 @@ def _stale_cache_fallback(
     trip_nights: int,
     preferred_car_site: str,
     preferred_hotel_site: str = "booking_com",
+    preferred_hotel_manual_url: str = "",
+    preferred_car_manual_url: str = "",
 ) -> list[TripCandidate]:
     """Build TripCandidates from stale (possibly TTL-expired) cached prices.
 
@@ -226,6 +228,7 @@ def _stale_cache_fallback(
             session=session,
             num_rooms=num_rooms,
             hotel_site=preferred_hotel_site,
+            hotel_manual_url=preferred_hotel_manual_url,
         )
         if hotel is None:
             continue
@@ -270,6 +273,7 @@ def _stale_cache_fallback(
             cached.departure_date,
             cached.return_date,
             preferred_car_site,
+            manual_url=preferred_car_manual_url,
         )
         candidates.append(
             TripCandidate(
@@ -667,6 +671,10 @@ def run(triggered_by: str = "manual") -> None:
         num_rooms = get_int(session, "num_rooms")
         preferred_hotel_site = get_or(session, "preferred_hotel_site", "booking_com")
         preferred_car_site = get_or(session, "preferred_car_site", "kayak")
+        preferred_hotel_manual_url = get_or(
+            session, "preferred_hotel_site_manual_url", ""
+        )
+        preferred_car_manual_url = get_or(session, "preferred_car_site_manual_url", "")
         ranking_strategy = get(session, "ranking_strategy")
         direct_flights_only = get_bool(session, "direct_flights_only")
         car_rental_required = get_bool(session, "car_rental_required")
@@ -1106,6 +1114,7 @@ def run(triggered_by: str = "manual") -> None:
                             session=session,
                             num_rooms=num_rooms,
                             hotel_site=preferred_hotel_site,
+                            hotel_manual_url=preferred_hotel_manual_url,
                         )
                         if hotel is None:
                             logger.info(
@@ -1155,6 +1164,7 @@ def run(triggered_by: str = "manual") -> None:
                                 best_depart_date,
                                 return_date_v,
                                 preferred_car_site,
+                                manual_url=preferred_car_manual_url,
                             )
                             booking_url = build_flight_url(
                                 dep_iata,
@@ -1249,6 +1259,8 @@ def run(triggered_by: str = "manual") -> None:
                 trip_nights=trip_nights,
                 preferred_car_site=preferred_car_site,
                 preferred_hotel_site=preferred_hotel_site,
+                preferred_hotel_manual_url=preferred_hotel_manual_url,
+                preferred_car_manual_url=preferred_car_manual_url,
             )
             if stale_candidates:
                 pass1_stats["stale_cache_used"] = 1

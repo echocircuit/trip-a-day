@@ -190,6 +190,17 @@ class TestBuildHotelUrl:
         )
         assert url_obj == url_iso
 
+    def test_manual_site_returns_provided_url(self):
+        custom = "https://example.com/hotels?city=Paris"
+        url = build_hotel_url(
+            "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "manual", custom
+        )
+        assert url == custom
+
+    def test_manual_site_with_no_url_returns_empty_string(self):
+        url = build_hotel_url("Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "manual")
+        assert url == ""
+
     def test_unknown_site_raises_value_error(self):
         with pytest.raises(ValueError, match="Unknown hotel site"):
             build_hotel_url(
@@ -216,6 +227,15 @@ class TestBuildCarUrl:
         url = build_car_url("CDG", "Paris", _DEPART, _RETURN, "expedia_cars")
         assert "expedia.com/carsearch" in url
         assert "06/15/2026" in url
+
+    def test_manual_site_returns_provided_url(self):
+        custom = "https://example.com/cars?city=Paris"
+        url = build_car_url("CDG", "Paris", _DEPART, _RETURN, "manual", custom)
+        assert url == custom
+
+    def test_manual_site_with_no_url_returns_empty_string(self):
+        url = build_car_url("CDG", "Paris", _DEPART, _RETURN, "manual")
+        assert url == ""
 
     def test_unknown_site_raises_value_error(self):
         with pytest.raises(ValueError, match="Unknown car site"):

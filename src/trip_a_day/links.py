@@ -85,11 +85,14 @@ def build_hotel_url(
     children: int,
     rooms: int,
     site: str,
+    manual_url: str = "",
 ) -> str:
     """Return a hotel search URL for *site*.
 
     Supported sites: booking_com, expedia, manual.
-    Raises ValueError for unknown *site* identifiers.
+    For "manual", returns *manual_url* (the user-configured URL from
+    preferred_hotel_site_manual_url preference). Returns "" when manual_url
+    is not yet configured. Raises ValueError for unknown *site* identifiers.
     """
     city_enc = quote_plus(city)
     country_enc = quote_plus(country)
@@ -123,6 +126,9 @@ def build_hotel_url(
             f"&children={children}"
         )
 
+    if site == "manual":
+        return manual_url
+
     raise ValueError(f"Unknown hotel site: {site!r}")
 
 
@@ -132,11 +138,14 @@ def build_car_url(
     pickup_date: date,
     return_date: date,
     site: str,
+    manual_url: str = "",
 ) -> str:
     """Return a car rental search URL for *site*.
 
     Supported sites: kayak, expedia_cars, manual.
-    Raises ValueError for unknown *site* identifiers.
+    For "manual", returns *manual_url* (the user-configured URL from
+    preferred_car_site_manual_url preference). Returns "" when manual_url
+    is not yet configured. Raises ValueError for unknown *site* identifiers.
     """
     city_enc = quote_plus(city)
     pickup_str = pickup_date.isoformat()
@@ -152,5 +161,8 @@ def build_car_url(
         pi = f"{pickup_date.month:02d}/{pickup_date.day:02d}/{pickup_date.year}"
         ri = f"{return_date.month:02d}/{return_date.day:02d}/{return_date.year}"
         return f"https://www.expedia.com/carsearch?locn={city_enc}&d1={pi}&d2={ri}"
+
+    if site == "manual":
+        return manual_url
 
     raise ValueError(f"Unknown car site: {site!r}")
