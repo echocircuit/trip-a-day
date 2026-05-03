@@ -395,6 +395,16 @@ def _preferences() -> None:
         except (json.JSONDecodeError, TypeError):
             return []
 
+    # Session-state keys for the manual URL text inputs.
+    # We use key= (not value=) so Streamlit's form submit doesn't overwrite the
+    # user's typed URL with the stale DB value that was loaded before the save ran.
+    _hmurl_key = "pref_hotel_manual_url"
+    _cmurl_key = "pref_car_manual_url"
+    if _hmurl_key not in st.session_state:
+        st.session_state[_hmurl_key] = prefs.get("preferred_hotel_site_manual_url", "")
+    if _cmurl_key not in st.session_state:
+        st.session_state[_cmurl_key] = prefs.get("preferred_car_site_manual_url", "")
+
     with st.form("preferences_form"):
         st.subheader("Flight Data Mode")
         _current_mode = prefs.get("flight_data_mode", "mock")
@@ -640,7 +650,7 @@ def _preferences() -> None:
         if preferred_hotel_site == "manual":
             preferred_hotel_manual_url = st.text_input(
                 "Hotel base URL",
-                value=prefs.get("preferred_hotel_site_manual_url", ""),
+                key=_hmurl_key,
                 help="This URL will be used as-is — no trip details will be added automatically.",
             )
         else:
@@ -650,7 +660,7 @@ def _preferences() -> None:
         if preferred_car_site == "manual":
             preferred_car_manual_url = st.text_input(
                 "Car rental base URL",
-                value=prefs.get("preferred_car_site_manual_url", ""),
+                key=_cmurl_key,
                 help="This URL will be used as-is — no trip details will be added automatically.",
             )
         else:
@@ -841,6 +851,10 @@ def _preferences() -> None:
                     s, "preferred_hotel_site_manual_url", preferred_hotel_manual_url
                 )
                 set_pref(s, "preferred_car_site_manual_url", preferred_car_manual_url)
+                # Keep session state in sync with what was just saved so the
+                # text inputs show the correct value on the next render.
+                st.session_state[_hmurl_key] = preferred_hotel_manual_url
+                st.session_state[_cmurl_key] = preferred_car_manual_url
                 # Only update notification_emails when not in test sender mode
                 _from_saved = os.environ.get(
                     "RESEND_FROM_EMAIL", "onboarding@resend.dev"
