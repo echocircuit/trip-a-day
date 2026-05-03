@@ -85,14 +85,12 @@ def build_hotel_url(
     children: int,
     rooms: int,
     site: str,
-    manual_url: str = "",
 ) -> str:
     """Return a hotel search URL for *site*.
 
-    Supported sites: booking_com, expedia, manual.
-    For "manual", returns *manual_url* (the user-configured URL from
-    preferred_hotel_site_manual_url preference). Returns "" when manual_url
-    is not yet configured. Raises ValueError for unknown *site* identifiers.
+    Supported named sites: booking_com, expedia.
+    Any other value is treated as a direct URL and returned as-is — this is
+    how user-typed URLs from the accept_new_options selectbox are handled.
     """
     city_enc = quote_plus(city)
     country_enc = quote_plus(country)
@@ -126,10 +124,8 @@ def build_hotel_url(
             f"&children={children}"
         )
 
-    if site == "manual":
-        return manual_url
-
-    raise ValueError(f"Unknown hotel site: {site!r}")
+    # User-supplied URL (typed via accept_new_options selectbox) — return as-is.
+    return site
 
 
 def build_car_url(
@@ -138,14 +134,12 @@ def build_car_url(
     pickup_date: date,
     return_date: date,
     site: str,
-    manual_url: str = "",
 ) -> str:
     """Return a car rental search URL for *site*.
 
-    Supported sites: kayak, expedia_cars, manual.
-    For "manual", returns *manual_url* (the user-configured URL from
-    preferred_car_site_manual_url preference). Returns "" when manual_url
-    is not yet configured. Raises ValueError for unknown *site* identifiers.
+    Supported named sites: kayak, expedia_cars.
+    Any other value is treated as a direct URL and returned as-is — this is
+    how user-typed URLs from the accept_new_options selectbox are handled.
     """
     city_enc = quote_plus(city)
     pickup_str = pickup_date.isoformat()
@@ -162,7 +156,5 @@ def build_car_url(
         ri = f"{return_date.month:02d}/{return_date.day:02d}/{return_date.year}"
         return f"https://www.expedia.com/carsearch?locn={city_enc}&d1={pi}&d2={ri}"
 
-    if site == "manual":
-        return manual_url
-
-    raise ValueError(f"Unknown car site: {site!r}")
+    # User-supplied URL (typed via accept_new_options selectbox) — return as-is.
+    return site

@@ -6,8 +6,6 @@ import base64
 import re
 from datetime import date
 
-import pytest
-
 from trip_a_day.links import build_car_url, build_flight_url, build_hotel_url
 
 _DEPART = date(2026, 6, 15)
@@ -190,22 +188,15 @@ class TestBuildHotelUrl:
         )
         assert url_obj == url_iso
 
-    def test_manual_site_returns_provided_url(self):
+    def test_custom_url_returned_as_is(self):
+        """Any value not matching a named site is returned as-is (accept_new_options URL)."""
         custom = "https://example.com/hotels?city=Paris"
-        url = build_hotel_url(
-            "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "manual", custom
-        )
+        url = build_hotel_url("Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, custom)
         assert url == custom
 
-    def test_manual_site_with_no_url_returns_empty_string(self):
-        url = build_hotel_url("Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "manual")
+    def test_empty_string_returned_as_is(self):
+        url = build_hotel_url("Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "")
         assert url == ""
-
-    def test_unknown_site_raises_value_error(self):
-        with pytest.raises(ValueError, match="Unknown hotel site"):
-            build_hotel_url(
-                "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "unknown_site"
-            )
 
 
 class TestBuildCarUrl:
@@ -228,15 +219,12 @@ class TestBuildCarUrl:
         assert "expedia.com/carsearch" in url
         assert "06/15/2026" in url
 
-    def test_manual_site_returns_provided_url(self):
+    def test_custom_url_returned_as_is(self):
+        """Any value not matching a named site is returned as-is (accept_new_options URL)."""
         custom = "https://example.com/cars?city=Paris"
-        url = build_car_url("CDG", "Paris", _DEPART, _RETURN, "manual", custom)
+        url = build_car_url("CDG", "Paris", _DEPART, _RETURN, custom)
         assert url == custom
 
-    def test_manual_site_with_no_url_returns_empty_string(self):
-        url = build_car_url("CDG", "Paris", _DEPART, _RETURN, "manual")
+    def test_empty_string_returned_as_is(self):
+        url = build_car_url("CDG", "Paris", _DEPART, _RETURN, "")
         assert url == ""
-
-    def test_unknown_site_raises_value_error(self):
-        with pytest.raises(ValueError, match="Unknown car site"):
-            build_car_url("CDG", "Paris", _DEPART, _RETURN, "unknown_site")
