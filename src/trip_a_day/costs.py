@@ -109,5 +109,6 @@ def build_cost_breakdown(
         car=car,
         food=round(food_total, 2),
         car_is_estimate=car_is_estimate,
+        hotel_is_estimate=True,
         transport_usd=round(transport_usd, 2),
     )
