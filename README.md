@@ -46,7 +46,7 @@ Determines the cheapest trip that can be booked each day. Runs once daily, finds
 
 ```bash
 # 1. Clone
-git clone git@github.com:YOUR_USERNAME/trip-a-day.git
+git clone git@github.com:echocircuit/trip-a-day.git
 cd trip-a-day
 
 # 2. Create virtual environment and install
