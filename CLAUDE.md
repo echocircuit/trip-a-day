@@ -226,7 +226,7 @@ main.py
 | CSV import skips existing IATA codes | Re-importing a CSV that overlaps with seed or prior custom data is a no-op for existing rows; prevents duplicate inserts without raising an error |
 | Per-diem preview rendered outside the form | Streamlit forms only update on submit; showing the match result outside the form gives live feedback as the user types the city name |
 | Destinations page in its own sidebar section (not in Preferences) | The pool manager, add-custom form, and CSV import are operationally distinct from the scalar preference inputs; separating them avoids a very long Preferences page |
-| `timezone` preference (default `America/Chicago`) | Stored as IANA tz string; validated with `ZoneInfo(tz_str)` on save (raises `ZoneInfoNotFoundError` on invalid input); UI blocks save and shows error when invalid |
+| `timezone` preference (default `America/New_York`) | Stored as IANA tz string; validated with `ZoneInfo(tz_str)` on save (raises `ZoneInfoNotFoundError` on invalid input); UI blocks save and shows error when invalid |
 | Naive datetime assumed UTC in utils.py helpers | `run_at` in RunLog is stored without tz; assuming UTC is correct for all server-generated timestamps and consistent with APScheduler behaviour |
 | `TravelWindow` ORM model in `db.py` | New table `travel_windows`; `effective_start`/`effective_end` are computed `@property` values (not columns) to keep effective dates in sync without a stored field |
 | `_probe_dest_window()` / `_probe_dest_normal()` thread entry points in `main.py` | Each destination is probed in a thread via `ThreadPoolExecutor`; functions accept pre-extracted plain dicts (not ORM objects) and open their own DB sessions; results are collected by `run()` |

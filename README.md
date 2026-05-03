@@ -201,7 +201,7 @@ Use Task Scheduler to launch `python scheduler.py` at login (set **Start in** to
 
 | Preference | Default |
 |---|---|
-| Home airport | `HSV` (Huntsville, AL) |
+| Home airport | `JFK` (New York, NY) |
 | Trip length | 7 nights (±0 flex nights) |
 | Advance booking | Departing 7–30 days from today (probes 3 dates across window) |
 | Travelers | 2 adults, 2 children, 1 room |
@@ -210,7 +210,7 @@ Use Task Scheduler to launch `python scheduler.py` at login (set **Start in** to
 | Nearby airport radius | 0 mi (disabled) |
 | IRS mileage rate | $0.70/mile |
 | Daily run time | 7:00 AM local |
-| Timezone | `America/Chicago` (any IANA tz string) |
+| Timezone | `America/New_York` (any IANA tz string) |
 | Flight data mode | `mock` — change to `live` in Preferences UI or `.env` |
 | Parallel flight queries | 3 concurrent workers |
 | Run timeout | 20 minutes |

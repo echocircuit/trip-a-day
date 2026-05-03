@@ -120,14 +120,16 @@ def test_multi_airport_selects_cheapest_globally(in_memory_session):
 
     from trip_a_day.db import Preference
 
-    # Pre-seed search_radius_miles > 0 so the nearby-airport search fires.
+    # Pre-seed preferences so the test is independent of global defaults.
     with in_memory_session() as s:
         s.merge(
             Preference(
-                key="search_radius_miles",
-                value="100",
-                updated_at=datetime.now(UTC),
+                key="search_radius_miles", value="100", updated_at=datetime.now(UTC)
             )
+        )
+        # Fix home_airport to HSV so the BHM transport cost ($102) is as designed.
+        s.merge(
+            Preference(key="home_airport", value="HSV", updated_at=datetime.now(UTC))
         )
         s.commit()
 

@@ -71,9 +71,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("main")
 
-# HSV coordinates — fallback if home airport has no coordinates in DB.
-_HSV_LAT = 34.6418
-_HSV_LON = -86.7751
+# JFK coordinates — fallback if home airport has no coordinates in DB.
+_DEFAULT_LAT = 40.6413
+_DEFAULT_LON = -73.7781
 
 # Maximum random delay (seconds) added before each live fli call in parallel mode.
 # Staggers simultaneous TLS connections so they don't all hit Google at once.
@@ -133,7 +133,7 @@ def _store_results(
 
 
 def _connectivity_ok(session, is_mock: bool) -> bool:
-    """Make one test call to Google Flights (HSV→ATL) to verify live API access.
+    """Make one test call to Google Flights (JFK→LAX) to verify live API access.
 
     Skipped entirely in mock mode. Logs a WARNING on failure but never aborts
     the run — cached prices may still be usable even when live calls are broken.
@@ -142,8 +142,8 @@ def _connectivity_ok(session, is_mock: bool) -> bool:
         return True
     test_date = date.today() + timedelta(days=7)
     result = get_flight_offers(
-        origin="HSV",
-        destination="ATL",
+        origin="JFK",
+        destination="LAX",
         depart_date=test_date,
         return_date=test_date + timedelta(days=7),
         adults=1,
@@ -154,12 +154,12 @@ def _connectivity_ok(session, is_mock: bool) -> bool:
     )
     if result is None:
         logger.warning(
-            "Connectivity pre-check: test call HSV→ATL returned no result"
+            "Connectivity pre-check: test call JFK→LAX returned no result"
             " — live Google Flights API may be degraded or blocked."
         )
         return False
     logger.info(
-        "Connectivity pre-check: OK (HSV→ATL ≈ $%.0f on %s).",
+        "Connectivity pre-check: OK (JFK→LAX ≈ $%.0f on %s).",
         result.price_total,
         test_date,
     )
@@ -576,9 +576,11 @@ def run(triggered_by: str = "manual") -> None:
 
         # Resolve home airport coordinates
         home_info = get_airport_info(home_airport, session)
-        home_lat = home_info.latitude if home_info and home_info.latitude else _HSV_LAT
+        home_lat = (
+            home_info.latitude if home_info and home_info.latitude else _DEFAULT_LAT
+        )
         home_lon = (
-            home_info.longitude if home_info and home_info.longitude else _HSV_LON
+            home_info.longitude if home_info and home_info.longitude else _DEFAULT_LON
         )
 
         # ── Apply destination filters to full pool before batch selection ──────
