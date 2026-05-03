@@ -41,6 +41,8 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 ## Current phase
 
+**v1.0 pre-release review — Complete.** Full diagnostic read of all source files; 2 must-fix and 5 should-fix items resolved. Fixes: `build_hotel_url`/`build_car_url` `site="manual"` crash; `sys.exit(1)` → `sys.exit(0)` for Pass 2 no-candidates; removed `_window_pass1_for_departure` dead code; `hotel_is_estimate=True` in `build_cost_breakdown`; removed phantom `numpy`/`scipy` deps; added exception logging to `_email_limit_warning_html`; documented `DB_PATH` in `.env.example`. 357 tests passing.
+
 **Phase 9 — Complete.** Polish, hardening, and 1.0 release prep: README audited (scheduler launchd plist example, fli reference, preferences table, project structure); CHANGELOG.md added; CONTRIBUTING.md expanded (dev setup, test commands, PR checklist); version bumped to 1.0.0; spec reviewed and Phase 9 marked complete; Linux headless smoke tests moved to Section 14 Future Work. 350 tests passing (unchanged — Phase 9 is docs-only).
 
 **feature/performance-fix — Complete.** Root cause: sequential fli calls (~49s each) with no concurrency, compounded by 2 active travel windows multiplying the batch (2 windows × 15 dests × 3 probes = 90 sequential calls = 70-min run). Fixes: WAL-mode SQLite + per-thread sessions for thread safety; `ThreadPoolExecutor` parallel Pass 1 (3 workers default); random jitter per call to stagger TLS connections; global run timeout (20 min); probe hard cap (7/dest); travel window seed changed to `enabled=False`; Performance preferences exposed in UI; Streamlit network config added. 350 tests passing (346 prior + 7 new performance; note some counted in multiple groups above).

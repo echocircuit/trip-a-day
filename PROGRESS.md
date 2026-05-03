@@ -428,6 +428,25 @@ Root cause confirmed: sequential fli calls (~49 s each) × 90 total calls (2 act
 - [x] CLAUDE.md updated: Phase 9 current-phase entry, spec discrepancies section (2026-05-02)
 - [x] PROGRESS.md updated (this file) (2026-05-02)
 
+### v1.0 Pre-Release Review + Pass 2 Fixes (2026-05-03)
+
+Branch: `feature/phase-9-polish` (worktree: vibrant-faraday-5ce107)
+
+Full diagnostic read of all source files; findings written to `docs/v1_review_report.md`.
+
+**Must Fix (both resolved):**
+- [x] M1: `build_hotel_url`/`build_car_url` raised `ValueError` for `site="manual"` — crashed Pass 2 when user selected "Manual URL" in Booking Preferences. Added `manual_url` parameter to both functions; threaded `preferred_hotel_site_manual_url` and `preferred_car_site_manual_url` through `get_hotel_offers()`, `_stale_cache_fallback()`, and both `build_car_url` call sites in `run()`. Added 4 tests. (2026-05-03)
+- [x] M2: `sys.exit(1)` at `main.py:1296` ("No valid candidates after Pass 2") killed APScheduler process. Changed to `sys.exit(0)`. Updated smoke test expectation. (2026-05-03)
+
+**Should Fix (all resolved):**
+- [x] S1: Removed `_window_pass1_for_departure()` dead code (~128 lines, replaced during parallelization but never deleted). Replaced 5 dead-code tests in `TestWindowPass1ForDeparture` with 4 equivalent tests for `_probe_dest_window`. Updated CLAUDE.md. (2026-05-03)
+- [x] S2: `hotel_is_estimate` was always `False` despite all hotel costs being per-diem estimates. Set `hotel_is_estimate=True` in `build_cost_breakdown()`. (2026-05-03)
+- [x] S3: `numpy>=1.26` and `scipy>=1.12` in `pyproject.toml [project.dependencies]` — never imported anywhere. Removed both. (2026-05-03)
+- [x] S4: `_email_limit_warning_html()` had a bare `except Exception:` with no logging — silent failure. Added `logger.warning(...)` on the exception path. (2026-05-03)
+- [x] S5: `DB_PATH` env var was undocumented. Added commented-out example to `.env.example`. (2026-05-03)
+
+**Result:** 357 tests passing (358 after M1 adds +4 tests; S1 removes 5, adds 4 = net -1).
+
 ### Next Action
 
-Phase 9 complete. Open PR `feature/phase-9-polish` → `main` with the manual verification checklist in the PR body. v1.0.0 is considered feature-complete after merge.
+v1.0 pre-release review complete. Open PR `feature/phase-9-polish` → `main`.

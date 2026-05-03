@@ -4,9 +4,20 @@ All notable changes to trip-a-day are documented here. Entries are high-level pe
 
 ---
 
-## [v1.0.0] — 2026-05-02
+## [v1.0.0] — 2026-05-03
 
-Phase 9 release prep: README audit (scheduler instructions, launchd plist example, preferences table, fli library reference), CHANGELOG and CONTRIBUTING docs added, version bumped to 1.0.0. The spec was reviewed in full and Linux headless smoke testing moved to Section 14 Future Work. No functional changes.
+**Pre-release review fixes:** Full diagnostic read of all source files; 2 must-fix and 5 should-fix items resolved.
+
+- `build_hotel_url` / `build_car_url` now support `site="manual"` (previously raised `ValueError`, crashing Pass 2 for any user who had selected "Manual URL" in Booking Preferences). The `preferred_hotel_site_manual_url` and `preferred_car_site_manual_url` DB preferences are now consulted.
+- `sys.exit(1)` → `sys.exit(0)` when Pass 2 yields no candidates — was killing the APScheduler process permanently.
+- Removed `_window_pass1_for_departure()` dead code (~128 lines, orphaned by the parallelization refactor). Dead-code tests replaced with equivalent `_probe_dest_window` tests.
+- `hotel_is_estimate` in `CostBreakdown` now correctly set to `True` by `build_cost_breakdown()` (all hotel costs are per-diem estimates).
+- Removed `numpy` and `scipy` phantom dependencies from `pyproject.toml` (never imported; ~100 MB unnecessary install).
+- `_email_limit_warning_html()` now logs exceptions instead of silently swallowing them.
+- `DB_PATH` env var documented in `.env.example`.
+- Pre-release review report written to `docs/v1_review_report.md`.
+
+**Phase 9 release prep (2026-05-02):** README audit (scheduler instructions, launchd plist example, preferences table, fli library reference), CHANGELOG and CONTRIBUTING docs added, version bumped to 1.0.0. The spec was reviewed in full and Linux headless smoke testing moved to Section 14 Future Work. No functional changes.
 
 ---
 
