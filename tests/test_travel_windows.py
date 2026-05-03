@@ -5,7 +5,7 @@ and notifier rendering.
 from __future__ import annotations
 
 from datetime import date, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from trip_a_day.costs import CostBreakdown
 from trip_a_day.db import TravelWindow
@@ -112,198 +112,166 @@ class TestTravelWindowEffectiveDates:
         assert tw.effective_end == date(2026, 10, 12)
 
 
-# ── _window_pass1_for_departure ───────────────────────────────────────────────
+# ── _probe_dest_window ────────────────────────────────────────────────────────
 
 
-class TestWindowPass1ForDeparture:
-    """Tests for the _window_pass1_for_departure() helper in main.py."""
+def _make_window_data(
+    name: str,
+    min_days: int,
+    max_days: int,
+    eff_end_offset: int,
+) -> dict:
+    """Return a window_data dict as produced by run() before thread submission."""
+    from datetime import timedelta
 
-    def _call(
-        self,
-        active_windows,
-        batch,
-        trip_nights=7,
-        is_mock=True,
-        find_window_return=None,
-    ):
-        """Helper that calls _window_pass1_for_departure with controlled mocks."""
-        from main import _window_pass1_for_departure
+    today = date.today()
+    return {
+        "name": name,
+        "min_days": min_days,
+        "max_days": max_days,
+        "eff_end": today + timedelta(days=eff_end_offset),
+    }
 
-        mock_session = MagicMock()
-        mock_session.query.return_value.filter.return_value.first.return_value = None
 
-        # _is_excluded always returns False (destination not excluded)
-        with (
-            patch("main._is_excluded", return_value=False),
-            patch("main.find_cheapest_in_window", return_value=find_window_return),
-        ):
-            return _window_pass1_for_departure(
-                session=mock_session,
-                dep_iata="HSV",
-                batch=batch,
-                active_windows=active_windows,
-                trip_nights=trip_nights,
-                num_adults=2,
-                num_children=0,
-                num_rooms=1,
-                car_rental_required=False,
-                direct_flights_only=False,
-                cache_ttl_enabled=True,
-                is_mock=is_mock,
-                max_live_calls=40,
-                live_calls_made_so_far=0,
-                transport_usd=0.0,
-            )
+def _call_probe_dest_window(window_data_list, find_return, trip_nights=7):
+    """Call _probe_dest_window with standard args and a mocked find_cheapest."""
+    import main as main_mod
 
-    def _make_dest(self, iata: str = "CDG") -> MagicMock:
-        d = MagicMock()
-        d.iata_code = iata
-        return d
-
-    def test_window_too_short_for_trip_skipped(self):
-        """Window with range smaller than trip_nights yields no results."""
-        # Window: Oct 5 to Oct 7 → only 2 effective days → can't fit 7-night trip
-        tw = _make_window(
-            earliest=date(2026, 10, 5),
-            latest=date(2026, 10, 7),
+    dest_data = {"iata": "NRT", "city": "Tokyo", "country": "Japan", "region": "Asia"}
+    with patch("main.find_cheapest_in_window", return_value=find_return):
+        return main_mod._probe_dest_window(
+            dep_iata="HSV",
+            dest_data=dest_data,
+            window_data_list=window_data_list,
+            trip_nights=trip_nights,
+            adults=2,
+            children=0,
+            num_rooms=1,
+            car_rental_required=False,
+            direct_flights_only=False,
+            cache_ttl_enabled=True,
+            is_mock=True,
+            live_calls_budget=40,
+            transport_usd=0.0,
         )
-        dest = self._make_dest()
-        results, _calls, _hits, iata_map = self._call(
-            active_windows=[tw],
-            batch=[dest],
-            trip_nights=7,
-            find_window_return=(None, None, 0, 0),
+
+
+class TestProbeDestWindow:
+    """Tests for _probe_dest_window — the actual parallel Pass 1 thread entry point."""
+
+    def test_no_price_returned_yields_none_cost(self):
+        """find_cheapest returns (None, None, 0, 0) → cost is None in result."""
+        wd = [_make_window_data("Win", 7, 30, 40)]
+        iata, cost, best_date, _calls, _hits, window_name = _call_probe_dest_window(
+            wd, (None, None, 0, 0)
         )
-        assert results == []
-        assert iata_map == {}
+        assert iata == "NRT"
+        assert cost is None
+        assert best_date is None
+        assert window_name is None
 
-    def test_no_price_returned_skipped(self):
-        """Destination skipped when find_cheapest_in_window returns cost=None."""
-        tw = _make_window(earliest=date(2026, 10, 1), latest=date(2026, 10, 15))
-        dest = self._make_dest("NRT")
-        results, _, _, iata_map = self._call(
-            active_windows=[tw],
-            batch=[dest],
-            find_window_return=(None, None, 1, 0),
-        )
-        assert results == []
-        assert "NRT" not in iata_map
+    def test_valid_result_returned(self):
+        """When find_cheapest returns a valid cost, it propagates to the caller."""
+        wd = [_make_window_data("Fall Break", 7, 30, 40)]
+        from datetime import timedelta
 
-    def test_valid_result_included(self):
-        """Destination included when find_cheapest_in_window returns a valid cost."""
-        from trip_a_day.costs import CostBreakdown
-
-        tw = _make_window(earliest=date(2026, 10, 1), latest=date(2026, 10, 15))
-        dest = self._make_dest("NRT")
+        probe_date = date.today() + timedelta(days=14)
         cost = CostBreakdown(
             flights=500.0, hotel=700.0, car=200.0, food=150.0, car_is_estimate=True
         )
-        best_date = date(2026, 10, 4)
-        results, _, _, iata_map = self._call(
-            active_windows=[tw],
-            batch=[dest],
-            find_window_return=(cost, best_date, 1, 0),
+        _iata, got_cost, got_date, _calls, _hits, window_name = _call_probe_dest_window(
+            wd, (cost, probe_date, 1, 0)
         )
-        assert len(results) == 1
-        _dest, _total, _date = results[0]
-        assert _dest.iata_code == "NRT"
-        assert _total == cost.total
-        assert "NRT" in iata_map
-        assert iata_map["NRT"] == "Test Window"
+        assert got_cost is not None
+        assert abs(got_cost.total - cost.total) < 0.01
+        assert got_date == probe_date
+        assert window_name == "Fall Break"
 
-    def test_best_result_kept_across_multiple_windows(self):
-        """When two windows both cover a destination, keep the cheaper result."""
-        from trip_a_day.costs import CostBreakdown
-
-        tw1 = _make_window(
-            name="Cheap Window",
-            earliest=date(2026, 10, 1),
-            latest=date(2026, 10, 12),
-        )
-        tw2 = _make_window(
-            name="Expensive Window",
-            earliest=date(2026, 11, 1),
-            latest=date(2026, 11, 12),
-        )
-        dest = self._make_dest("NRT")
-
+    def test_picks_cheaper_of_two_windows(self):
+        """With two windows, _probe_dest_window keeps the cheaper result."""
         cheap_cost = CostBreakdown(
             flights=400.0, hotel=700.0, car=200.0, food=150.0, car_is_estimate=True
         )
         expensive_cost = CostBreakdown(
             flights=900.0, hotel=700.0, car=200.0, food=150.0, car_is_estimate=True
         )
-        # Alternate between cheap and expensive depending on call count
         call_count = {"n": 0}
 
         def _side_effect(**kwargs):
             call_count["n"] += 1
-            if call_count["n"] == 1:
-                return (cheap_cost, date(2026, 10, 4), 1, 0)
-            return (expensive_cost, date(2026, 11, 4), 1, 0)
+            from datetime import timedelta
 
-        from main import _window_pass1_for_departure
+            d = date.today() + timedelta(days=14 if call_count["n"] == 1 else 35)
+            return (
+                (cheap_cost, d, 1, 0)
+                if call_count["n"] == 1
+                else (expensive_cost, d, 1, 0)
+            )
 
-        mock_session = MagicMock()
-        with (
-            patch("main._is_excluded", return_value=False),
-            patch("main.find_cheapest_in_window", side_effect=_side_effect),
-        ):
-            results, _, _, iata_map = _window_pass1_for_departure(
-                session=mock_session,
+        import main as main_mod
+
+        wd = [
+            _make_window_data("Cheap Window", 7, 20, 25),
+            _make_window_data("Expensive Window", 28, 42, 50),
+        ]
+        dest_data = {
+            "iata": "NRT",
+            "city": "Tokyo",
+            "country": "Japan",
+            "region": "Asia",
+        }
+        with patch("main.find_cheapest_in_window", side_effect=_side_effect):
+            _, got_cost, _, _, _, window_name = main_mod._probe_dest_window(
                 dep_iata="HSV",
-                batch=[dest],
-                active_windows=[tw1, tw2],
+                dest_data=dest_data,
+                window_data_list=wd,
                 trip_nights=7,
-                num_adults=2,
-                num_children=0,
+                adults=2,
+                children=0,
                 num_rooms=1,
                 car_rental_required=False,
                 direct_flights_only=False,
                 cache_ttl_enabled=True,
                 is_mock=True,
-                max_live_calls=40,
-                live_calls_made_so_far=0,
+                live_calls_budget=40,
                 transport_usd=0.0,
             )
 
-        assert len(results) == 1
-        _dest, _total, _ = results[0]
-        assert abs(_total - cheap_cost.total) < 0.01
-        assert iata_map["NRT"] == "Cheap Window"
+        assert abs(got_cost.total - cheap_cost.total) < 0.01
+        assert window_name == "Cheap Window"
 
-    def test_exception_in_find_cheapest_skips_destination(self):
-        """Exception from find_cheapest_in_window causes destination to be skipped."""
-        tw = _make_window(earliest=date(2026, 10, 1), latest=date(2026, 10, 15))
-        dest = self._make_dest("BCN")
+    def test_exception_in_find_cheapest_yields_none_cost(self):
+        """An exception in find_cheapest_in_window is caught; cost is None."""
+        import main as main_mod
 
-        from main import _window_pass1_for_departure
-
-        mock_session = MagicMock()
-        with (
-            patch("main._is_excluded", return_value=False),
-            patch("main.find_cheapest_in_window", side_effect=RuntimeError("API down")),
+        wd = [_make_window_data("Win", 7, 30, 40)]
+        dest_data = {
+            "iata": "BCN",
+            "city": "Barcelona",
+            "country": "Spain",
+            "region": "Europe",
+        }
+        with patch(
+            "main.find_cheapest_in_window", side_effect=RuntimeError("API down")
         ):
-            results, _, _, iata_map = _window_pass1_for_departure(
-                session=mock_session,
+            _iata, cost, _, _, _, window_name = main_mod._probe_dest_window(
                 dep_iata="HSV",
-                batch=[dest],
-                active_windows=[tw],
+                dest_data=dest_data,
+                window_data_list=wd,
                 trip_nights=7,
-                num_adults=2,
-                num_children=0,
+                adults=2,
+                children=0,
                 num_rooms=1,
                 car_rental_required=False,
                 direct_flights_only=False,
                 cache_ttl_enabled=True,
                 is_mock=True,
-                max_live_calls=40,
-                live_calls_made_so_far=0,
+                live_calls_budget=40,
                 transport_usd=0.0,
             )
 
-        assert results == []
-        assert iata_map == {}
+        assert cost is None
+        assert window_name is None
 
 
 # ── _travel_window_html helper ────────────────────────────────────────────────

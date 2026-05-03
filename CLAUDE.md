@@ -227,7 +227,7 @@ main.py
 | `timezone` preference (default `America/Chicago`) | Stored as IANA tz string; validated with `ZoneInfo(tz_str)` on save (raises `ZoneInfoNotFoundError` on invalid input); UI blocks save and shows error when invalid |
 | Naive datetime assumed UTC in utils.py helpers | `run_at` in RunLog is stored without tz; assuming UTC is correct for all server-generated timestamps and consistent with APScheduler behaviour |
 | `TravelWindow` ORM model in `db.py` | New table `travel_windows`; `effective_start`/`effective_end` are computed `@property` values (not columns) to keep effective dates in sync without a stored field |
-| `_window_pass1_for_departure()` helper in `main.py` | Encapsulates per-departure-airport window logic; returns `(pass1_results, live_calls, cache_hits, iata_to_window_name)` so caller accumulates counters without shared mutable state |
+| `_probe_dest_window()` / `_probe_dest_normal()` thread entry points in `main.py` | Each destination is probed in a thread via `ThreadPoolExecutor`; functions accept pre-extracted plain dicts (not ORM objects) and open their own DB sessions; results are collected by `run()` |
 | Two-pass retry for travel windows | Window mode runs first (`_search_pass=0`); if no prices found, `window_fallback_used=True` is set and a normal advance-window search runs (`_search_pass=1`). Live API budget is shared across both passes |
 | `_travel_window_html/plain` private helpers in notifier.py | Keep window card rendering separate from the main HTML/plain builders; both accept `(trip, window_name, window_fallback_used)` so fallback flag takes priority over name |
 | `travel_window_name` column on `RunLog` | Nullable TEXT; written only when a window produced the winning trip; NULL for normal-mode runs and fallback runs |
@@ -297,7 +297,7 @@ main.py
 | `tests/test_api_counter.py` | API counter consistency: mock/live modes, exception path counting, window search double-count prevention (7 tests) |
 | `tests/test_notifier_limits.py` | Monthly email limit enforcement: get/record helpers, _check_email_limit, warning banner, RunLog blocking (16 tests) |
 | `tests/test_utils.py` | Timezone conversion helpers: CST/CDT/EST/BST conversions, naive-as-UTC, invalid tz raises, format shape (11 tests) |
-| `tests/test_travel_windows.py` | Travel window model properties, `_window_pass1_for_departure` logic, notifier HTML/plain helpers, `send_trip_notification` signature, `_build_html/_build_plain` thread-through (28 tests) |
+| `tests/test_travel_windows.py` | Travel window model properties, `_probe_dest_window` behavior (best result selection, exception handling), notifier HTML/plain helpers, `send_trip_notification` signature, `_build_html/_build_plain` thread-through (27 tests) |
 | `tests/test_settings.py` | `get_flight_data_mode()` priority logic: DB > env var > default; invalid value fallback; seed default (8 tests) |
 | `tests/test_performance.py` | Probe cap enforcement, travel window call-count correctness (2 windows × 3 dests = 6 calls), max_workers=1 sequential behavior, run timeout submission guard (7 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
