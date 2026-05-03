@@ -1,8 +1,8 @@
 # Implementation Progress
 
-## Current Phase: fix/pass1-live-calls-counter
-## Status: In progress
-## Last updated: 2026-05-02 — 354 tests passing
+## Current Phase: Phase 9 — Polish, Hardening, and 1.0 Release Prep
+## Status: Complete
+## Last updated: 2026-05-02 — 350 tests passing (docs-only phase, no new tests)
 
 ### Phase 1 Checklist
 
@@ -416,6 +416,18 @@ Root cause confirmed: sequential fli calls (~49 s each) × 90 total calls (2 act
 - [x] `tests/test_performance.py`: 7 tests covering probe cap, window call-count correctness, max_workers=1 sequential behavior, run timeout guard (2026-05-02)
 - [x] 350 tests passing; ruff + mypy clean; mock run completes in 0.2 s (2026-05-02)
 
+### Phase 9 Checklist — Complete
+
+- [x] Create branch `feature/phase-9-polish` from main (2026-05-02)
+- [x] README audit: updated "What works now", scheduler launchd/systemd examples, fli reference, GSA key clarification, preferences table (timezone/mode/workers/timeout), project structure (links.py, utils.py) (2026-05-02)
+- [x] `.env.example` updated: fast-flights → fli comment, GSA key comment clarified (2026-05-02)
+- [x] CHANGELOG.md created with one-paragraph summaries for all phases (2026-05-02)
+- [x] CONTRIBUTING.md updated: dev environment setup, test suite commands, PR checklist, branch naming table (2026-05-02)
+- [x] Version bumped to 1.0.0 in pyproject.toml (no git tag) (2026-05-02)
+- [x] Spec reviewed in full: Phase 9 marked complete, Linux headless smoke tests moved to Section 14 Future Work, spec discrepancies documented in CLAUDE.md (2026-05-02)
+- [x] CLAUDE.md updated: Phase 9 current-phase entry, spec discrepancies section (2026-05-02)
+- [x] PROGRESS.md updated (this file) (2026-05-02)
+
 ### Next Action
 
-Open PR `feature/performance-fix` → `main`. After merge, begin Phase 9 (Polish, Hardening, and 1.0 Release Prep).
+Phase 9 complete. Open PR `feature/phase-9-polish` → `main` with the manual verification checklist in the PR body. v1.0.0 is considered feature-complete after merge.

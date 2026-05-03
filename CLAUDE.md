@@ -41,7 +41,9 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 ## Current phase
 
-**feature/performance-fix — In progress.** Root cause: sequential fli calls (~49s each) with no concurrency, compounded by 2 active travel windows multiplying the batch (2 windows × 15 dests × 3 probes = 90 sequential calls = 70-min run). Fixes: WAL-mode SQLite + per-thread sessions for thread safety; `ThreadPoolExecutor` parallel Pass 1 (3 workers default); random jitter per call to stagger TLS connections; global run timeout (20 min); probe hard cap (7/dest); travel window seed changed to `enabled=False`; Performance preferences exposed in UI; Streamlit network config added. 350 tests passing (346 prior + 7 new performance; note some counted in multiple groups above).
+**Phase 9 — Complete.** Polish, hardening, and 1.0 release prep: README audited (scheduler launchd plist example, fli reference, preferences table, project structure); CHANGELOG.md added; CONTRIBUTING.md expanded (dev setup, test commands, PR checklist); version bumped to 1.0.0; spec reviewed and Phase 9 marked complete; Linux headless smoke tests moved to Section 14 Future Work. 350 tests passing (unchanged — Phase 9 is docs-only).
+
+**feature/performance-fix — Complete.** Root cause: sequential fli calls (~49s each) with no concurrency, compounded by 2 active travel windows multiplying the batch (2 windows × 15 dests × 3 probes = 90 sequential calls = 70-min run). Fixes: WAL-mode SQLite + per-thread sessions for thread safety; `ThreadPoolExecutor` parallel Pass 1 (3 workers default); random jitter per call to stagger TLS connections; global run timeout (20 min); probe hard cap (7/dest); travel window seed changed to `enabled=False`; Performance preferences exposed in UI; Streamlit network config added. 350 tests passing (346 prior + 7 new performance; note some counted in multiple groups above).
 
 **feature/hotel-links-chart-cleanup — Complete.** Three contained fixes: (1) hotel deep-link date formatting verified + preferred_hotel_site preference wired through; (2) chart 30-day lookback + city-label removal; (3) flight_data_mode promoted to DB preference with UI toggle. 346 tests passing (320 prior + 5 new links + 5 new charts + 8 new settings; prior count: 190 unit + 34 links + 11 imports + 2 smoke + 17 charts + 8 pass1-resilience + 7 api-counter + 16 email-limits + 11 utils + 28 travel-windows + 6 main-flex + 8 main-smoke + 8 settings; note some tests counted in multiple groups above).
 
@@ -334,6 +336,16 @@ python main.py
 - Google Flights occasionally fails for specific routes (returns no data); those destinations are silently skipped.
 - Mock flight prices are static fixtures; they don't reflect real market prices or trends.
 - **fast-flights deprecated (2026-04-26):** `fast-flights==2.2` was fully replaced by `fli` (PyPI: `flights>=0.8.4`). fast-flights was returning 401 `{"error":"no token provided"}` on every live call — Google changed their internal auth endpoint. fli uses primp for Chrome TLS mimicry and works correctly as of the migration date.
+
+## Spec discrepancies (Phase 9 review)
+
+The following parts of `trip_of_the_day_spec.md` are historical artifacts predating library migrations and are **not updated** per the spec's read-only authorship policy:
+
+- Architecture diagram (Section 3) still shows "Tequila" as the flight data source — actual source is `fli`
+- Section 4.1 references `fast-flights` by name and shows the old Python usage example
+- Section 4.2 lists seed list size as "75–100 airports" — current size is 302
+- Section 6 module list predates `selector.py`, `filters.py`, `cache.py`, `window_search.py`, `links.py`, `utils.py`, `charts.py`, `destination_input.py`
+- Section 11 lists `TEQUILA_API_KEY` in the env vars template — this key is unused; `fli` requires no key
 
 ## Branch Convention
 
