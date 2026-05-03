@@ -124,7 +124,10 @@ def build_hotel_url(
             f"&children={children}"
         )
 
-    # User-supplied URL (typed via accept_new_options selectbox) — return as-is.
+    # User-supplied URL (typed via accept_new_options selectbox).
+    # Prepend https:// if no scheme so bare domains don't become relative paths.
+    if site and not site.startswith(("http://", "https://")):
+        return f"https://{site}"
     return site
 
 
@@ -156,5 +159,8 @@ def build_car_url(
         ri = f"{return_date.month:02d}/{return_date.day:02d}/{return_date.year}"
         return f"https://www.expedia.com/carsearch?locn={city_enc}&d1={pi}&d2={ri}"
 
-    # User-supplied URL (typed via accept_new_options selectbox) — return as-is.
+    # User-supplied URL (typed via accept_new_options selectbox).
+    # Prepend https:// if no scheme so bare domains don't become relative paths.
+    if site and not site.startswith(("http://", "https://")):
+        return f"https://{site}"
     return site

@@ -194,6 +194,23 @@ class TestBuildHotelUrl:
         url = build_hotel_url("Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, custom)
         assert url == custom
 
+    def test_custom_url_http_returned_as_is(self):
+        custom = "http://example.com/hotels"
+        url = build_hotel_url("Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, custom)
+        assert url == custom
+
+    def test_bare_domain_gets_https_prepended(self):
+        url = build_hotel_url(
+            "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "hilton.com"
+        )
+        assert url == "https://hilton.com"
+
+    def test_bare_path_gets_https_prepended(self):
+        url = build_hotel_url(
+            "Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "hilton.com/page"
+        )
+        assert url == "https://hilton.com/page"
+
     def test_empty_string_returned_as_is(self):
         url = build_hotel_url("Paris", "France", _CHECKIN, _CHECKOUT, 2, 2, 1, "")
         assert url == ""
@@ -224,6 +241,19 @@ class TestBuildCarUrl:
         custom = "https://example.com/cars?city=Paris"
         url = build_car_url("CDG", "Paris", _DEPART, _RETURN, custom)
         assert url == custom
+
+    def test_custom_url_http_returned_as_is(self):
+        custom = "http://example.com/cars"
+        url = build_car_url("CDG", "Paris", _DEPART, _RETURN, custom)
+        assert url == custom
+
+    def test_bare_domain_gets_https_prepended(self):
+        url = build_car_url("CDG", "Paris", _DEPART, _RETURN, "rentalcars.com")
+        assert url == "https://rentalcars.com"
+
+    def test_bare_path_gets_https_prepended(self):
+        url = build_car_url("CDG", "Paris", _DEPART, _RETURN, "rentalcars.com/results")
+        assert url == "https://rentalcars.com/results"
 
     def test_empty_string_returned_as_is(self):
         url = build_car_url("CDG", "Paris", _DEPART, _RETURN, "")
