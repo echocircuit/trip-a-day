@@ -4,7 +4,7 @@ Determines the cheapest trip that can be booked each day. Runs once daily, finds
 
 ---
 
-## Current phase: Phase 8 — Hybrid Destination Input
+## v1.0.0
 
 **What works now:**
 
@@ -14,6 +14,10 @@ Determines the cheapest trip that can be booked each day. Runs once daily, finds
 - Multi-airport search: set a radius in Preferences and the pipeline searches nearby airports too, adding IRS-rate driving cost, and picks the globally cheapest departure
 - Monthly email limit: Resend sends are tracked per calendar month; approaching the limit adds a warning banner to outgoing emails; reaching it pauses sends until next month (Dashboard and Preferences show live usage)
 - **Destinations page:** search and toggle any of the 302 seed airports on/off; add custom airports with live per-diem match preview; bulk-import from CSV (preview table shows matched/unmatched/error counts before committing)
+- **Travel Windows:** define named date ranges (e.g. "Fall Break 2026") and the pipeline searches those windows first before falling back to the standard advance-booking window; windows auto-expire when they pass
+- **Timezone display:** Dashboard timestamps shown in your local timezone (configurable in Preferences)
+- **Parallel flight queries:** Pass 1 runs up to 3 concurrent Google Flights lookups by default, cutting typical run time from ~70 min to ~20 min for a full 15-destination batch; configurable in Preferences
+- **Flight data mode toggle:** switch between mock and live flight data from the Preferences UI — no restart required
 
 ---
 
@@ -29,12 +33,12 @@ Determines the cheapest trip that can be booked each day. Runs once daily, finds
 
 | Service | What it's for | Sign up |
 |---|---|---|
-| [GSA API](https://api.data.gov/signup/) | US domestic lodging & meal estimates | Free — register at api.data.gov |
 | [Resend](https://resend.com) | Daily email notification | Free up to 3,000 emails/month — optional, falls back to terminal output |
+| [GSA API](https://api.data.gov/signup/) | Refresh US per diem rates (optional) | Free — only needed to run `scripts/update_rates.py` each October |
 
-> **Flight data:** No API key required. Flights are fetched via `fast-flights`, which queries Google Flights directly.
+> **Flight data:** No API key required. Flights are fetched via `fli`, which queries Google Flights directly using Chrome TLS mimicry (`curl_cffi`).
 >
-> **Per diem rates:** Run `python scripts/update_rates.py` once after setup (requires `GSA_API_KEY`) to download and cache domestic and international per diem rates to `data/`. The committed `data/per_diem_rates.json` is current as of April 2026.
+> **Per diem rates:** `data/per_diem_rates.json` is committed to the repo and current as of April 2026 — no setup step required. Run `python scripts/update_rates.py` each October (requires `GSA_API_KEY`) to pull the latest GSA fiscal-year rates.
 
 ---
 
@@ -57,7 +61,8 @@ pre-commit install --hook-type pre-push
 
 # 4. Configure your environment
 cp .env.example .env
-# Edit .env and fill in your API keys (only Resend and GSA are needed)
+# Edit .env: set RESEND_API_KEY and NOTIFICATION_EMAILS to enable email delivery.
+# FLIGHT_DATA_MODE=mock (the default) requires no other keys — run main.py immediately.
 ```
 
 **`.env` reference:**
@@ -68,8 +73,9 @@ cp .env.example .env
 # The UI Preferences page is the primary way to change this — no restart needed.
 FLIGHT_DATA_MODE=mock
 
-# Hotel + food estimates (domestic US) — register free at https://api.data.gov/signup/
-GSA_API_KEY=your_key_here
+# Per diem rates refresh — only needed when running scripts/update_rates.py (each October)
+# The committed data/per_diem_rates.json is used at runtime; no key required for daily runs.
+GSA_API_KEY=
 
 # Email delivery — register free at https://resend.com (3,000 emails/month, no credit card)
 RESEND_API_KEY=your_key_here
@@ -98,7 +104,7 @@ Finds today's cheapest trip and prints or emails it. The local SQLite database (
 streamlit run ui.py
 ```
 
-Opens at `http://localhost:8501`. Five pages:
+Opens at `http://localhost:8501`. Also accessible from other devices on your local network at `http://<your-machine-ip>:8501`. Five pages:
 
 | Page | What it does |
 |---|---|
@@ -114,13 +120,78 @@ Opens at `http://localhost:8501`. Five pages:
 python scheduler.py
 ```
 
-Keeps running and fires the full pipeline once per calendar day at the time configured in **Preferences → Daily run time** (default 7:00 AM local). Keep this process alive or register it with your OS init system:
+Keeps running and fires the full pipeline once per calendar day at the time configured in **Preferences → Daily run time** (default 7:00 AM local). Keep this process alive or register it with your OS init system.
 
-**macOS (launchd):** Create a plist in `~/Library/LaunchAgents/` that runs `python scheduler.py` at login.
+#### macOS (launchd) — recommended
 
-**Linux (systemd):** Create a user service unit that `ExecStart`s `python scheduler.py`.
+Save the file below as `~/Library/LaunchAgents/com.tripaday.scheduler.plist`, replacing `/path/to/trip-a-day` with the absolute path to this repository:
 
-**Windows:** Use Task Scheduler to launch `python scheduler.py` at startup, or run it in the background with `pythonw scheduler.py`.
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>Label</key>
+    <string>com.tripaday.scheduler</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/path/to/trip-a-day/.venv/bin/python</string>
+        <string>/path/to/trip-a-day/scheduler.py</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>/path/to/trip-a-day</string>
+    <key>StandardOutPath</key>
+    <string>/tmp/tripaday.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/tripaday.err</string>
+</dict></plist>
+```
+
+Then load it:
+
+```bash
+# Load (starts immediately and on every login)
+launchctl load ~/Library/LaunchAgents/com.tripaday.scheduler.plist
+
+# Verify it's registered
+launchctl list | grep tripaday
+
+# Stop and unload
+launchctl unload ~/Library/LaunchAgents/com.tripaday.scheduler.plist
+```
+
+The scheduler loads your `.env` file automatically — no need to embed API keys in the plist. Logs go to `/tmp/tripaday.log` and `/tmp/tripaday.err`.
+
+#### Linux (systemd)
+
+Create `~/.config/systemd/user/tripaday.service`:
+
+```ini
+[Unit]
+Description=trip-a-day scheduler
+
+[Service]
+ExecStart=/path/to/trip-a-day/.venv/bin/python /path/to/trip-a-day/scheduler.py
+WorkingDirectory=/path/to/trip-a-day
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
+
+Then enable it:
+
+```bash
+systemctl --user enable --now tripaday
+```
+
+#### Windows
+
+Use Task Scheduler to launch `python scheduler.py` at login (set **Start in** to the repo directory), or run it in a background console with `pythonw scheduler.py`.
 
 ---
 
@@ -137,6 +208,10 @@ Keeps running and fires the full pipeline once per calendar day at the time conf
 | Nearby airport radius | 0 mi (disabled) |
 | IRS mileage rate | $0.70/mile |
 | Daily run time | 7:00 AM local |
+| Timezone | `America/Chicago` (any IANA tz string) |
+| Flight data mode | `mock` — change to `live` in Preferences UI or `.env` |
+| Parallel flight queries | 3 concurrent workers |
+| Run timeout | 20 minutes |
 | Notifications | Enabled |
 | Monthly email limit | 3,000 (Resend free tier) |
 | Email warning threshold | 90% |
@@ -184,7 +259,7 @@ mypy src/
 ├── src/trip_a_day/
 │   ├── db.py                # SQLite schema and ORM (SQLAlchemy 2.x)
 │   ├── preferences.py       # Read/write user preferences from DB
-│   ├── fetcher.py           # fast-flights + per diem lookups + nearby airport scan
+│   ├── fetcher.py           # fli + per diem lookups + nearby airport scan
 │   ├── selector.py          # 8 destination selection strategies
 │   ├── filters.py           # Region allowlist/blocklist, favorite-radius, exclusion rules
 │   ├── cache.py             # TTL-aware flight price cache
@@ -192,8 +267,10 @@ mypy src/
 │   ├── costs.py             # Cost assembly (flight + hotel + car + food + transport)
 │   ├── ranker.py            # Trip sorting and selection logic
 │   ├── charts.py            # Price history chart (matplotlib PNG, base64-embedded in email)
+│   ├── links.py             # Booking URL builders (flight, hotel, car)
 │   ├── notifier.py          # Resend email or terminal output
-│   └── destination_input.py # Phase 8: per-diem fuzzy matching, CSV parse/preview
+│   ├── utils.py             # Timezone conversion helpers
+│   └── destination_input.py # Per-diem fuzzy matching, CSV parse/preview
 ├── car_rates.json           # Static regional car rental rate estimates
 ├── data/
 │   ├── seed_airports.json   # 302 curated destination airports with lat/lon and region
