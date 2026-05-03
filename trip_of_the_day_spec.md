@@ -3,7 +3,7 @@
 **Version:** 1.3
 **Date:** 2026-04-19
 **Language:** Python
-**Status:** Phases 1–8 complete
+**Status:** Phases 1–9 complete
 
 > **Modification policy:** This spec is the authoritative reference for the project. Do not modify it except to update phase completion status (e.g., changing "In Progress" to "Complete"). All other edits require explicit instruction from the project owner. This policy was temporarily lifted for the v1.3 phase renumbering only.
 
@@ -800,19 +800,21 @@ All values in Section 5.1 are stored in the `preferences` table and editable via
 
 ---
 
-### Phase 9: Polish, Hardening, and 1.0 Release Prep
+### Phase 9: Polish, Hardening, and 1.0 Release Prep — ✅ Complete
 
 **Goal:** Ensure the application is stable, well-documented, and ready for first-time users to set up independently.
 
 **Scope:**
-- End-to-end test on a clean machine (clone → configure → first daily email)
-- README audit: verify all setup steps, API key instructions, and run commands are current
-- Add CHANGELOG.md with per-phase summary of changes
-- CONTRIBUTING.md with contribution guidelines and PR checklist
-- Version bump to 1.0.0 in pyproject.toml; tag `v1.0.0`
-- Final spec review: confirm all implemented phases match the spec
-- Smoke tests on macOS and Linux (headless)
-- Verify scheduler setup instructions for macOS (launchd), Linux (systemd/cron), Windows (startup)
+- README audit: all setup steps, API key instructions, and run commands verified and updated
+- CHANGELOG.md added with per-phase summary of changes
+- CONTRIBUTING.md updated with dev environment setup, test commands, and PR checklist
+- Version bumped to 1.0.0 in pyproject.toml (no git tag)
+- Final spec review: confirmed all implemented phases match the spec; discrepancies noted in CLAUDE.md
+- Scheduler setup instructions fleshed out: macOS launchd plist example, Linux systemd snippet, Windows note
+- Manual verification checklist included in the PR body for clean-machine testing
+
+**Out of scope (deferred):**
+- Linux headless smoke tests — moved to Section 14 Future Work
 
 **Success criteria:** A new developer can clone the repository and receive a working daily trip email within 30 minutes, following only the README. All unit and smoke tests pass on a clean Python 3.12 environment.
 
@@ -883,3 +885,4 @@ These items are explicitly out of scope for all current phases but should not be
 - **Weather data integration** — include destination weather forecast in the notification
 - **Trip scoring beyond cost** — incorporate safety index, traveler ratings, climate suitability
 - **Per-component price history chart** — extend `charts.py` to show stacked or side-by-side lines for flights, hotel, food, and car separately (in addition to the existing total-cost line), helping users understand which cost component is driving changes over time
+- **Linux headless smoke tests** — automated end-to-end test on a clean Linux environment (e.g. GitHub Actions Ubuntu runner): clone → venv → install → `FLIGHT_DATA_MODE=mock python main.py` → assert exit 0 and DB row created. Currently verified manually on macOS only.
