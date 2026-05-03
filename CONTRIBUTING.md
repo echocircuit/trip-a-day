@@ -16,7 +16,7 @@ cd trip-a-day
 uv venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate
 uv pip install -e ".[dev]"
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 
 # 3. Install pre-commit hooks (ruff on commit, unit tests on push)
 pre-commit install
