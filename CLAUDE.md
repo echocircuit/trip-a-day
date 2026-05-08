@@ -43,6 +43,8 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 **v1.0 pre-release review — Complete.** Full diagnostic read of all source files; 2 must-fix and 5 should-fix items resolved. Fixes: `build_hotel_url`/`build_car_url` `site="manual"` crash; `sys.exit(1)` → `sys.exit(0)` for Pass 2 no-candidates; removed `_window_pass1_for_departure` dead code; `hotel_is_estimate=True` in `build_cost_breakdown`; removed phantom `numpy`/`scipy` deps; added exception logging to `_email_limit_warning_html`; documented `DB_PATH` in `.env.example`. 357 tests passing.
 
+**feature/window-mode-fixes — Complete.** Seven live-run bugs fixed (window trip duration from span, _probe_dest_window trip_nights override, Pass 2 window clipping, budget reset before fallback, stale mock cache exclusion, last_queried_at staleness rotation, nearby excluded filter). 366 tests passing (357 prior + 9 new).
+
 **Phase 9 — Complete.** Polish, hardening, and 1.0 release prep: README audited (scheduler launchd plist example, fli reference, preferences table, project structure); CHANGELOG.md added; CONTRIBUTING.md expanded (dev setup, test commands, PR checklist); version bumped to 1.0.0; spec reviewed and Phase 9 marked complete; Linux headless smoke tests moved to Section 14 Future Work. 350 tests passing (unchanged — Phase 9 is docs-only).
 
 **feature/performance-fix — Complete.** Root cause: sequential fli calls (~49s each) with no concurrency, compounded by 2 active travel windows multiplying the batch (2 windows × 15 dests × 3 probes = 90 sequential calls = 70-min run). Fixes: WAL-mode SQLite + per-thread sessions for thread safety; `ThreadPoolExecutor` parallel Pass 1 (3 workers default); random jitter per call to stagger TLS connections; global run timeout (20 min); probe hard cap (7/dest); travel window seed changed to `enabled=False`; Performance preferences exposed in UI; Streamlit network config added. 350 tests passing (346 prior + 7 new performance; note some counted in multiple groups above).
@@ -252,6 +254,11 @@ main.py
 | `live_calls_used += 1` increments BEFORE `get_flight_offers()` in `window_search.py` | `record_api_call()` fires before `get_flights()` in `fetcher.py`; the local counter must match that timing so `pass1_stats["live_calls"]` agrees with `api_usage.calls_made`. Previously the increment was after the call, so exceptions between those two lines would leave the counters misaligned. |
 | `_probe_dest_normal` initialises `calls/hits` outside the try block | Previously returned hard-coded `(0, 0)` on any exception from `find_cheapest_in_window`; now the outer variables survive the except branch, preserving whatever partial counts were set before the exception. |
 | `_probe_dest_window` initialises per-window `calls/hits=0` before each try/except | Previously the `continue` in the except block skipped `live_calls_used += calls`, discarding counts for the failed window. Accumulation now always runs (with `calls=0` for a failed window), preserving counts from earlier windows in the same destination pass. |
+| Window trip duration derived from window span, not `trip_length_nights` preference | `trip_length_nights=7` collapsed a 4-night Fall Break window's departure probe range to 2 dates (Oct 3–4 only); using the actual span (Oct 5→9 = 4 nights) widens probes across Oct 3–7 and gives the API realistic departure dates to search. `trip_nights` is stored in each window_data dict so threads use it without re-reading ORM objects. |
+| `live_calls_made = 0` reset before normal-mode fallback | Window mode accumulates live_calls_made across all windows before falling back to normal mode; without the reset the budget is exhausted before any normal-mode probes can run. Resetting gives the fallback a fresh budget equal to `max_live_calls_per_run`. |
+| `_stale_cache_fallback` filters `PriceCache.is_mock.is_(False)` | Mock cache rows (departure price=$360, is_mock=True) created during testing persist past their context. Without the filter, a May live run picked up an April mock entry and produced a nonsense $4,945 total ($360 flight + $4,585 hotel for CDG). |
+| `last_queried_at` updated for no-price destinations when live calls consumed | European cities (CDG, LHR, …) from HSV consistently return no price; without this update they permanently occupy the top of the least-recently-queried queue, recycling the same unreachable destinations every day. Marking them as queried rotates them out so other destinations get a turn. |
+| `get_nearby_airports` filters `Destination.excluded.is_(False)` | An excluded destination can be within the search radius; without the filter it would appear in `departure_iatas` and trigger flight probes from a user-blocked origin. |
 
 ## Key file map
 
@@ -285,7 +292,7 @@ main.py
 | `tests/unit/test_fetcher_perdiem.py` | Per diem lookup fallback chain tests (7 tests incl. domestic national-average fallback) |
 | `tests/unit/test_fetcher_flights.py` | direct_only filtering tests; cheapest-by-price selection; deep link encodes direct_only (8 tests) |
 | `tests/unit/test_filters.py` | Region allowlist/blocklist, favorite-radius, exclusion rule tests (16 tests) |
-| `tests/unit/test_fetcher_nearby.py` | `get_nearby_airports` haversine radius tests (9 tests) |
+| `tests/unit/test_fetcher_nearby.py` | `get_nearby_airports` haversine radius tests (10 tests) |
 | `tests/unit/test_costs_transport.py` | `transport_usd` field on `CostBreakdown` (6 tests) |
 | `tests/unit/test_multi_airport.py` | Multi-airport pipeline smoke tests (2 tests) |
 | `tests/test_links.py` | URL builder tests for all three `links.py` functions (34 tests) |
@@ -295,11 +302,11 @@ main.py
 | `tests/unit/test_notifier_departure.py` | Departure airport line in HTML and plain text email (12 tests) |
 | `tests/unit/test_window_search.py` | `_probe_dates` and `find_cheapest_in_window` unit tests — budget, cache, and probe-selection (17 tests) |
 | `tests/test_charts.py` | Chart generation: None for <3 pts, PNG bytes for ≥3, 30-day window boundary, S2 degradation, dual-series rendering, no city-name bytes (17 tests) |
-| `tests/test_pass1_resilience.py` | Pass 1 failure modes: graceful exit, stale cache fallback, exception skipping, diagnostics JSON (8 tests) |
+| `tests/test_pass1_resilience.py` | Pass 1 failure modes: graceful exit, stale cache fallback, exception skipping, diagnostics JSON, mock exclusion, last_queried_at staleness rotation (11 tests) |
 | `tests/test_api_counter.py` | API counter consistency: mock/live modes, exception path counting, window search double-count prevention (7 tests) |
 | `tests/test_notifier_limits.py` | Monthly email limit enforcement: get/record helpers, _check_email_limit, warning banner, RunLog blocking (16 tests) |
 | `tests/test_utils.py` | Timezone conversion helpers: CST/CDT/EST/BST conversions, naive-as-UTC, invalid tz raises, format shape (11 tests) |
-| `tests/test_travel_windows.py` | Travel window model properties, `_probe_dest_window` behavior (best result selection, exception handling), notifier HTML/plain helpers, `send_trip_notification` signature, `_build_html/_build_plain` thread-through (27 tests) |
+| `tests/test_travel_windows.py` | Travel window model properties, `_probe_dest_window` behavior (best result selection, exception handling, trip_nights override), notifier HTML/plain helpers, `send_trip_notification` signature, `_build_html/_build_plain` thread-through (28 tests) |
 | `tests/test_settings.py` | `get_flight_data_mode()` priority logic: DB > env var > default; invalid value fallback; seed default (8 tests) |
 | `tests/test_performance.py` | Probe cap enforcement, travel window call-count correctness (2 windows × 3 dests = 6 calls), max_workers=1 sequential behavior, run timeout submission guard (7 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |

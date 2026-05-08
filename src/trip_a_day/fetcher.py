@@ -861,7 +861,9 @@ def get_nearby_airports(
         return []
 
     destinations = (
-        session.query(Destination).filter(Destination.enabled.is_(True)).all()
+        session.query(Destination)
+        .filter(Destination.enabled.is_(True), Destination.excluded.is_(False))
+        .all()
     )
     nearby: list[AirportInfo] = []
     for dest in destinations:

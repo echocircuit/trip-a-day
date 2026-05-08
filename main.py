@@ -197,6 +197,7 @@ def _stale_cache_fallback(
                 PriceCache.origin_iata == dep_iata,
                 PriceCache.destination_iata == iata,
                 PriceCache.departure_date >= today,
+                PriceCache.is_mock.is_(False),
             )
             .order_by(PriceCache.queried_at.desc())
             .first()
@@ -370,13 +371,14 @@ def _probe_dest_window(
             hits = 0
             cost = None
             probe_date = None
+            window_tn = tw_data.get("trip_nights", trip_nights)
             try:
                 cost, probe_date, calls, hits = find_cheapest_in_window(
                     origin_iata=dep_iata,
                     destination=dest,
                     min_days=tw_data["min_days"],
                     max_days=tw_data["max_days"],
-                    trip_length_nights=trip_nights,
+                    trip_length_nights=window_tn,
                     adults=adults,
                     children=children,
                     num_rooms=num_rooms,
@@ -404,7 +406,7 @@ def _probe_dest_window(
             if cost is None or probe_date is None:
                 continue
 
-            return_date_check = probe_date + timedelta(days=trip_nights)
+            return_date_check = probe_date + timedelta(days=window_tn)
             if return_date_check > tw_data["eff_end"]:
                 logger.debug(
                     "  [P1/win] %s→%s (%s): return %s > window end %s — excluded",
@@ -886,6 +888,12 @@ def run(triggered_by: str = "manual") -> None:
                                 dep_iata,
                                 iata_res,
                             )
+                            if (
+                                calls > 0
+                                and dep_iata == home_airport
+                                and iata_res in iata_to_dest
+                            ):
+                                iata_to_dest[iata_res].last_queried_at = now_utc
 
                     # Log and cancel futures that didn't complete before timeout.
                     for fut in pending_set:
