@@ -465,3 +465,109 @@ class TestBuildPlainWindowSection:
         trip = _make_trip()
         plain = _build_plain(trip)
         assert "Travel window" not in plain
+
+
+# ── window_data_list construction (run() logic) ───────────────────────────────
+
+
+class TestWindowDataListConstruction:
+    """Verify the math that run() uses to build window_data_list entries.
+
+    The core fix for the PR #46 incomplete fix: trip_nights in the dict must
+    equal the window span (latest_return - earliest_departure), not the global
+    trip_length_nights preference.
+    """
+
+    def test_window_tn_equals_span_not_global(self):
+        """window_tn = (latest_return - earliest_departure).days, not 7."""
+        tw = _make_window(earliest=date(2026, 10, 5), latest=date(2026, 10, 9))
+        window_tn = (tw.latest_return - tw.earliest_departure).days
+        assert window_tn == 4
+        assert window_tn != 7  # must not use global trip_nights default
+
+    def test_max_days_wider_with_span_based_trip_nights(self):
+        """Fall Break 2026 with buffer=2: span=4, gives max_days=152 not 149.
+
+        With global trip_nights=7: max_days = Oct11 - 7d - May8 = Oct4 - May8 = 149
+        With window_tn=4:          max_days = Oct11 - 4d - May8 = Oct7 - May8 = 152
+        """
+        tw = _make_window(
+            earliest=date(2026, 10, 5),
+            latest=date(2026, 10, 9),
+            buffer_start=2,
+            buffer_end=2,
+        )
+        run_date = date(2026, 5, 8)
+        window_tn = (tw.latest_return - tw.earliest_departure).days  # 4
+        eff_start = tw.effective_start  # Oct 3
+        eff_end = tw.effective_end  # Oct 11
+        min_days = max(0, (eff_start - run_date).days)
+        max_days = (eff_end - timedelta(days=window_tn) - run_date).days
+
+        assert window_tn == 4
+        assert min_days == 148
+        assert max_days == 152  # 4-day probe range, not 1-day
+        assert max_days > min_days
+
+    def test_max_days_with_7_global_gives_nearly_closed_window(self):
+        """Demonstrates the pre-fix bug: global trip_nights=7 collapses the range."""
+        tw = _make_window(
+            earliest=date(2026, 10, 5),
+            latest=date(2026, 10, 9),
+            buffer_start=2,
+            buffer_end=2,
+        )
+        run_date = date(2026, 5, 8)
+        global_trip_nights = 7  # bug: was using this instead of span
+        eff_start = tw.effective_start  # Oct 3
+        eff_end = tw.effective_end  # Oct 11
+        min_days = max(0, (eff_start - run_date).days)
+        max_days_buggy = (eff_end - timedelta(days=global_trip_nights) - run_date).days
+
+        # The bug: range collapses to [148, 149] — only 2 dates possible
+        assert max_days_buggy - min_days == 1
+
+    def test_window_tn_in_probe_receives_span_value(self):
+        """_probe_dest_window receives trip_length_nights=4 when dict has trip_nights=4."""
+        import main as main_mod
+
+        captured: list[dict] = []
+
+        def _capture(**kwargs):
+            captured.append(kwargs)
+            return (None, None, 0, 0)
+
+        wd = [
+            {
+                "name": "Fall Break",
+                "min_days": 148,
+                "max_days": 152,
+                "eff_end": date(2026, 10, 11),
+                "trip_nights": 4,  # window span
+            }
+        ]
+        dest_data = {
+            "iata": "CDG",
+            "city": "Paris",
+            "country": "France",
+            "region": "Europe",
+        }
+        with patch("main.find_cheapest_in_window", side_effect=_capture):
+            main_mod._probe_dest_window(
+                dep_iata="HSV",
+                dest_data=dest_data,
+                window_data_list=wd,
+                trip_nights=7,  # global — must be ignored
+                adults=2,
+                children=0,
+                num_rooms=1,
+                car_rental_required=False,
+                direct_flights_only=False,
+                cache_ttl_enabled=True,
+                is_mock=True,
+                live_calls_budget=40,
+                transport_usd=0.0,
+            )
+
+        assert len(captured) == 1
+        assert captured[0]["trip_length_nights"] == 4

@@ -34,6 +34,7 @@ def test_preferences_default_keys_exist():
         "notifications_enabled",
         "ranking_strategy",
         "daily_batch_size",
+        "window_batch_size",
         "destination_selection_strategy",
     ]
     for key in required_keys:

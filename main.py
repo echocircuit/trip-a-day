@@ -545,6 +545,7 @@ def run(triggered_by: str = "manual") -> None:
         car_rental_required = get_bool(session, "car_rental_required")
         # Phase 5 pool prefs
         daily_batch_size = get_int(session, "daily_batch_size")
+        window_batch_size = get_int(session, "window_batch_size")
         selection_strategy = get(session, "destination_selection_strategy")
         cache_ttl_enabled = get_bool(session, "cache_ttl_enabled")
         max_live_calls = get_int(session, "max_live_calls_per_run")
@@ -599,12 +600,29 @@ def run(triggered_by: str = "manual") -> None:
             )
 
         # ── Select daily batch from eligible pool ─────────────────────────────
+        # Use the larger window_batch_size when any travel windows are active so
+        # window mode has more destinations to probe (it only hits 2-3 dates per
+        # destination, leaving budget for a wider scan than normal mode needs).
+        _any_active_windows = any(
+            tw.effective_end >= run_date
+            for tw in session.query(TravelWindow)
+            .filter(TravelWindow.enabled.is_(True))
+            .all()
+        )
+        effective_batch_size = (
+            max(daily_batch_size, window_batch_size)
+            if _any_active_windows
+            else daily_batch_size
+        )
         batch = select_daily_batch(
-            selection_strategy, daily_batch_size, session, pool=eligible_pool
+            selection_strategy, effective_batch_size, session, pool=eligible_pool
         )
         session.commit()
         logger.info(
-            "Batch: %d destinations via strategy '%s'", len(batch), selection_strategy
+            "Batch: %d destinations via strategy '%s'%s",
+            len(batch),
+            selection_strategy,
+            " (window mode — enlarged batch)" if _any_active_windows else "",
         )
 
         # ── Phase 7: resolve departure airports ──────────────────────────────
@@ -737,16 +755,22 @@ def run(triggered_by: str = "manual") -> None:
                     for tw in active_windows:
                         eff_start = tw.effective_start
                         eff_end = tw.effective_end
+                        # Trip duration for a window trip = the window span itself
+                        # (latest_return - earliest_departure), NOT the global
+                        # trip_nights preference.  Using the global value here was
+                        # the PR #46 incomplete fix: max_days_tw ended up only 1-2
+                        # days wide, giving _probe_dates almost nothing to probe.
+                        window_tn = (tw.latest_return - tw.earliest_departure).days
                         min_days_tw = max(0, (eff_start - run_date).days)
                         max_days_tw = (
-                            eff_end - timedelta(days=trip_nights) - run_date
+                            eff_end - timedelta(days=window_tn) - run_date
                         ).days
                         if max_days_tw < min_days_tw:
-                            _logger_tw.info(
+                            _logger_tw.warning(
                                 '"%s" effective range too short for %d-night trip'
                                 " from %s — skipping.",
                                 tw.name,
-                                trip_nights,
+                                window_tn,
                                 dep_iata,
                             )
                             continue
@@ -756,7 +780,18 @@ def run(triggered_by: str = "manual") -> None:
                                 "min_days": min_days_tw,
                                 "max_days": max_days_tw,
                                 "eff_end": eff_end,
+                                "trip_nights": window_tn,
                             }
+                        )
+                    for _entry in window_data_list:
+                        _logger_tw.debug(
+                            '  window "%s": min_days=%d max_days=%d'
+                            " trip_nights=%d eff_end=%s",
+                            _entry["name"],
+                            _entry["min_days"],
+                            _entry["max_days"],
+                            _entry["trip_nights"],
+                            _entry["eff_end"],
                         )
 
                 # iata → ORM Destination for stat updates on the main session later.
