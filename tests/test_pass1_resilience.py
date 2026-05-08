@@ -5,12 +5,14 @@ Verifies that when Pass 1 returns no valid prices the pipeline:
 - Tries a stale-cache fallback before giving up
 - Logs and skips individual exceptions rather than aborting the whole run
 - Writes a structured pass1_diagnostics JSON blob to run_log
+- _stale_cache_fallback excludes is_mock=True cache entries
+- last_queried_at updated for no-price destinations that consumed live calls
 """
 
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -19,7 +21,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from trip_a_day.costs import CostBreakdown
-from trip_a_day.db import Base, RunLog
+from trip_a_day.db import Base, PriceCache, RunLog
 from trip_a_day.fetcher import AirportInfo, FlightOffer, FoodEstimate, HotelOffer
 from trip_a_day.ranker import TripCandidate
 
@@ -428,3 +430,165 @@ def test_pass1_diagnostics_present_on_failed_run(in_memory_session):
     diag = json.loads(run.pass1_diagnostics)
     assert diag["no_price"] == 2
     assert diag["valid"] == 0
+
+
+# ── Test 5: _stale_cache_fallback excludes is_mock=True entries ────────────
+
+
+def test_stale_cache_fallback_excludes_mock_entries(tmp_path):
+    """_stale_cache_fallback must not use is_mock=True cache entries.
+
+    A mock cache row (is_mock=True) should be ignored even if it has a
+    future departure date, leaving no candidate; a real row (is_mock=False)
+    for the same destination should be returned.
+    """
+    from types import SimpleNamespace
+
+    import main
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'stale_mock.db'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    future = date.today() + timedelta(days=30)
+    past_expire = datetime(2020, 1, 1)
+
+    with factory() as s:
+        # Mock entry — should be ignored
+        s.add(
+            PriceCache(
+                origin_iata="HSV",
+                destination_iata="CDG",
+                departure_date=future,
+                return_date=future + timedelta(days=7),
+                adults=2,
+                children=0,
+                price_usd=360.0,
+                expires_at=past_expire,
+                is_mock=True,
+            )
+        )
+        s.commit()
+
+    dest = SimpleNamespace(iata_code="CDG", excluded=False)
+
+    with factory() as s:
+        result = main._stale_cache_fallback(
+            session=s,
+            batch=[dest],
+            dep_iata="HSV",
+            transport_usd=0.0,
+            home_lat=34.6,
+            home_lon=-86.8,
+            num_adults=2,
+            num_children=0,
+            num_rooms=1,
+            car_rental_required=False,
+            trip_nights=7,
+            preferred_car_site="kayak",
+        )
+
+    assert result == [], "Mock cache entry must not produce a stale candidate"
+
+
+def test_stale_cache_fallback_uses_real_entries(tmp_path):
+    """_stale_cache_fallback returns candidates when is_mock=False entries exist."""
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    import main
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'stale_real.db'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+
+    future = date.today() + timedelta(days=30)
+    past_expire = datetime(2020, 1, 1)
+
+    with factory() as s:
+        s.add(
+            PriceCache(
+                origin_iata="HSV",
+                destination_iata="CDG",
+                departure_date=future,
+                return_date=future + timedelta(days=7),
+                adults=2,
+                children=0,
+                price_usd=500.0,
+                expires_at=past_expire,
+                is_mock=False,
+            )
+        )
+        s.commit()
+
+    dest = SimpleNamespace(iata_code="CDG", excluded=False)
+
+    mock_airport = AirportInfo(
+        iata="CDG",
+        city="Paris",
+        country="France",
+        country_code="FR",
+        region="Western Europe",
+        latitude=48.86,
+        longitude=2.35,
+    )
+
+    with (
+        factory() as s,
+        patch("main.get_airport_info", return_value=mock_airport),
+        patch("main.get_hotel_offers", return_value=_hotel(future)),
+        patch("main.get_food_cost", return_value=_food()),
+        patch("main.build_flight_url", return_value="https://example.com/f"),
+        patch("main.build_car_url", return_value="https://example.com/c"),
+    ):
+        result = main._stale_cache_fallback(
+            session=s,
+            batch=[dest],
+            dep_iata="HSV",
+            transport_usd=0.0,
+            home_lat=34.6,
+            home_lon=-86.8,
+            num_adults=2,
+            num_children=0,
+            num_rooms=1,
+            car_rental_required=False,
+            trip_nights=7,
+            preferred_car_site="kayak",
+        )
+
+    assert len(result) == 1
+    assert result[0].destination_iata == "CDG"
+    assert result[0].stale_cache is True
+
+
+# ── Test 6: last_queried_at updated for no-price destinations with live calls ─
+
+
+def test_last_queried_at_updated_for_no_price_with_live_calls(in_memory_session):
+    """last_queried_at is updated even when no price is found, if a live call was made.
+
+    Destinations that consistently return no price (e.g. European cities from HSV)
+    were permanently stuck at the top of the least-recently-queried queue because
+    last_queried_at was only updated on success. This fix ensures they rotate out.
+    """
+    import main
+
+    dest = _dest("JFK")
+    assert dest.last_queried_at is None
+
+    with (
+        patch("main.init_db"),
+        patch("main.SessionFactory", in_memory_session),
+        patch("main.select_daily_batch", return_value=[dest]),
+        # No price found but 1 live call consumed
+        patch("main.find_cheapest_in_window", return_value=(None, None, 1, 0)),
+        patch("main.get_airport_info", return_value=_airport()),
+        patch("main._stale_cache_fallback", return_value=[]),
+        patch("main.send_no_results_notification", return_value=True),
+        pytest.raises(SystemExit),
+    ):
+        main.run()
+
+    assert dest.last_queried_at is not None, (
+        "last_queried_at should be set after a live call, even with no price"
+    )

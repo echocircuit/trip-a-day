@@ -4,7 +4,7 @@ and notifier rendering.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 from trip_a_day.costs import CostBreakdown
@@ -272,6 +272,58 @@ class TestProbeDestWindow:
 
         assert cost is None
         assert window_name is None
+
+    def test_window_trip_nights_overrides_function_param(self):
+        """trip_nights in tw_data takes priority over the function-level trip_nights param.
+
+        Fall Break is 4 nights (Oct 5→9); the function param of 7 should be ignored
+        so that find_cheapest_in_window receives trip_length_nights=4.
+        """
+        import main as main_mod
+
+        captured_kwargs: list[dict] = []
+
+        def _capture(**kwargs):
+            captured_kwargs.append(kwargs)
+            return (None, None, 0, 0)
+
+        # Window dict carries trip_nights=4 (derived from window span)
+        wd = [
+            {
+                "name": "Fall Break",
+                "min_days": 0,
+                "max_days": 10,
+                "eff_end": date.today() + timedelta(days=10),
+                "trip_nights": 4,
+            }
+        ]
+        dest_data = {
+            "iata": "NRT",
+            "city": "Tokyo",
+            "country": "Japan",
+            "region": "Asia",
+        }
+        with patch("main.find_cheapest_in_window", side_effect=_capture):
+            main_mod._probe_dest_window(
+                dep_iata="HSV",
+                dest_data=dest_data,
+                window_data_list=wd,
+                trip_nights=7,  # function param — should be overridden
+                adults=2,
+                children=0,
+                num_rooms=1,
+                car_rental_required=False,
+                direct_flights_only=False,
+                cache_ttl_enabled=True,
+                is_mock=True,
+                live_calls_budget=40,
+                transport_usd=0.0,
+            )
+
+        assert len(captured_kwargs) == 1
+        assert captured_kwargs[0]["trip_length_nights"] == 4, (
+            "tw_data['trip_nights']=4 should override function param trip_nights=7"
+        )
 
 
 # ── _travel_window_html helper ────────────────────────────────────────────────

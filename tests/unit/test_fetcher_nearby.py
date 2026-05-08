@@ -26,6 +26,7 @@ def _add_airport(
     lat: float,
     lon: float,
     enabled: bool = True,
+    excluded: bool = False,
 ) -> Destination:
     d = Destination(
         iata_code=iata,
@@ -35,7 +36,7 @@ def _add_airport(
         latitude=lat,
         longitude=lon,
         enabled=enabled,
-        excluded=False,
+        excluded=excluded,
     )
     session.add(d)
     session.flush()
@@ -117,3 +118,10 @@ class TestGetNearbyAirports:
         _add_airport(session, "BHM", "Birmingham", 33.5629, -86.7535)
         result = get_nearby_airports("UNKNOWN", 500, session)
         assert result == []
+
+    def test_excluded_airport_within_radius_excluded(self, session):
+        _add_airport(session, "HSV", "Huntsville", 34.6418, -86.7751)
+        _add_airport(session, "BHM", "Birmingham", 33.5629, -86.7535, excluded=True)
+        result = get_nearby_airports("HSV", 500, session)
+        iatas = [a.iata for a in result]
+        assert "BHM" not in iatas
