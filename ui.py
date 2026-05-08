@@ -522,6 +522,18 @@ def _preferences() -> None:
             value=_int("daily_batch_size", 15),
             help="Number of destinations evaluated each run.",
         )
+        window_batch_size = st.number_input(
+            "Window-mode batch size",
+            min_value=1,
+            max_value=100,
+            value=_int("window_batch_size", 12),
+            help=(
+                "Batch size used when active travel windows are present. "
+                "Window probes hit only 2-3 dates per destination, so a larger "
+                "batch fits within the same API budget. Effective size is "
+                "max(daily, window)."
+            ),
+        )
         sel_strategy_keys = list(STRATEGY_LABELS.keys())
         sel_strategy_default = prefs.get(
             "destination_selection_strategy", "least_recently_queried"
@@ -800,6 +812,7 @@ def _preferences() -> None:
                 set_pref(s, "car_rental_required", "true" if car_required else "false")
                 set_pref(s, "ranking_strategy", ranking_strategy)
                 set_pref(s, "daily_batch_size", str(int(daily_batch_size)))
+                set_pref(s, "window_batch_size", str(int(window_batch_size)))
                 set_pref(
                     s, "destination_selection_strategy", destination_selection_strategy
                 )
@@ -906,6 +919,14 @@ def _preferences() -> None:
             col_buf.write(buf_str)
             col_eff.write(f"{eff_s} to {eff_e} ({eff_days}d)")
             col_status.write(status_label)
+
+            if tw.enabled and (tw.earliest_departure - today_tw).days > 300:
+                st.caption(
+                    f"⚠️ **{tw.name}** departs in "
+                    f"{(tw.earliest_departure - today_tw).days} days. "
+                    "Google Flights typically prices flights ~330 days out — "
+                    "window searches may return no results until closer to the date."
+                )
 
             with col_actions:
                 toggle_label = "Disable" if tw.enabled else "Enable"
