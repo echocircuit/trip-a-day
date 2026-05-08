@@ -450,3 +450,32 @@ Full diagnostic read of all source files; findings written to `docs/v1_review_re
 ### Next Action
 
 v1.0 pre-release review complete. Open PR `feature/phase-9-polish` → `main`.
+
+---
+
+## feature/window-mode-fixes (2026-05-07)
+
+Seven live-run bugs diagnosed from DB investigation; all fixed and tested.
+
+### Fixes
+
+- [x] Fix 1: Window trip duration derived from window span (`latest_return - earliest_departure`), not the `trip_length_nights` preference — prevents the departure probe window from collapsing to 2 dates for a 4-night window
+- [x] Fix 2: `_probe_dest_window` uses `tw_data.get("trip_nights", trip_nights)` so each window gets its own natural trip length instead of the global preference
+- [x] Fix 3: Pass 2 night variants clipped to window's effective_end; window's natural trip length inserted when not already in variants
+- [x] Fix 4: `live_calls_made = 0` reset before normal-mode fallback so window-mode failures don't exhaust the budget for the fallback pass
+- [x] Fix 5: `_stale_cache_fallback` filters `PriceCache.is_mock.is_(False)` — prevents April mock entries from appearing as stale prices in May live runs
+- [x] Fix 6: `last_queried_at` updated for no-price destinations when live calls were consumed — allows them to rotate out of the least-recently-queried queue
+- [x] Fix 7: `get_nearby_airports` filters `Destination.excluded.is_(False)` — excluded airports no longer appear as nearby departure alternatives
+
+### Tests
+
+- [x] `tests/test_travel_windows.py`: `test_window_trip_nights_overrides_function_param` — verifies tw_data trip_nights takes priority over function param
+- [x] `tests/test_pass1_resilience.py`: `test_stale_cache_fallback_excludes_mock_entries` + `test_stale_cache_fallback_uses_real_entries` — mock exclusion and real-entry baseline
+- [x] `tests/test_pass1_resilience.py`: `test_last_queried_at_updated_for_no_price_with_live_calls` — staleness rotation fix
+- [x] `tests/unit/test_fetcher_nearby.py`: `test_excluded_airport_within_radius_excluded` — nearby exclusion filter
+
+**Result:** 366 tests passing (357 prior + 9 new).
+
+### Next Action
+
+PR `feature/window-mode-fixes` → `main` open. Merge and resume Phase 9.
