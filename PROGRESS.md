@@ -479,3 +479,28 @@ Seven live-run bugs diagnosed from DB investigation; all fixed and tested.
 ### Next Action
 
 PR `feature/window-mode-fixes` → `main` open. Merge and resume Phase 9.
+
+---
+
+## feature/window-mode-fix2 (2026-05-09)
+
+Follow-up investigation found PR #46's `trip_nights` fix was incomplete: the
+`window_data_list` dict never received a `trip_nights` key, so `_probe_dest_window`
+always fell back to global `trip_nights=7`. For a 4-night Fall Break window this
+collapsed the departure probe range to [148,149] — only 2 dates instead of 5.
+
+### Fixes
+
+- [x] Fix 1 (core): In `run()`, compute `window_tn = (tw.latest_return - tw.earliest_departure).days` and use it in both `max_days_tw` and the `window_data_list` dict — departure probe range widens from 1 day to the full window span
+- [x] Fix 2: DEBUG logging for each `window_data_list` entry (name, min_days, max_days, trip_nights, eff_end) so future diagnosis is instant
+- [x] Fix 3: `get_cached_flight` now filters `PriceCache.is_mock.is_(False)` — mock entries from test runs can no longer silently substitute for live prices regardless of TTL
+- [x] Fix 4: New `window_batch_size` DB preference (default 12); window-mode runs use `max(daily_batch_size, window_batch_size)` so the larger pool gets the benefit of cheap window probes
+- [x] Fix 5: UI advisory in Travel Windows section when `earliest_departure` is > 300 days out — warns that Google Flights may not yet price that far ahead
+
+### Tests
+
+- [x] `tests/unit/test_cache.py`: `test_mock_entries_excluded_from_cache_hits` + `test_live_entry_returned_cache_hit` — is_mock filter behavior
+- [x] `tests/test_travel_windows.py`: `TestWindowDataListConstruction` — 4 tests verifying window_tn formula, min/max_days math, and probe receives correct value
+- [x] `tests/test_smoke.py`: `window_batch_size` added to required-keys list
+
+**Result:** 371 tests passing (366 prior + 5 new).

@@ -45,6 +45,7 @@ def get_cached_flight(
             PriceCache.adults == adults,
             PriceCache.children == children,
             PriceCache.expires_at > now,
+            PriceCache.is_mock.is_(False),
         )
         .order_by(PriceCache.queried_at.desc())
         .first()

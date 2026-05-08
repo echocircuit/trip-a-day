@@ -277,6 +277,9 @@ _PREFERENCE_DEFAULTS: dict[str, str] = {
     "max_concurrent_flight_queries": "3",
     "flight_query_timeout_seconds": "10",
     "run_timeout_minutes": "20",
+    # Travel window search uses a larger batch than normal runs: window mode only
+    # probes 2-3 dates per destination so it can afford more destinations per run.
+    "window_batch_size": "12",
 }
 
 # Public alias for use in tests and tooling.

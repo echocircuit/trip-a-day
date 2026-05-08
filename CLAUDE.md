@@ -43,6 +43,8 @@ The final commit of each phase must be a doc sweep that confirms all three files
 
 **v1.0 pre-release review — Complete.** Full diagnostic read of all source files; 2 must-fix and 5 should-fix items resolved. Fixes: `build_hotel_url`/`build_car_url` `site="manual"` crash; `sys.exit(1)` → `sys.exit(0)` for Pass 2 no-candidates; removed `_window_pass1_for_departure` dead code; `hotel_is_estimate=True` in `build_cost_breakdown`; removed phantom `numpy`/`scipy` deps; added exception logging to `_email_limit_warning_html`; documented `DB_PATH` in `.env.example`. 357 tests passing.
 
+**feature/window-mode-fix2 — In progress.** Follow-up to PR #46 incomplete fix: `window_data_list` dict now includes `trip_nights` (window span, not global pref) so `max_days_tw` widens from 1-day to span-width; `get_cached_flight` filters `is_mock=False`; `window_batch_size` preference (default 12) enlarges batch for window runs; UI advisory for far-future windows (>300 days). 371 tests passing (366 prior + 5 new).
+
 **feature/window-mode-fixes — Complete.** Seven live-run bugs fixed (window trip duration from span, _probe_dest_window trip_nights override, Pass 2 window clipping, budget reset before fallback, stale mock cache exclusion, last_queried_at staleness rotation, nearby excluded filter). 366 tests passing (357 prior + 9 new).
 
 **Phase 9 — Complete.** Polish, hardening, and 1.0 release prep: README audited (scheduler launchd plist example, fli reference, preferences table, project structure); CHANGELOG.md added; CONTRIBUTING.md expanded (dev setup, test commands, PR checklist); version bumped to 1.0.0; spec reviewed and Phase 9 marked complete; Linux headless smoke tests moved to Section 14 Future Work. 350 tests passing (unchanged — Phase 9 is docs-only).
@@ -259,6 +261,9 @@ main.py
 | `_stale_cache_fallback` filters `PriceCache.is_mock.is_(False)` | Mock cache rows (departure price=$360, is_mock=True) created during testing persist past their context. Without the filter, a May live run picked up an April mock entry and produced a nonsense $4,945 total ($360 flight + $4,585 hotel for CDG). |
 | `last_queried_at` updated for no-price destinations when live calls consumed | European cities (CDG, LHR, …) from HSV consistently return no price; without this update they permanently occupy the top of the least-recently-queried queue, recycling the same unreachable destinations every day. Marking them as queried rotates them out so other destinations get a turn. |
 | `get_nearby_airports` filters `Destination.excluded.is_(False)` | An excluded destination can be within the search radius; without the filter it would appear in `departure_iatas` and trigger flight probes from a user-blocked origin. |
+| `window_data_list` dict includes `"trip_nights": window_tn` | PR #46 wired `_probe_dest_window` to read `tw_data.get("trip_nights", trip_nights)` but never populated the key; `max_days_tw` also still used global `trip_nights`. For a 4-night window with global `trip_nights=7` this collapsed the probe range to [148, 149] — only 2 departure dates. Passing `window_tn = (latest_return - earliest_departure).days` widens the range to the full window span. |
+| `get_cached_flight` filters `PriceCache.is_mock.is_(False)` | TTL expiry alone is insufficient: a mock entry created moments before a live run is unexpired and would silently return a $360 fixture price instead of a real quote. The `is_mock` filter makes the isolation explicit regardless of TTL. |
+| `window_batch_size` preference (default 12), applied as `max(daily, window)` when windows active | Window probes cover only 2–3 dates per destination (vs a full advance-window scan), so a window-mode run can afford a larger batch within the same API budget. Using `max()` ensures window mode is never narrower than normal mode. |
 
 ## Key file map
 
@@ -288,7 +293,7 @@ main.py
 | `tests/unit/test_costs.py` | Cost calculation tests |
 | `tests/unit/test_ranker.py` | Ranking and sorting tests |
 | `tests/unit/test_selector.py` | All 8 destination selection strategies + pool parameter tests (in-memory DB) |
-| `tests/unit/test_cache.py` | TTL logic, cache hit/miss, is_mock flag |
+| `tests/unit/test_cache.py` | TTL logic, cache hit/miss, is_mock exclusion from get_cached_flight (12 tests) |
 | `tests/unit/test_fetcher_perdiem.py` | Per diem lookup fallback chain tests (7 tests incl. domestic national-average fallback) |
 | `tests/unit/test_fetcher_flights.py` | direct_only filtering tests; cheapest-by-price selection; deep link encodes direct_only (8 tests) |
 | `tests/unit/test_filters.py` | Region allowlist/blocklist, favorite-radius, exclusion rule tests (16 tests) |
@@ -306,7 +311,7 @@ main.py
 | `tests/test_api_counter.py` | API counter consistency: mock/live modes, exception path counting, window search double-count prevention (7 tests) |
 | `tests/test_notifier_limits.py` | Monthly email limit enforcement: get/record helpers, _check_email_limit, warning banner, RunLog blocking (16 tests) |
 | `tests/test_utils.py` | Timezone conversion helpers: CST/CDT/EST/BST conversions, naive-as-UTC, invalid tz raises, format shape (11 tests) |
-| `tests/test_travel_windows.py` | Travel window model properties, `_probe_dest_window` behavior (best result selection, exception handling, trip_nights override), notifier HTML/plain helpers, `send_trip_notification` signature, `_build_html/_build_plain` thread-through (28 tests) |
+| `tests/test_travel_windows.py` | Travel window model properties, `_probe_dest_window` behavior (best result selection, exception handling, trip_nights override), `window_data_list` construction math (window_tn formula, min/max_days), notifier HTML/plain helpers, `send_trip_notification` signature, `_build_html/_build_plain` thread-through (32 tests) |
 | `tests/test_settings.py` | `get_flight_data_mode()` priority logic: DB > env var > default; invalid value fallback; seed default (8 tests) |
 | `tests/test_performance.py` | Probe cap enforcement, travel window call-count correctness (2 windows × 3 dests = 6 calls), max_workers=1 sequential behavior, run timeout submission guard (7 tests) |
 | `tests/integration/test_fetcher.py` | Live Google Flights tests (`@pytest.mark.integration`, no key required) |
