@@ -50,7 +50,7 @@ from fli.models import (  # type: ignore[import]
 from fli.search import SearchFlights  # type: ignore[import]
 from sqlalchemy.orm import Session
 
-from trip_a_day.db import get_api_calls_today, record_api_call
+from trip_a_day.db import SessionFactory, get_api_calls_today, record_api_call
 from trip_a_day.links import build_flight_url, build_hotel_url
 from trip_a_day.preferences import get_or
 
@@ -606,9 +606,15 @@ def get_flight_offers(
         if is_mock:
             ff_result = _mock_flight_result(origin, destination)
         else:
-            # Count the attempt before calling — ensures api_usage tracks all live
-            # attempts regardless of whether get_flights() throws or returns empty.
-            record_api_call(session, "google_flights")
+            # Count the attempt before calling in its own committed session so
+            # the write lock is held for milliseconds, not the entire fli call
+            # duration (~30s).  Keeping this in the thread's main session would
+            # mark api_usage dirty, causing autoflush contention when subsequent
+            # session.query() calls trigger a flush while another thread is also
+            # mid-write — leading to "database is locked" / PendingRollbackError.
+            with SessionFactory() as _usage_sess:
+                record_api_call(_usage_sess, "google_flights")
+                _usage_sess.commit()
             try:
                 ff_result = get_flights(
                     origin, destination, depart_date, return_date, adults, children

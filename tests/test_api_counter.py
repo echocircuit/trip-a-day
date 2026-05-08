@@ -35,11 +35,17 @@ RETURN = DEPART + timedelta(days=7)
 
 
 @pytest.fixture()
-def db_session(tmp_path):
-    """In-memory SQLite session with the full schema."""
+def db_session(tmp_path, monkeypatch):
+    """In-memory SQLite session with the full schema.
+
+    Also patches trip_a_day.fetcher.SessionFactory so that the micro-session
+    opened inside get_flight_offers for record_api_call writes to this same
+    test DB rather than the real production DB.
+    """
     engine = create_engine(f"sqlite:///{tmp_path / 'counter_test.db'}")
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
+    monkeypatch.setattr("trip_a_day.fetcher.SessionFactory", factory)
     with factory() as session:
         yield session
 
