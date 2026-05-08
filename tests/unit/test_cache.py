@@ -87,7 +87,7 @@ def test_get_cached_flight_returns_none_wrong_route(session):
         "Delta",
         0,
         14,
-        True,
+        False,
     )
     # Different destination
     result = get_cached_flight(
@@ -112,7 +112,7 @@ def test_store_and_retrieve_cache_hit(session):
         "Delta",
         0,
         14,
-        True,
+        False,
     )
     hit = get_cached_flight(
         session, "HSV", "JFK", date(2026, 5, 1), date(2026, 5, 8), 2, 2
@@ -128,11 +128,11 @@ def test_cache_hit_returns_most_recent_entry(session):
     ret = date(2026, 5, 8)
     # Older entry
     store_flight_cache(
-        session, "HSV", "JFK", dep, ret, 2, 2, 380.0, None, None, 14, True
+        session, "HSV", "JFK", dep, ret, 2, 2, 380.0, None, None, 14, False
     )
     # Newer entry
     store_flight_cache(
-        session, "HSV", "JFK", dep, ret, 2, 2, 420.0, None, None, 14, True
+        session, "HSV", "JFK", dep, ret, 2, 2, 420.0, None, None, 14, False
     )
 
     hit = get_cached_flight(session, "HSV", "JFK", dep, ret, 2, 2)
@@ -140,7 +140,8 @@ def test_cache_hit_returns_most_recent_entry(session):
     assert hit.price_usd == 420.0
 
 
-def test_cache_is_mock_flag_stored(session):
+def test_mock_entries_excluded_from_cache_hits(session):
+    """Mock entries must never be returned by get_cached_flight in live mode."""
     store_flight_cache(
         session,
         "HSV",
@@ -155,18 +156,42 @@ def test_cache_is_mock_flag_stored(session):
         45,
         is_mock=True,
     )
+    # Mock entry is stored but get_cached_flight must not return it.
+    hit = get_cached_flight(
+        session, "HSV", "CDG", date(2026, 6, 1), date(2026, 6, 8), 2, 0
+    )
+    assert hit is None
+
+
+def test_live_entry_returned_cache_hit(session):
+    """Live (is_mock=False) entries are returned normally."""
+    store_flight_cache(
+        session,
+        "HSV",
+        "CDG",
+        date(2026, 6, 1),
+        date(2026, 6, 8),
+        2,
+        0,
+        850.0,
+        "Air France",
+        1,
+        45,
+        is_mock=False,
+    )
     hit = get_cached_flight(
         session, "HSV", "CDG", date(2026, 6, 1), date(2026, 6, 8), 2, 0
     )
     assert hit is not None
-    assert hit.is_mock is True
+    assert hit.price_usd == 850.0
+    assert hit.is_mock is False
 
 
 def test_cache_different_pax_no_hit(session):
     dep = date(2026, 5, 1)
     ret = date(2026, 5, 8)
     store_flight_cache(
-        session, "HSV", "JFK", dep, ret, 2, 2, 400.0, None, None, 14, True
+        session, "HSV", "JFK", dep, ret, 2, 2, 400.0, None, None, 14, False
     )
 
     # Different number of adults — should miss
