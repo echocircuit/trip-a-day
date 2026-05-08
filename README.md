@@ -212,6 +212,7 @@ Use Task Scheduler to launch `python scheduler.py` at login (set **Start in** to
 | Daily run time | 7:00 AM local |
 | Timezone | `America/New_York` (any IANA tz string) |
 | Flight data mode | `mock` — change to `live` in Preferences UI or `.env` |
+| Daily destination batch | 15 (normal), 12 (window mode minimum) |
 | Parallel flight queries | 3 concurrent workers |
 | Run timeout | 20 minutes |
 | Notifications | Enabled |
