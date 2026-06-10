@@ -60,7 +60,14 @@ def main() -> None:
         sys.exit(1)
 
     scheduler = BlockingScheduler()
-    scheduler.add_job(_scheduled_run, "cron", hour=hour, minute=minute)
+    scheduler.add_job(
+        _scheduled_run,
+        "cron",
+        hour=hour,
+        minute=minute,
+        misfire_grace_time=7200,  # 2-hour window: fires even if Mac woke from sleep late
+        coalesce=True,  # if multiple fires were missed, run only once on wake
+    )
     logger.info(
         "Scheduler started — daily run at %02d:%02d local time.  Press Ctrl+C to stop.",
         hour,
