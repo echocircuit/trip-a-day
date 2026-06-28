@@ -5,7 +5,7 @@ flights>=0.8.4      # flight search via fli (replaces fast-flights get_flights, 
 matplotlib>=3.10.9
 openpyxl==3.1.5
 python-dotenv==1.2.2
-requests==2.33.1
+requests==2.34.2
 resend==2.29.0
 sqlalchemy==2.0.49
 streamlit==1.57.0
